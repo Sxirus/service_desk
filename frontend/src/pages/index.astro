@@ -1,20 +1,11 @@
 ---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
 const email = await fetch('http://localhost:3000/api/emails/getMails?customer_id=1');
 const mailjson = await email.json();
 console.log(mailjson);
 ---
 
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<h1>Astro</h1>
-		<h1 class="text-red-500">Hello Tailwind + TypeScript!</h1>
-		<p>{mailjson[0].subject}</p>
-	</body>
-</html>
+<BaseLayout title="Service Desk">
+	<p>{mailjson[0].subject}</p>
+</BaseLayout>
