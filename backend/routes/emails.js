@@ -5,13 +5,15 @@ const supabase = require("../config/supabase")
 //getting mails from the mail table
 router.get('/getMails', async (req, res) => {
   //getting params
-  const customerId = req.query.customer_id;
+  const client_id = req.query.client_id;
   //fetching from db
   try {
     const { data, error } = await supabase
       .from('incoming-mails') 
       .select('*')
-      .eq("customer_id", customerId);
+      .eq("client_id", client_id)
+      .order('send_at', { ascending: false })
+      .limit(10); ;
 
     if (error) {
       console.log('Supabase error:', error.message);

@@ -1,0 +1,10 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+const { params } = Astro;
+const customerId = params.customerId;
+console.log(customerId);
+---
+
+<BaseLayout title="Mail">
+  <p>Das ist ein mail ding</p>
+</BaseLayout>

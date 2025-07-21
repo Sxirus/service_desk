@@ -1,11 +1,16 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 
-const email = await fetch('http://localhost:3000/api/emails/getMails?customer_id=1');
-const mailjson = await email.json();
-console.log(mailjson);
+const result = await fetch('http://localhost:3000/api/emails/getMails?client_id=1');
+const last10mails = await result.json();
 ---
 
 <BaseLayout title="Service Desk">
-	<p>{mailjson[0].subject}</p>
+	<ul>
+  {last10mails.map(mail => (
+    <li>
+      <a href={`/tickets/${mail.customer_id}`}>{mail.subject}</a>
+    </li>
+  ))}
+</ul>
 </BaseLayout>
