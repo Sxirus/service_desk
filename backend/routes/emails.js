@@ -4,7 +4,9 @@ const supabase = require("../config/supabase")
 
 //getting mails from the mail table
 router.get('/getMails', async (req, res) => {
+  //getting params
   const customerId = req.query.customer_id;
+  //fetching from db
   try {
     const { data, error } = await supabase
       .from('incoming-mails') 
@@ -23,4 +25,5 @@ router.get('/getMails', async (req, res) => {
   }
 })
 
+//exporting
 module.exports = router;
