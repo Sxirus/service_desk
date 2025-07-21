@@ -16,7 +16,10 @@ class EmailService {
       password: process.env.IMAP_PASS,           // Email password or app-specific password
       host: process.env.IMAP_HOST,               // IMAP server hostname (e.g., imap.gmail.com)
       port: parseInt(process.env.IMAP_PORT),     // IMAP port (usually 993 for SSL/TLS)
-      tls: true                                  // Enable TLS encryption for secure connection
+      tls: true,                                  // Enable TLS encryption for secure connection
+      tlsOptions: {
+        rejectUnauthorized: false  // << erlaubt selbstsignierte Zertifikate
+      }
     });
 
     // Track processed messages to prevent duplicate processing

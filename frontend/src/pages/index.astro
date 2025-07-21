@@ -1,5 +1,7 @@
 ---
-
+const email = await fetch('http://localhost:3000/api/emails/getMails?customer_id=1');
+const mailjson = await email.json();
+console.log(mailjson);
 ---
 
 <html lang="en">
@@ -13,5 +15,6 @@
 	<body>
 		<h1>Astro</h1>
 		<h1 class="text-red-500">Hello Tailwind + TypeScript!</h1>
+		<p>{mailjson[0].subject}</p>
 	</body>
 </html>

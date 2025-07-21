@@ -7,7 +7,10 @@ const imap = new Imap({
   password: process.env.IMAP_PASS,
   host: process.env.IMAP_HOST,
   port: parseInt(process.env.IMAP_PORT),
-  tls: true
+  tls: true,
+  tlsOptions: {
+      rejectUnauthorized: false  // << erlaubt selbstsignierte Zertifikate
+    }
 });
 
 function openInbox(cb) {

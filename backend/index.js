@@ -17,6 +17,8 @@ app.use(express.urlencoded({ extended: true })); // Parse URL-encoded form data 
 // API route registration
 app.use('/api/health', require('./routes/health')); // Health check endpoint for monitoring
 
+app.use('/api/emails', require('./routes/emails'));
+
 // Global error handling middleware
 // This catches any unhandled errors from routes and provides consistent error responses
 app.use((err, req, res, next) => {
