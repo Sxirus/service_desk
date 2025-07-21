@@ -1,73 +1,54 @@
-const Imap = require('imap');
-const { simpleParser } = require('mailparser');
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
 require('dotenv').config();
 
-const imap = new Imap({
-  user: process.env.IMAP_USER,
-  password: process.env.IMAP_PASS,
-  host: process.env.IMAP_HOST,
-  port: parseInt(process.env.IMAP_PORT),
-  tls: true
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(helmet());
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// Routes
+app.use('/api/health', require('./routes/health'));
+
+// Global Error Handler
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ 
+    error: 'Something went wrong!',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Internal Server Error'
+  });
+});
+/*
+// 404 Handler
+app.use('*', (req, res) => {
+  res.status(404).json({ error: 'Route not found' });
+}); */
+
+// Email Service
+const EmailService = require('./services/emailService');
+const emailService = new EmailService();
+
+// Start email monitoring
+emailService.connect();
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  emailService.disconnect();
+  process.exit(0);
 });
 
-function openInbox(cb) {
-  imap.openBox('INBOX', false, cb); // false = Schreibzugriff, true = nur lesen
-}
-
-imap.once('ready', () => {
-    openInbox((err, box) => {
-        if (err) throw err;
-
-        console.log(`Connected to inbox: ${box.name}`);
-        console.log('Listening for new emails...');
-
-        imap.on('mail', (numNewMsgs) => {
-            console.log(`${numNewMsgs} new email(s) received!`);
-
-            // Get the highest sequence number (last email)
-            imap.search(['ALL'], (err, results) => {
-                if (err || !results || results.length === 0) {
-                console.error('Error while searching for new emails:', err);
-                return;
-                }
-
-                const latest = results[results.length - 1]; // last ID
-                const fetch = imap.seq.fetch(latest, {
-                    bodies: '',
-                    struct: true
-                });
-
-                fetch.on('message', (msg) => {
-                    msg.on('body', async (stream) => {
-                        const parsed = await simpleParser(stream);
-
-                        // Variables:
-                        const emailSubject = parsed.subject || 'No Subject';
-                        const emailFrom = parsed.from.text || 'Unknown Sender';
-                        const emailContent = parsed.text || 'No Content';
-
-                        console.log('---');
-                        console.log('New Email Received:');
-                        console.log(`Subject: ${emailSubject}`);
-                        console.log(`From: ${emailFrom}`);
-                        console.log(`Content: ${emailContent}\n`);
-                    });
-                });
-
-                fetch.once('end', () => {
-                    console.log('Mail fetch complete.');
-                });
-            });
-        });
-    });
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully');
+  emailService.disconnect();
+  process.exit(0);
 });
 
-imap.once('error', (err) => {
-  console.error('IMAP Error:', err);
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
-
-imap.once('end', () => {
-  console.log('IMAP Connection ended.');
-});
-
-imap.connect();

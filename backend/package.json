@@ -13,10 +13,13 @@
   "type": "commonjs",
   "dependencies": {
     "@supabase/supabase-js": "^2.52.0",
+    "cors": "^2.8.5",
     "dotenv": "^17.2.0",
     "express": "^5.1.0",
-    "imap": "^0.8.19",
-    "mailparser": "^3.7.4"
+    "helmet": "^8.1.0",
+    "imap": "^0.8.17",
+    "mailparser": "^3.7.4",
+    "winston": "^3.17.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
