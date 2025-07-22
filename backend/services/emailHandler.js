@@ -133,7 +133,7 @@ async function checkIfEmailAddressExists(email) {
         return false;                            // Assume email doesn't exist on error
     } else {
         // Return true if we found a record with a valid customer_id
-        return data && data.customer_id ? true : false;
+        return Boolean(data?.customer_id);
     }
 }
 
