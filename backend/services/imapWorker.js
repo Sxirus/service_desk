@@ -87,8 +87,12 @@ function startImapWorker({ email, password, imapHost, imapPort, clientId }) {
     imap.once('error', (err) => console.error(`[${email}] IMAP error:`, err));
     
     // Handle IMAP connection termination
-    // Log when connection is closed for monitoring purposes
-    imap.once('end', () => console.log(`[${email}] Connection closed.`));
+    // Log when connection is closed for monitoring purposes and attempt to reconnect
+    imap.once('end', () => {
+      console.warn(`[${email}] Connection closed. Reconnecting in 3 seconds...`);
+      setTimeout(() => imap.connect(), 3000);
+      console.log(`[${email}] Connecting...`);
+    });
     
     // Initiate the IMAP connection to the email server
     imap.connect();
