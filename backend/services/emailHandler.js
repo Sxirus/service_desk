@@ -38,6 +38,10 @@ async function saveEmail(parsedEmail, clientId, InboxEmail) {
         // Email address is new - create a new customer record
         console.log(`[${InboxEmail}] Email address does not exist, creating new customer with email:`, senderEmailAddress);
         customerId = await createCustomerWithEmail(from, clientId);
+        if (!customerId) {
+            console.error(`[${clientId}] Failed to create customer for email address:`, senderEmailAddress);
+            return;
+        }
     } else {
         // Email address exists - retrieve the existing customer ID
         customerId = await getCustomerIdByEmail(senderEmailAddress);
