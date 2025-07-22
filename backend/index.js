@@ -19,6 +19,8 @@ app.use('/api/health', require('./routes/health')); // Health check endpoint for
 
 app.use('/api/emails', require('./routes/emails'));
 
+app.use('/api/customers', require('./routes/customers'));
+
 // Global error handling middleware
 // This catches any unhandled errors from routes and provides consistent error responses
 app.use((err, req, res, next) => {

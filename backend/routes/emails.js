@@ -12,7 +12,7 @@ router.get('/getMails', async (req, res) => {
       .from('incoming-mails') 
       .select('*')
       .eq("client_id", client_id)
-      .order('send_at', { ascending: false })
+      .order('send_at', { ascending: true })
       .limit(10); ;
 
     if (error) {

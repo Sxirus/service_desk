@@ -2,7 +2,9 @@
 import BaseLayout from "../../layouts/BaseLayout.astro";
 const { params } = Astro;
 const customerId = params.customerId;
-console.log(customerId);
+const result = await fetch(`http://localhost:3000/api/customers/getCustomerById?customerId=${customerId}`);
+const customerArray = await result.json();
+const customer = customerArray[0];
 ---
 
 <BaseLayout title="Mail">
