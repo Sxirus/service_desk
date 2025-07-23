@@ -27,5 +27,26 @@ router.get('/getMails', async (req, res) => {
   }
 })
 
+router.get('/getEmailsFromCustomer', async (req, res) => {
+  const customerId = req.query.customerId;
+  try {
+    const {data,error} = await supabase
+      .from('incoming-mails')
+      .select('*')
+      .eq('customer_id', customerId)
+      .order('send_at', { ascending: true })
+
+    if (error) {
+      console.log('Supabase error:', error.message);
+      return res.status(500).json({ error: 'Datenbankfehler' });
+    }
+
+    res.json(data)
+  } catch (err) {
+    console.log('Server error:', err.message);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+})
+
 //exporting
 module.exports = router;
