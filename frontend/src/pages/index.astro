@@ -1,11 +1,13 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 
+//gets the last 10 mails from the database
 const result = await fetch('http://localhost:3000/api/emails/getMails?client_id=1');
 const last10mails = await result.json();
 ---
 
 <BaseLayout title="Service Desk">
+  <!-- list of 10 emails from the db -->
 	<ul>
   {last10mails.map(mail => (
     <li>

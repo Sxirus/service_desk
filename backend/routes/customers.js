@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require("../config/supabase")
 
+//gets the customer from the database by using the customer id
 router.get('/getCustomerById', async (req, res) => {
   //getting params
   const customerId = req.query.customerId;

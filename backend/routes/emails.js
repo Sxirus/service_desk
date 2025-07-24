@@ -27,6 +27,7 @@ router.get('/getMails', async (req, res) => {
   }
 })
 
+//gets all the mails from a customer using the customer id
 router.get('/getEmailsFromCustomer', async (req, res) => {
   const customerId = req.query.customerId;
   try {

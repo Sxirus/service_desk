@@ -1,16 +1,20 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
+//parameters
 const { params } = Astro;
 const customerId = params.customerId;
+//getting the customer
 const resultCustomer = await fetch(`http://localhost:3000/api/customers/getCustomerById?customerId=${customerId}`);
 const customerArray = await resultCustomer.json();
 const customer = customerArray[0];
+//getting all the emails from a customer
 const resultMails = await fetch(`http://localhost:3000/api/emails/getEmailsFromCustomer?customerId=${customerId}`);
 const emailArray = await resultMails.json();
 ---
 
 <BaseLayout title={customer.name}>
   <p> Name: {customer.name}</p>
+  <!-- all the mails of the customer -->
   <ul>
     {emailArray.map(mail => (
     <li>
