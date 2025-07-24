@@ -3,6 +3,7 @@ const express = require('express');           // Web framework for Node.js
 const cors = require('cors');                 // Cross-Origin Resource Sharing middleware
 const helmet = require('helmet');             // Security middleware for HTTP headers
 require('dotenv').config();                   // Load environment variables from .env file
+const { initializeWorkers } = require('./services/workerManager');
 
 // Initialize Express application and configure port
 const app = express();
@@ -32,39 +33,16 @@ app.use((err, req, res, next) => {
   });
 });
 
-/*
-// 404 Handler for unmatched routes
-// Currently commented out - uncomment if you want to handle unknown routes
-app.use('*', (req, res) => {
-  res.status(404).json({ error: 'Route not found' });
-}); */
-
-// Initialize email monitoring service
-const EmailService = require('./services/emailService');
-const emailService = new EmailService();
-
 // Start the email monitoring service
 // This begins listening for incoming emails to process as support tickets
-emailService.connect();
-
-// Graceful shutdown handlers
-// These ensure the email service is properly disconnected when the server stops
-
-// Handle SIGTERM signal (typically sent by process managers like PM2 or Docker)
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully');
-  emailService.disconnect();                  // Close email connections cleanly
-  process.exit(0);                           // Exit with success code
-});
-
-// Handle SIGINT signal (typically Ctrl+C in terminal)
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully');
-  emailService.disconnect();                  // Close email connections cleanly
-  process.exit(0);                           // Exit with success code
-});
 
 // Start the HTTP server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.listen(PORT, async () => {
+    console.log(`Server running on port ${PORT}`);
+    try {
+        await initializeWorkers();
+    } catch (err) {
+        console.error('Failed to initialize workers:', err);
+    }
+
 });
