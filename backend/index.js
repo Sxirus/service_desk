@@ -4,6 +4,7 @@ const cors = require('cors');                 // Cross-Origin Resource Sharing m
 const helmet = require('helmet');             // Security middleware for HTTP headers
 require('dotenv').config();                   // Load environment variables from .env file
 const { initializeWorkers } = require('./services/workerManager');
+const bodyParser = require('body-parser');
 
 // Initialize Express application and configure port
 const app = express();
@@ -14,6 +15,9 @@ app.use(helmet());                            // Add security headers to protect
 app.use(cors());                              // Enable CORS for cross-origin requests from frontend
 app.use(express.json({ limit: '10mb' }));    // Parse JSON payloads up to 10MB (for file uploads)
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded form data with extended syntax support
+
+// to be able to send bodys in requests
+app.use(bodyParser.json());
 
 // API route registration
 app.use('/api/health', require('./routes/health')); // Health check endpoint for monitoring
