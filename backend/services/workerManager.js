@@ -26,7 +26,7 @@ async function initializeWorkers() {
   // Uses Supabase's relational query to join client-emails with email-provider table
   const { data: clientEmails, error } = await supabase
     .from('client-emails')
-    .select(`id, email_address, password, provider:email-provider (imap, imap_port)`);
+    .select(`id, client_id, email_address, password, provider:email-provider (imap, imap_port)`);
 
   // Handle database query errors
   if (error) {
@@ -36,7 +36,7 @@ async function initializeWorkers() {
 
   // Process each client email configuration
   for (const entry of clientEmails) {
-    const { id, email_address, password, provider } = entry;
+    const { id, client_id, email_address, password, provider } = entry;
 
     // Validate that required provider configuration exists
     // Skip entries that don't have complete IMAP settings
@@ -59,7 +59,7 @@ async function initializeWorkers() {
       password,                                  // Email account password
       imapHost: provider.imap,                   // IMAP server hostname from provider config
       imapPort: provider.imap_port,              // IMAP server port from provider config
-      clientId: id                               // Client identifier for database association
+      clientId: client_id                               // Client identifier for database association
     });
 
     // Mark this worker as active to prevent duplicate instances
