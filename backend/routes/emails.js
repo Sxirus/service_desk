@@ -14,7 +14,7 @@ router.get('/getMails', async (req, res) => {
       .select('*')
       .eq("client_id", client_id)
       .order('send_at', { ascending: true })
-      .limit(10); ;
+      .limit(100); ;
 
     if (error) {
       console.log('Supabase error:', error.message);
@@ -57,8 +57,8 @@ router.post('/sendMail', async (req, res) => {
 
   //creating transporter
   const transporter = nodemailer.createTransport({
-  host: process.env.IMAP_HOST,
-  port: process.env.IMAP_PORT,
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT),
   secure: false,
   auth: {
     user: process.env.IMAP_USER,
@@ -77,14 +77,18 @@ router.post('/sendMail', async (req, res) => {
 
     const { data, error } = await supabase
       .from('send-mail')
-      .insert([{employee_id: 1, body: text, customer_id: customerId}]);
+      .insert([{employee_id: 1, body: text, customer_id: parseInt(customerId)}]);
 
 
     if (error) {
       return res.status(500).json({ error: error.message });
     }
 
-    res.json({ success: true, messageId: info.messageId }, data );
+    res.json({
+      success: true,
+      messageId: info.messageId,
+      insertedData: data
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, error: err.message });

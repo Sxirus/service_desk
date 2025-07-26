@@ -20,7 +20,7 @@ const newSubject = `RE: ${lastMail.subject}`
   <!-- the right side -->
   <div class="fixed right-0 bg-gray-100 h-full w-1/5 outline outline-2 outline-gray-300 flex justify-center">
     <p> Name: {customer.name}</p>
-    <button id="sendButton" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 absolute bottom-7 w-4/5">Send</button>
+    <button   data-email={emailAdress} data-subject={newSubject} data-customerid={customerId} id="sendButton" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 absolute bottom-7 w-4/5">Send</button>
   </div>
   
   <!-- all the mails of the customer -->
@@ -31,30 +31,37 @@ const newSubject = `RE: ${lastMail.subject}`
       <li class="outline outline-2 outline-gray-300">
         <p class="">{mail.text_content}</p>
       </li>
-    ))};
+    ))}
     </ul>
     <textarea class="w-full h-1/5 absolute bottom-3 resize-none overflow-y-auto p-2 border border-gray-300" placeholder="Answer..." id="answer"></textarea>
   </div>
-  <script>
-    const emailAdress = "{emailAdress}";
-    const newSubject = "{newSubject}";
-    const button = document.getElementById('sendButton');
-    const textarea = document.getElementById('answer')as HTMLTextAreaElement;
 
-    //send button action
-    button?.addEventListener('click', async() => {
-      const body = textarea.value;
-      //sending mail
-      await fetch('http://localhost:3000/api/mail/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          to: emailAdress,
-          subject: newSubject,
-          text: body,
-        }),
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const button = document.getElementById('sendButton') as HTMLButtonElement;
+      const textarea = document.getElementById('answer') as HTMLTextAreaElement;
+
+      //send button action
+      button?.addEventListener('click', async() => {
+        console.log("bin im button")
+        const emailAdress = button.dataset.email;
+        const newSubject = button.dataset.subject;
+        const customerId = button.dataset.customerid;
+        console.log(customerId);
+
+        const body = textarea.value;
+        //sending mail
+        await fetch(`http://localhost:3000/api/emails/sendMail?customerId=${customerId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            to: emailAdress,
+            subject: newSubject,
+            text: body,
+          }),
+        });
       });
     });
   </script>
