@@ -28,9 +28,9 @@ function startImapWorker({ email, password, imapHost, imapPort, clientId }) {
         password,                                // Email password or app-specific password
         host: imapHost,                         // IMAP server hostname
         port: imapPort,                         // IMAP server port
-        tls: true,                              // Enable TLS encryption for secure connection
+        tls: true,                               // Enable TLS encryption for secure connection
         tlsOptions: {
-            rejectUnauthorized: false, // unsersicher in production ändern
+            rejectUnauthorized: false,           // unsersicher in production ändern
         }
     });
 
