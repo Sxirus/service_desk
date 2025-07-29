@@ -50,18 +50,20 @@ console.log(emailArray);
         const customerId = button.dataset.customerid;
 
         const body = textarea.value;
-        //sending mail
-        await fetch(`http://localhost:3000/api/emails/sendMail?customerId=${customerId}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            to: emailAdress,
-            subject: newSubject,
-            text: body,
-          }),
-        });
+        if(body.trim() != '') {
+          //sending mail
+          await fetch(`http://localhost:3000/api/emails/sendMail?customerId=${customerId}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              to: emailAdress,
+              subject: newSubject,
+              text: body,
+            }),
+          });
+        }
         //making all mails read
         await fetch(`http://localhost:3000/api/emails/makeRead?customerId=${customerId}`, {
           method: 'POST'
