@@ -13,7 +13,7 @@ const emailArray = await resultMails.json();
 const lastMail = emailArray[emailArray.length - 1]
 const emailAdress = lastMail.email_address;
 const newSubject = `RE: ${lastMail.subject}`
-
+console.log(emailArray);
 ---
 
 <BaseLayout title={customer.name}>
@@ -43,11 +43,9 @@ const newSubject = `RE: ${lastMail.subject}`
 
       //send button action
       button?.addEventListener('click', async() => {
-        console.log("bin im button")
         const emailAdress = button.dataset.email;
         const newSubject = button.dataset.subject;
         const customerId = button.dataset.customerid;
-        console.log(customerId);
 
         const body = textarea.value;
         //sending mail
@@ -61,6 +59,10 @@ const newSubject = `RE: ${lastMail.subject}`
             subject: newSubject,
             text: body,
           }),
+        });
+        //making all mails read
+        await fetch(`http://localhost:3000/api/emails/makeRead?customerId=${customerId}`, {
+          method: 'POST'
         });
       });
     });

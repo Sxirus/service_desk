@@ -48,7 +48,7 @@ router.get('/getEmailsFromCustomer', async (req, res) => {
     console.log('Server error:', err.message);
     res.status(500).json({ error: 'Serverfehler' });
   }
-})
+});
 
 //sending mails and saving them to db
 router.post('/sendMail', async (req, res) => {
@@ -79,7 +79,6 @@ router.post('/sendMail', async (req, res) => {
       .from('send-mail')
       .insert([{employee_id: 1, body: text, customer_id: parseInt(customerId)}]);
 
-
     if (error) {
       return res.status(500).json({ error: error.message });
     }
@@ -93,7 +92,28 @@ router.post('/sendMail', async (req, res) => {
     console.error(err);
     res.status(500).json({ success: false, error: err.message });
   }
+});
 
+//making mails read by customerid
+router.post('/makeRead', async (req, res) => {
+  const customerId = req.query.customerId;
+
+  try {
+  const { data, error } = await supabase
+  .from('incoming-mails')
+  .update({ read: true })
+  .eq('customer_id', customerId);
+
+  if (error) {
+  console.error('Supabase error:', error.message);
+  return res.status(500).json({ success: false, error: error.message });
+  }
+
+  res.json({ success: true});
+  } catch (err){
+    console.error('Server error:', err.message);
+    res.status(500).json({ success: false, error: 'Servererror' });
+  } 
 })
 
 //exporting
