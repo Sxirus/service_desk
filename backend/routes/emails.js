@@ -78,7 +78,7 @@ router.post('/sendMail', async (req, res) => {
 
     const { data, error } = await supabase
       .from('send-mail')
-      .insert([{employee_id: 1, body: text, customer_id: parseInt(customerId)}]);
+      .insert([{employee_id: 1, text_content: text, customer_id: parseInt(customerId)}]);
 
     if (error) {
       return res.status(500).json({ error: error.message });
