@@ -18,7 +18,7 @@ const { data } = await supabase.auth.getUser();
 <BaseLayout title="Service Desk">
   <!-- list of 10 emails from the db -->
 	<ul class="flex flex-col items-center mt-3">
-    {last10mails.map(mail => (
+    {last10mails.map((mail: any) => (
       <li class="w-2/3 size-14">
         <a href={`/tickets/${mail.customer_id}`} class="flex justify-start items-center outline outline-2 outline-gray-300 w-full h-full bg-gray-100">{mail.subject}</a>
       </li>
