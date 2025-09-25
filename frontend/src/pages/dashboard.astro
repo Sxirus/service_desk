@@ -1,0 +1,63 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { createClient } from "../lib/supabase.ts";
+
+//gets the last 10 mails from the database
+const result = await fetch('http://localhost:3000/api/emails/getMails?client_id=1');
+const last10mails = await result.json();
+
+const supabase = createClient({
+    request: Astro.request,
+    cookies: Astro.cookies,
+});
+
+
+const { data } = await supabase.auth.getUser();
+---
+
+<BaseLayout title="Service Desk">
+  <!-- list of 10 emails from the db -->
+	<ul class="flex flex-col items-center mt-3">
+    {last10mails.map(mail => (
+      <li class="w-2/3 size-14">
+        <a href={`/tickets/${mail.customer_id}`} class="flex justify-start items-center outline outline-2 outline-gray-300 w-full h-full bg-gray-100">{mail.subject}</a>
+      </li>
+    ))}
+  </ul>
+  <section style="margin: 50px;" class="flex flex-col items-center justify-center m-30">
+      <h1 class="text-4xl text-left font-bold mb-12">You are logged in!</h1>
+      <p class="mb-6">Your user Id: {data.user?.id}</p>
+      <button
+          id="sign-out"
+          class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-md text-white font-bold cursor-pointer disabled:bg-gray-500 disabled:hover:bg-gray-500 disabled:cursor-not-allowed"
+          >Sign Out</button
+      >
+  </section>
+</BaseLayout>
+
+<script>
+    import { actions } from "astro:actions";
+    const signOutBtn = document.getElementById("sign-out") as HTMLButtonElement;
+
+    signOutBtn?.addEventListener("click", async (e) => {
+        e.preventDefault();
+        signOutBtn!.disabled = true;
+        signOutBtn!.textContent = "Signing out...";
+
+        try {
+            const results = await actions.signOut();
+
+            if (!results.data?.success) {
+                signOutBtn!.disabled = false;
+                signOutBtn!.textContent = "Sign Out";
+                return alert("Oops! Could not sign Out. Please try again");
+            }
+            return window.location.reload();
+        } catch (error) {
+            signOutBtn.disabled = false;
+            signOutBtn.textContent = "Sign Out";
+            console.log(error);
+            return alert("Something went wrong. Please try again");
+        }
+    });
+</script>
