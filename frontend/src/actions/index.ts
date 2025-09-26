@@ -5,6 +5,10 @@ import { createClient as createAdmin } from "@supabase/supabase-js";
 
 /* ----------------------- SIGN IN (Password) ----------------------- */
 
+/**
+ * Handles user sign-in with email and password
+ * Includes CAPTCHA verification for security
+ */
 const emailSignIn = async (
   {
     email,
@@ -19,17 +23,20 @@ const emailSignIn = async (
 ) => {
   console.log("[actions.signIn] start");
   try {
+    // Create Supabase client with SSR context
     const supabase = createSSR({
       request: context.request,
       cookies: context.cookies,
     });
 
+    // Attempt to sign in with email, password, and CAPTCHA token
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
       options: { captchaToken },
     });
 
+    // Handle sign-in errors
     if (error) {
       console.error("[actions.signIn] error:", error);
       return { success: false, message: error.message };
@@ -45,6 +52,10 @@ const emailSignIn = async (
 
 /* ----------------------- RESET PASSWORD (email) ----------------------- */
 
+/**
+ * Sends a password reset email to the user
+ * Includes CAPTCHA verification to prevent abuse
+ */
 const passwordReset = async (
   {
     email,
@@ -57,16 +68,19 @@ const passwordReset = async (
 ) => {
   console.log("[actions.resetPassword] start");
   try {
+    // Create Supabase client with SSR context
     const supabase = createSSR({
       request: context.request,
       cookies: context.cookies,
     });
 
+    // Send password reset email with redirect URL
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
       captchaToken,
       redirectTo: "http://localhost:4321/update-password",
     });
 
+    // Handle reset email errors
     if (error) {
       console.error("[actions.resetPassword] error:", error);
       return { success: false, message: error.message };
@@ -82,10 +96,11 @@ const passwordReset = async (
 
 /* ----------------------- ADMIN: CREATE EMPLOYEE ----------------------- */
 
+// Schema for validating employee creation input
 const createEmployeeSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1),
-  // deine Rollen: 1 = admin, 2 = User
+  // Role validation: 1 = admin, 2 = regular user
   role_id: z.coerce.number().int().refine((v) => v === 1 || v === 2, {
     message: "invalid role_id",
   }),
@@ -93,13 +108,17 @@ const createEmployeeSchema = z.object({
 
 type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;
 
+/**
+ * Admin-only function to create new employees
+ * Validates admin permissions, creates user account, and assigns role
+ */
 const createEmployee = async (
   { email, name, role_id }: CreateEmployeeInput,
   context: ActionAPIContext
 ) => {
   console.log("[actions.createEmployee] start");
   try {
-    // 1) eingeloggten User verifizieren
+    // 1) Verify the current user is authenticated
     const ssr = createSSR({ request: context.request, cookies: context.cookies });
     const { data: { user }, error: userErr } = await ssr.auth.getUser();
     if (userErr || !user) {
@@ -107,7 +126,8 @@ const createEmployee = async (
       return { success: false, message: "Unauthorized" };
     }
     console.log("[actions.createEmployee] Debug after 1")
-    // 2) meinen Employee + Mandant
+    
+    // 2) Get current employee record and client ID
     const { data: me, error: meErr } = await ssr
       .from("employees")
       .select("id, client_id")
@@ -120,7 +140,7 @@ const createEmployee = async (
     }
     console.log("[actions.createEmployee] Debug after 2")
 
-    // 3) Admin-Check (rolle 1 = admin)
+    // 3) Check if current user has admin role (role_id = 1)
     const { data: myRoles, error: rolesErr } = await ssr
       .from("roles-employees")
       .select("role_id")
@@ -131,12 +151,13 @@ const createEmployee = async (
       return { success: false, message: "Forbidden" };
     }
 
+    // Verify admin permissions
     const amIAdmin = !!myRoles?.some((r) => r.role_id === 1);
     if (!amIAdmin) return { success: false, message: "Forbidden" };
 
     console.log("[actions.createEmployee] Debug after 3")
 
-    // 4) Service-Role Client (NUR serverseitig!)
+    // 4) Create admin client using service role key (server-side only!)
     const admin = createAdmin(
       import.meta.env.SUPABASE_URL!,
       import.meta.env.SUPABASE_KEY!,
@@ -145,10 +166,10 @@ const createEmployee = async (
 
     console.log("[actions.createEmployee] Debug after 4");
 
-    // 5) auth.users anlegen
+    // 5) Create new user in auth.users table
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
       email,
-      email_confirm: false,
+      email_confirm: false, // User will confirm via reset password email
       user_metadata: { name },
     });
     if (createErr) {
@@ -158,7 +179,7 @@ const createEmployee = async (
 
     console.log("[actions.createEmployee] Debug after 5");
 
-    // 6) employees-Zeile im selben Mandanten
+    // 6) Create employee record in same client/organization
     const { data: empRow, error: empErr } = await admin
       .from("employees")
       .insert({ user_id: created.user.id, client_id: me.client_id, name })
@@ -171,7 +192,7 @@ const createEmployee = async (
 
     console.log("[actions.createEmployee] Debug after 6");
 
-    // 7) Rolle setzen
+    // 7) Assign role to the new employee
     const { error: relErr } = await admin
       .from("roles-employees")
       .insert({ role_id, employee_id: empRow.id });
@@ -182,7 +203,7 @@ const createEmployee = async (
 
     console.log("[actions.createEmployee] Debug after 7");
 
-    // 8) Reset-Mail mit Redirect auf deine Update-Seite
+    // 8) Send password reset email as account activation
     await admin.auth.resetPasswordForEmail(email, {
       redirectTo: new URL("/update-password", context.request.url).toString(),
     });
@@ -198,6 +219,7 @@ const createEmployee = async (
 /* ----------------------- EXPORTS ----------------------- */
 
 export const server = {
+  // User sign-in with email/password and CAPTCHA
   signIn: defineAction({
     accept: "form",
     input: z.object({
@@ -208,6 +230,7 @@ export const server = {
     handler: (input, context) => emailSignIn(input, context),
   }),
 
+  // User sign-out - clears session cookies
   signOut: defineAction({
     handler: async (_input, context) => {
       const supabase = createSSR({ request: context.request, cookies: context.cookies });
@@ -220,6 +243,7 @@ export const server = {
     },
   }),
 
+  // Password reset via email with CAPTCHA
   resetPassword: defineAction({
     accept: "form",
     input: z.object({
@@ -229,6 +253,7 @@ export const server = {
     handler: (input, context) => passwordReset(input, context),
   }),
 
+  // Admin-only employee creation with role assignment
   createEmployee: defineAction({
     accept: "form",
     input: createEmployeeSchema,

@@ -138,6 +138,11 @@ function rolesFor(empId: number) {
         return;
       }
 
+      const url = new URL(location.href);
+        url.search = ''; // it reset the search params
+        location.href = url.toString();
+
+
       // Erfolgreich → Liste aktualisieren
       location.reload();
     } catch (err) {
@@ -145,6 +150,10 @@ function rolesFor(empId: number) {
       alert("Unerwarteter Fehler");
       btn.disabled = false;
       btn.textContent = "Benutzer anlegen";
+
+            const url = new URL(location.href);
+        url.search = ''; // it reset the search params
+        location.href = url.toString();
     }
   });
 </script>
