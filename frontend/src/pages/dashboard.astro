@@ -32,6 +32,10 @@ const { data } = await supabase.auth.getUser();
           class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-md text-white font-bold cursor-pointer disabled:bg-gray-500 disabled:hover:bg-gray-500 disabled:cursor-not-allowed"
           >Sign Out</button
       >
+      <button
+          onclick="location.href='/manage/admin-panel'"
+          class="mt-4 bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-md text-white font-bold cursor-pointer disabled:bg-gray-500 disabled:hover:bg-gray-500 disabled:cursor-not-allowed"
+          >Admin Panel</button>
   </section>
 </BaseLayout>
 

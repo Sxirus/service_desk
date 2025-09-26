@@ -1,26 +1,30 @@
+// src/middleware.ts
 import { defineMiddleware } from "astro:middleware";
 import { createClient } from "./lib/supabase";
 
-export const onRequest = defineMiddleware(async (context, next) => {
-    const { pathname } = context.url;
+export const onRequest = defineMiddleware(async (ctx, next) => {
+  const { pathname } = ctx.url;
+  console.log("Middleware executing for path:", pathname);
 
-    console.log("Middleware executing for path:", pathname);
+  if (pathname === "/dashboard" || pathname.startsWith("/tickets/") || pathname.startsWith("/manage/")) {
+    console.log("Checking auth for protected route");
 
-    const supabase = createClient({
-        request: context.request,
-        cookies: context.cookies,
-    });
+    const supabase = createClient({ request: ctx.request, cookies: ctx.cookies });
 
-    if (pathname === "/dashboard" || pathname.startsWith("/tickets/")) {
-        console.log("Checking auth for protected route");
+    // 1) Schnell: lokale Session aus Cookie (kein Netz)
+    const [{ data: sessionData }, { data: userData, error: userErr }] = await Promise.all([
+      supabase.auth.getSession(),
+      supabase.auth.getUser(),
+    ]);
 
-        const { data } = await supabase.auth.getUser();
+    if (userErr) console.warn("[auth] getUser error:", userErr.message);
+    const userId = userData?.user?.id ?? sessionData?.session?.user?.id;
 
-        // If no user, redirect to index
-        if (!data.user) {
-            return context.redirect("/");
-        }
+    if (!userId) {
+      // weder verifizierter User noch Session -> raus
+      return ctx.redirect("/");
     }
+  }
 
-    return next();
+  return next();
 });
