@@ -125,8 +125,7 @@ const createEmployee = async (
       console.error("[actions.createEmployee] getUser error:", userErr?.message);
       return { success: false, message: "Unauthorized" };
     }
-    console.log("[actions.createEmployee] Debug after 1")
-    
+  
     // 2) Get current employee record and client ID
     const { data: me, error: meErr } = await ssr
       .from("employees")
@@ -138,7 +137,6 @@ const createEmployee = async (
       console.error("[actions.createEmployee] employees lookup:", meErr?.message);
       return { success: false, message: "Forbidden" };
     }
-    console.log("[actions.createEmployee] Debug after 2")
 
     // 3) Check if current user has admin role (role_id = 1)
     const { data: myRoles, error: rolesErr } = await ssr
@@ -155,7 +153,6 @@ const createEmployee = async (
     const amIAdmin = !!myRoles?.some((r) => r.role_id === 1);
     if (!amIAdmin) return { success: false, message: "Forbidden" };
 
-    console.log("[actions.createEmployee] Debug after 3")
 
     // 4) Create admin client using service role key (server-side only!)
     const admin = createAdmin(
@@ -164,7 +161,6 @@ const createEmployee = async (
       { auth: { persistSession: false } }
     );
 
-    console.log("[actions.createEmployee] Debug after 4");
 
     // 5) Create new user in auth.users table
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
@@ -177,7 +173,6 @@ const createEmployee = async (
       return { success: false, message: createErr.message };
     }
 
-    console.log("[actions.createEmployee] Debug after 5");
 
     // 6) Create employee record in same client/organization
     const { data: empRow, error: empErr } = await admin
@@ -190,7 +185,6 @@ const createEmployee = async (
       return { success: false, message: empErr.message };
     }
 
-    console.log("[actions.createEmployee] Debug after 6");
 
     // 7) Assign role to the new employee
     const { error: relErr } = await admin
@@ -201,7 +195,6 @@ const createEmployee = async (
       return { success: false, message: relErr.message };
     }
 
-    console.log("[actions.createEmployee] Debug after 7");
 
     // 8) Send password reset email as account activation
     await admin.auth.resetPasswordForEmail(email, {
