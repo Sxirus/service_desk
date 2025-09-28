@@ -29,22 +29,48 @@ router.get('/getMails', async (req, res) => {
   }
 })
 
-//gets all the mails from a customer using the customer id
+//gets all the mails from a customer using the customer id (send and incomming)
 router.get('/getEmailsFromCustomer', async (req, res) => {
   const customerId = req.query.customerId;
   try {
-    const {data,error} = await supabase
+    const { data: incomingMails, error: errorIncoming } = await supabase
       .from('incoming-mails')
       .select('*')
-      .eq('customer_id', customerId)
-      .order('send_at', { ascending: true })
+      .eq('customer_id', customerId);
 
-    if (error) {
-      console.log('Supabase error:', error.message);
+    const { data: sentMails, error: errorSent } = await supabase
+      .from('sent-mail')
+      .select('*')
+      .eq('customer_id', customerId);
+    
+    if (sentMails != null) {
+      var allMails = [
+        ...incomingMails.map(m => ({
+          type: 'incoming',
+          sendBy: m.customer_id,
+          subject: m.subject,
+          text: m.text_content,
+          date: new Date(m.send_at),
+        })),
+        ...sentMails.map(m => ({
+          type: 'sent',
+          sendBy: m.employee_id,
+          subject: 'None',
+          text: m.text_content,
+          date: new Date(m.send_at),
+        })),
+        ].sort((a, b) => a.date - b.date);
+    } else {
+      var allMails = incomingMails;
+    }
+
+    
+    if (errorIncoming || errorSent) {
+      console.log('Supabase error:', errorIncoming || errorSent);
       return res.status(500).json({ error: 'Datenbankfehler' });
     }
 
-    res.json(data)
+    res.json(allMails)
   } catch (err) {
     console.log('Server error:', err.message);
     res.status(500).json({ error: 'Serverfehler' });
@@ -77,7 +103,7 @@ router.post('/sendMail', async (req, res) => {
     });
 
     const { data, error } = await supabase
-      .from('send-mail')
+      .from('sent-mail')
       .insert([{employee_id: 1, text_content: text, customer_id: parseInt(customerId)}]);
 
     if (error) {

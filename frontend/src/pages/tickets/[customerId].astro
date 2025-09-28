@@ -9,11 +9,17 @@ const customerArray = await resultCustomer.json();
 const customer = customerArray[0];
 //getting all the emails from a customer
 const resultMails = await fetch(`http://localhost:3000/api/emails/getEmailsFromCustomer?customerId=${customerId}`);
-const emailArray = await resultMails.json();
-const lastMail = emailArray[emailArray.length - 1]
+const emailArray = await resultMails.json()
+var lastMail = emailArray[emailArray.length - 1];
+if (lastMail['type'] != 'incoming'){
+  for (let mail of emailArray) {
+    if (mail.type == 'incoming') {
+      lastMail = mail;
+    };
+};
+};
 const emailAdress = lastMail.email_address;
 const newSubject = `RE: ${lastMail.subject}`
-console.log(emailArray);
 ---
 
 <BaseLayout title={customer.name}>
@@ -29,12 +35,20 @@ console.log(emailArray);
   <div class="relative w-4/5 h-screen">
     <h1 class="text-6xl w-full m-4">{lastMail.subject}</h1>
     <ul class="w-full">
-      {emailArray.map(mail => (
+      {emailArray.map(mail => {
+      if (mail.type == 'sent') return (      
       <li class="outline outline-2 outline-gray-300">
-        <p class="">{mail.text_content}</p>
+        <p>Employee</p> 
+        <p class="text-black">{mail.text}</p>
+      </li>);
+      return (
+      <li class="outline outline-2 outline-gray-300">
+        <p>Customer</p>
+        <p class="text-black">{mail.text}</p>
       </li>
-    ))}
+    )})}
     </ul>
+    <!-- Text field to write text for new mail -->
     <textarea class="w-full h-1/5 absolute bottom-3 resize-none overflow-y-auto p-2 border border-gray-300" placeholder="Answer..." id="answer"></textarea>
   </div>
 
