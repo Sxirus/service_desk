@@ -1,0 +1,170 @@
+---
+import Layout from "../../layouts/BaseLayout.astro";
+import { createClient } from "../../lib/supabase.ts";
+
+// DataTable
+import type { User } from "@/components/datatable/columns";
+import ClientUsersTable from "@/components/datatable/ClientUsersTable";
+
+// Create User Dialog
+import CreateUserDialog from "@/components/UserDialog";
+
+// Sidebar Shell
+import AdminShell from "@/components/AdminShell";
+
+const supabase = createClient({ request: Astro.request, cookies: Astro.cookies });
+
+console.log("[admin-panel] accessed");
+
+// Verifizierter User
+const { data: { user }, error: userErr } = await supabase.auth.getUser();
+if (userErr || !user) return Astro.redirect("/");
+
+// "me" ermitteln. Erst RPC, sonst Fallback
+let me: { id: number; client_id: number } | null = null;
+
+try {
+  const rpc = await supabase.rpc("get_my_employee").single();
+  if (!rpc.error) me = rpc.data as any;
+} catch {}
+
+if (!me) {
+  const res = await supabase
+    .from("employees")
+    .select("id, client_id")
+    .eq("user_id", user.id)
+    .single();
+  me = res.data as any;
+  if (res.error) {
+    console.error("[admin-panel] employees lookup:", res.error.message);
+  }
+}
+
+if (!me) return Astro.redirect("/");
+
+// Admin Rolle prüfen. Rolle 1 = admin
+const { data: myRoles, error: rolesErr } = await supabase
+  .from("roles-employees")
+  .select("role_id")
+  .eq("employee_id", me.id);
+
+if (rolesErr) {
+  console.error("[admin-panel] roles lookup:", rolesErr.message);
+  return new Response("Forbidden", { status: 403 });
+}
+
+const isAdmin = !!myRoles?.some((r) => r.role_id === 1);
+if (!isAdmin) return new Response("Forbidden", { status: 403 });
+
+// Rollen, Mitarbeiter, Zuordnungen laden
+const { data: roleRows, error: rolesListErr } = await supabase
+  .from("roles")
+  .select("id, name")
+  .order("id");
+
+if (rolesListErr) console.error("[admin-panel] roles list:", rolesListErr.message);
+
+const { data: employees, error: empsErr } = await supabase
+  .from("employees")
+  .select("id, name")
+  .eq("client_id", me.client_id)
+  .order("name");
+
+if (empsErr) console.error("[admin-panel] employees list:", empsErr.message);
+
+const { data: rels, error: relsErr } = await supabase
+  .from("roles-employees")
+  .select("employee_id, role_id");
+
+if (relsErr) console.error("[admin-panel] roles-employees list:", relsErr.message);
+
+// Helper
+function rolesFor(empId: number) {
+  const map = new Map<number, number[]>();
+  rels?.forEach((r) => {
+    if (!map.has(r.employee_id)) map.set(r.employee_id, []);
+    map.get(r.employee_id)!.push(r.role_id);
+  });
+  return map.get(empId) ?? [];
+}
+
+// Emails per SECURITY DEFINER RPC holen
+const empIds = (employees ?? []).map((e) => e.id);
+let emailMap = new Map<number, string>();
+
+if (empIds.length) {
+  const { data: emailRows, error: emailErr } = await supabase.rpc("get_employee_emails", {
+    emp_ids: empIds
+  });
+  if (emailErr) {
+    console.error("[admin-panel] get_employee_emails RPC error:", emailErr.message);
+  }
+  emailMap = new Map<number, string>(
+    (emailRows ?? []).map((row: any) => [row.employee_id as number, row.email as string])
+  );
+}
+
+// DataTable Daten bauen
+const TableData: User[] =
+  employees?.map((e) => {
+    const roleNames = rolesFor(e.id)
+      .map((rid) => roleRows?.find((r) => r.id === rid)?.name)
+      .filter(Boolean)
+      .join(", ");
+    return {
+      id: String(e.id),
+      name: e.name,
+      email: emailMap.get(e.id) ?? "",
+      role: roleNames || "—",
+    } as User;
+  }) ?? [];
+
+// Sidebar Infos
+const meName = employees?.find((e) => e.id === me?.id)?.name ?? user?.email ?? "Nutzer";
+const sidebarUser = {
+  name: meName,
+  email: user?.email ?? null,
+  avatarUrl: null,
+};
+
+// Team Eintrag
+let firstTeam = null as null | { name: string; plan?: string | null };
+try {
+  const { data: clientRow } = await supabase
+    .from("clients")
+    .select("id, name")
+    .eq("id", me.client_id)
+    .single();
+  if (clientRow?.name) {
+    firstTeam = { name: clientRow.name, plan: "Enterprise" };
+  }
+} catch {}
+---
+
+<Layout>
+  <AdminShell client:load
+    user={sidebarUser}
+    firstTeam={firstTeam ?? undefined}
+    crumbParentLabel="Administration"
+    crumbParentHref="/manage"
+    crumbCurrent="Users"
+    isAdmin={isAdmin}
+    currentPath="/manage/users"
+  >
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-2xl">User Management</h1>
+      
+      <!-- Eleganter Dialog Button zum Erstellen -->
+      <CreateUserDialog client:only="react" roles={roleRows ?? []} />
+    </div>
+
+    <div class="container mx-auto pb-6 min-h-[300px]">
+      <ClientUsersTable 
+        client:only="react" 
+        data={TableData} 
+        roles={roleRows ?? []} 
+      />
+    </div>
+
+  </AdminShell>
+</Layout>
