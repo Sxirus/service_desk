@@ -1,0 +1,85 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { createClient } from "../lib/supabase.ts";
+
+// Fetch the last 10 emails from the database for client ID 1
+const result = await fetch('http://localhost:3000/api/emails/getMails?client_id=1');
+const last10mails = await result.json();
+
+// Create Supabase client with server-side rendering support
+const supabase = createClient({
+    request: Astro.request,
+    cookies: Astro.cookies,
+});
+
+// Get the currently authenticated user
+const { data } = await supabase.auth.getUser();
+---
+
+<BaseLayout title="Service Desk">
+  <!-- Display list of 10 most recent emails -->
+    <ul class="flex flex-col items-center mt-3">
+    {last10mails.map((mail: any) => (
+      <li class="w-2/3 size-14">
+        {/* Each email links to the customer's ticket page */}
+        <a href={`/tickets/${mail.customer_id}`} class="flex justify-start items-center outline outline-2 outline-gray-300 w-full h-full bg-gray-100">{mail.subject}</a>
+      </li>
+    ))}
+  </ul>
+  
+  <!-- Main dashboard section with user info and navigation -->
+  <section style="margin: 50px;" class="flex flex-col items-center justify-center m-30">
+      <h1 class="text-4xl text-left font-bold mb-12">You are logged in!</h1>
+      <p class="mb-6">Your user Id: {data.user?.id}</p>
+      
+      {/* Sign out button */}
+      <button
+          id="sign-out"
+          class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-md text-white font-bold cursor-pointer disabled:bg-gray-500 disabled:hover:bg-gray-500 disabled:cursor-not-allowed"
+          >Sign Out</button
+      >
+      
+      {/* Admin panel navigation */}
+      <button
+          onclick="location.href='/manage/admin-panel'"
+          class="mt-4 bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-md text-white font-bold cursor-pointer disabled:bg-gray-500 disabled:hover:bg-gray-500 disabled:cursor-not-allowed"
+          >Admin Panel</button>
+  </section>
+</BaseLayout>
+
+<script>
+    import { actions } from "astro:actions";
+    
+    // Get reference to sign-out button
+    const signOutBtn = document.getElementById("sign-out") as HTMLButtonElement;
+
+    // Handle sign-out button click
+    signOutBtn?.addEventListener("click", async (e) => {
+        e.preventDefault();
+        
+        // Disable button and show loading state
+        signOutBtn!.disabled = true;
+        signOutBtn!.textContent = "Signing out...";
+
+        try {
+            // Call server-side sign-out action
+            const results = await actions.signOut();
+
+            // Handle sign-out failure
+            if (!results.data?.success) {
+                signOutBtn!.disabled = false;
+                signOutBtn!.textContent = "Sign Out";
+                return alert("Oops! Could not sign Out. Please try again");
+            }
+            
+            // Sign-out successful - reload page
+            return window.location.reload();
+        } catch (error) {
+            // Handle unexpected errors
+            signOutBtn.disabled = false;
+            signOutBtn.textContent = "Sign Out";
+            console.log(error);
+            return alert("Something went wrong. Please try again");
+        }
+    });
+</script>
