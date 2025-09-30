@@ -1,5 +1,6 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import { formatDate } from "../../utils/formatDate.js";
 //parameters
 const { params } = Astro;
 const customerId = params.customerId;
@@ -25,7 +26,12 @@ const newSubject = `RE: ${lastMail.subject}`
 <BaseLayout title={customer.name}>
   <!-- the right side -->
   <div class="fixed right-0 bg-gray-100 h-full w-1/5 outline outline-2 outline-gray-300 flex justify-center">
-    <p> Name: {customer.name}</p>
+    <ul>
+    <li>
+      Name: {customer.name}
+    </li>
+    <li>{emailAdress}</li>
+    </ul>
     <button
       data-email={emailAdress}
       data-subject={newSubject}
@@ -43,11 +49,13 @@ const newSubject = `RE: ${lastMail.subject}`
       {emailArray.map(mail => {
       if (mail.type == 'sent') return (      
       <li class="outline outline-2 outline-gray-300 mb-2">
+        <p>{formatDate(mail.date)}</p>
         <p>Employee</p> 
         <p class="text-black">{mail.text}</p>
       </li>);
       return (
       <li class="outline outline-2 outline-gray-300 mb-2">
+        <p>{formatDate(mail.date)}</p>
         <p>Customer</p>
         <p class="text-black">{mail.text}</p>
       </li>
