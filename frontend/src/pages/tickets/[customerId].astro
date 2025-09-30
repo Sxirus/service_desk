@@ -26,9 +26,14 @@ const newSubject = `RE: ${lastMail.subject}`
   <!-- the right side -->
   <div class="fixed right-0 bg-gray-100 h-full w-1/5 outline outline-2 outline-gray-300 flex justify-center">
     <p> Name: {customer.name}</p>
-    <a href="/" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 absolute bottom-7 w-4/5">
-    <button data-email={emailAdress} data-subject={newSubject} data-customerid={customerId} id="sendButton" class="w-full h-full">Send</button>
-    </a>
+    <button
+      data-email={emailAdress}
+      data-subject={newSubject}
+      data-customerid={customerId}
+      id="sendButton"
+      class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 absolute bottom-7 w-4/5">
+      Senden
+    </button>
   </div>
   
   <!-- all the mails of the customer -->
@@ -79,10 +84,11 @@ const newSubject = `RE: ${lastMail.subject}`
           });
         }
         //making all mails read
-        await fetch(`http://localhost:3000/api/emails/makeRead?customerId=${customerId}`, {
+        var result = await fetch(`http://localhost:3000/api/emails/makeRead?customerId=${customerId}`, {
           method: 'POST'
         });
-        return Astro.redirect("/");
+        //change window to main screen
+        window.location.assign('/');
       });
     });
   </script>
