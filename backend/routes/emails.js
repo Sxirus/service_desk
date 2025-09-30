@@ -51,6 +51,7 @@ router.get('/getEmailsFromCustomer', async (req, res) => {
           subject: m.subject,
           text: m.text_content,
           date: new Date(m.send_at),
+          email_adress: m.email_address,
         })),
         ...sentMails.map(m => ({
           type: 'sent',
