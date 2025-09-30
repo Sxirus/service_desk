@@ -38,26 +38,35 @@ const newSubject = `RE: ${lastMail.subject}`
   
   <!-- all the mails of the customer -->
   <div class="relative w-4/5 h-screen">
-    <h1 class="text-6xl w-full m-4">{lastMail.subject}</h1>
-    <ul class="w-full">
+    <h1 class="text-6xl w-full h-[5%] m-4">{lastMail.subject}</h1>
+    <ul id='mailList' class="w-full h-[70%] overflow-y-auto mb-2">
       {emailArray.map(mail => {
       if (mail.type == 'sent') return (      
-      <li class="outline outline-2 outline-gray-300">
+      <li class="outline outline-2 outline-gray-300 mb-2">
         <p>Employee</p> 
         <p class="text-black">{mail.text}</p>
       </li>);
       return (
-      <li class="outline outline-2 outline-gray-300">
+      <li class="outline outline-2 outline-gray-300 mb-2">
         <p>Customer</p>
         <p class="text-black">{mail.text}</p>
       </li>
     )})}
     </ul>
     <!-- Text field to write text for new mail -->
-    <textarea class="w-full h-1/5 absolute bottom-3 resize-none overflow-y-auto p-2 border border-gray-300" placeholder="Answer..." id="answer"></textarea>
+    <textarea class="w-full h-[20%] absolut bottom-3 resize-none overflow-y-auto p-2 border border-gray-300" placeholder="Answer..." id="answer"></textarea>
   </div>
 
   <script>
+    //mail list standartmäßig nach unten gescrollt
+    document.addEventListener('DOMContentLoaded', () => {
+      const list = document.getElementById('mailList');
+      if (list) {
+        list.scrollTop = list.scrollHeight; // ganz nach unten springen
+      }
+    });
+
+    //button functionalität
     document.addEventListener('DOMContentLoaded', () => {
       const button = document.getElementById('sendButton') as HTMLButtonElement;
       const textarea = document.getElementById('answer') as HTMLTextAreaElement;
