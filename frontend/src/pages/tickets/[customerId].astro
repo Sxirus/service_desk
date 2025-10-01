@@ -25,7 +25,7 @@ const newSubject = `RE: ${lastMail.subject}`
 
 <BaseLayout title={customer.name} overflowHidden>
   <!-- the right side -->
-  <div class="fixed right-0 bg-gray-100 h-full w-1/5 outline outline-2 outline-gray-300 flex justify-center">
+  <div class="fixed right-0 bg-gray-100 h-full w-1/5 outline-2 outline-gray-300 flex justify-center">
     <ul>
     <li>
       Name: {customer.name}
@@ -48,13 +48,13 @@ const newSubject = `RE: ${lastMail.subject}`
     <ul id='mailList' class="w-full h-[70%] overflow-y-auto mb-2">
       {emailArray.map((mail: any) => {
       if (mail.type == 'sent') return (      
-      <li class="outline outline-2 outline-gray-300 mb-2">
+      <li class="outline-2 outline-gray-300 mb-2">
         <p>{formatDate(mail.date)}</p>
         <p>Employee</p> 
         <p class="text-black">{mail.text}</p>
       </li>);
       return (
-      <li class="outline outline-2 outline-gray-300 mb-2">
+      <li class="outline-2 outline-gray-300 mb-2">
         <p>{formatDate(mail.date)}</p>
         <p>Customer</p>
         <p class="text-black">{mail.text}</p>
