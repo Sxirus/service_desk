@@ -82,6 +82,8 @@ export function LoginForm({ className, siteKey, ...props }: Props) {
           setCaptchaToken("");
         } else {
           setError("Login fehlgeschlagen. Bitte E-Mail und Passwort prüfen.");
+          window.turnstile?.reset?.(widgetIdRef.current || undefined);
+          setCaptchaToken("");
         }
         setLoading(false);
         return;
