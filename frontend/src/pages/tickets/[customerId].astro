@@ -1,9 +1,15 @@
 ---
+import { AtRule } from "postcss";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { formatDate } from "../../utils/formatDate.js";
-//parameters
+//parameters (pfad)
 const { params } = Astro;
 const customerId = params.customerId;
+
+//parameter(query)
+const url = Astro.url;
+const clientId = parseInt(url.searchParams.get('clientId') ?? 'null');
+
 //getting the customer
 const resultCustomer = await fetch(`http://localhost:3000/api/customers/getCustomerById?customerId=${customerId}`);
 const customerArray = await resultCustomer.json();
