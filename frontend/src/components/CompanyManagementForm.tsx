@@ -1,13 +1,13 @@
-"use client"
+"use client";
 
-import React, { useState } from "react"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
-import { z } from "zod"
-import { Building2, Save, AlertCircle, Check } from "lucide-react"
+import React, { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { Building2, Save, AlertCircle, Check } from "lucide-react";
 
-// shadcn/ui components (du musst diese importieren entsprechend deiner Setup)
-import { Button } from "@/components/ui/button"
+// shadcn/ui
+import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -16,102 +16,102 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { toast } from "sonner"
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { toast } from "sonner";
 
 const formSchema = z.object({
-  name: z.string().min(2, {
-    message: "Company name must be at least 2 characters.",
-  }),
-  address: z.string(),
-  city: z.string(),
-  postalCode: z.string(),
-  country: z.string(),
-  taxNumber: z.string(),
-  vatNumber: z.string(),
-  phone: z.string(),
-  email: z.string(),
-  website: z.string(),
-})
+  name: z.string().min(2, { message: "Company name must be at least 2 characters." }),
 
-type FormData = z.infer<typeof formSchema>
+  address_street: z.string().optional().nullable(),
+  address_city: z.string().optional().nullable(),
+  address_zip: z.string().optional().nullable(),
+  address_country: z.string().optional().nullable(),
+
+  vat: z.string().optional().nullable(),
+  website: z.string().url("Website muss eine gültige URL sein").optional().nullable(),
+
+  isActive: z.boolean().optional(),
+});
+
+type FormData = z.infer<typeof formSchema>;
 
 interface CompanyManagementFormProps {
   initialData: {
-    id: number
-    name: string
-    address: string
-    city: string
-    postalCode: string
-    country: string
-    taxNumber: string
-    vatNumber: string
-    phone: string
-    email: string
-    website: string
-  }
+    id: number;
+    name: string;
+    address_street: string;
+    address_city: string;
+    address_zip: string;
+    address_country: string;
+    vat: string;
+    website: string;
+    isActive: boolean;
+  };
 }
 
 export default function CompanyManagementForm({ initialData }: CompanyManagementFormProps) {
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: initialData.name,
-      address: initialData.address,
-      city: initialData.city,
-      postalCode: initialData.postalCode,
-      country: initialData.country,
-      taxNumber: initialData.taxNumber,
-      vatNumber: initialData.vatNumber,
-      phone: initialData.phone,
-      email: initialData.email,
+      address_street: initialData.address_street,
+      address_city: initialData.address_city,
+      address_zip: initialData.address_zip,
+      address_country: initialData.address_country,
+      vat: initialData.vat,
       website: initialData.website,
+      isActive: initialData.isActive,
     },
-  })
+  });
 
   const onSubmit = async (data: FormData) => {
-    setIsLoading(true)
-    
+    setIsLoading(true);
     try {
-      // Astro Action direkt aufrufen
-      const { actions } = await import("astro:actions")
-      
+      const { actions } = await import("astro:actions");
+
       const result = await actions.updateCompany({
         id: initialData.id,
         name: data.name,
-      })
+        address_street: data.address_street ?? null,
+        address_city: data.address_city ?? null,
+        address_zip: data.address_zip ?? null,
+        address_country: data.address_country ?? null,
+        vat: data.vat ?? null,
+        website: data.website ?? null,
+        isActive: typeof data.isActive === "boolean" ? data.isActive : undefined,
+      });
 
-      if (result.error) {
-        throw new Error(result.error.message || "Failed to update company")
+      if (!result?.data?.success) {
+        throw new Error(result?.data?.message || "Failed to update company");
       }
 
       toast("Company updated successfully", {
-        description: "Your company name has been updated.",
+        description: "Your company information has been updated.",
         action: {
           label: <Check className="h-4 w-4" />,
-          onClick: () => console.log("Success"),
+          onClick: () => {},
         },
-      })
+      });
       window.location.reload();
     } catch (error) {
-      console.error("Error updating company:", error)
+      console.error("Error updating company:", error);
       toast("Error updating company", {
         description: error instanceof Error ? error.message : "Please try again later.",
         action: {
           label: <AlertCircle className="h-4 w-4" />,
-          onClick: () => console.log("Error"),
+          onClick: () => {},
         },
-      })
+      });
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <Card className="w-full">
@@ -120,21 +120,18 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
           <Building2 className="h-5 w-5" />
           <CardTitle className="text-2xl">Company Information</CardTitle>
         </div>
-        <CardDescription>
-          Update your company details and business information.
-        </CardDescription>
+        <CardDescription>Update your company details and business information.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            
             {/* Basic Information */}
             <div className="space-y-4">
               <div className="flex items-center space-x-2">
                 <h3 className="text-lg font-medium">Basic Information</h3>
                 <Badge variant="outline">Editable</Badge>
               </div>
-              
+
               <FormField
                 control={form.control}
                 name="name"
@@ -142,15 +139,9 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
                   <FormItem>
                     <FormLabel>Company Name</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="Enter company name" 
-                        {...field} 
-                        className=""
-                      />
+                      <Input placeholder="Enter company name" {...field} />
                     </FormControl>
-                    <FormDescription>
-                      This is your company's official name.
-                    </FormDescription>
+                    <FormDescription>This is your company's official name.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -159,78 +150,66 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
 
             <Separator />
 
-            {/* Address Information */}
+            {/* Address */}
             <div className="space-y-4">
               <div className="flex items-center space-x-2">
-                <h3 className="text-lg font-medium">Address Information</h3>
-                <Badge variant="secondary">Coming Soon</Badge>
+                <h3 className="text-lg font-medium">Address</h3>
+                <Badge variant="outline">Editable</Badge>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
-                  name="address"
+                  name="address_street"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Street Address</FormLabel>
+                    <FormItem className="md:col-span-2">
+                      <FormLabel>Street & Number</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="Street address" 
-                          {...field} 
-                          disabled 
-                        />
+                        <Input placeholder="Street and number" {...field} value={field.value ?? ""} />
                       </FormControl>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
 
                 <FormField
                   control={form.control}
-                  name="city"
+                  name="address_zip"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>ZIP</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Postal code" {...field} value={field.value ?? ""} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="address_city"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>City</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="City" 
-                          {...field} 
-                          disabled 
-                        />
+                        <Input placeholder="City" {...field} value={field.value ?? ""} />
                       </FormControl>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
 
                 <FormField
                   control={form.control}
-                  name="postalCode"
+                  name="address_country"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Postal Code</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="Postal code" 
-                          {...field} 
-                          disabled 
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="country"
-                  render={({ field }) => (
-                    <FormItem>
+                    <FormItem className="md:col-span-2">
                       <FormLabel>Country</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="Country" 
-                          {...field} 
-                          disabled 
-                        />
+                        <Input placeholder="Country" {...field} value={field.value ?? ""} />
                       </FormControl>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -239,90 +218,24 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
 
             <Separator />
 
-            {/* Tax Information */}
+            {/* Tax and Web */}
             <div className="space-y-4">
               <div className="flex items-center space-x-2">
-                <h3 className="text-lg font-medium">Tax Information</h3>
-                <Badge variant="secondary">Coming Soon</Badge>
+                <h3 className="text-lg font-medium">Tax and Web</h3>
+                <Badge variant="outline">Editable</Badge>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
-                  name="taxNumber"
+                  name="vat"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Tax Number</FormLabel>
+                      <FormLabel>VAT</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="Tax number" 
-                          {...field} 
-                          disabled 
-                        />
+                        <Input placeholder="DE123456789" {...field} value={field.value ?? ""} />
                       </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="vatNumber"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>VAT Number</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="VAT number" 
-                          {...field} 
-                          disabled 
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Contact Information */}
-            <div className="space-y-4">
-              <div className="flex items-center space-x-2">
-                <h3 className="text-lg font-medium">Contact Information</h3>
-                <Badge variant="secondary">Coming Soon</Badge>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Phone</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="+1 (555) 123-4567" 
-                          {...field} 
-                          disabled 
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="contact@company.com" 
-                          {...field} 
-                          disabled 
-                        />
-                      </FormControl>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -331,30 +244,25 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
                   control={form.control}
                   name="website"
                   render={({ field }) => (
-                    <FormItem className="md:col-span-2">
+                    <FormItem>
                       <FormLabel>Website</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="https://www.company.com" 
-                          {...field} 
-                          disabled 
-                        />
+                        <Input placeholder="https://example.com" {...field} value={field.value ?? ""} />
                       </FormControl>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
             </div>
 
+            <Separator />
+
             <div className="flex justify-end pt-6">
-              <Button 
-                type="submit" 
-                disabled={isLoading}
-                className="min-w-[120px] cursor-pointer"
-              >
+              <Button type="submit" disabled={isLoading} className="min-w-[140px] cursor-pointer">
                 {isLoading ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
                     Saving...
                   </>
                 ) : (
@@ -369,5 +277,5 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
         </Form>
       </CardContent>
     </Card>
-  )
+  );
 }

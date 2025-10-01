@@ -127,7 +127,7 @@ const sidebarUser = {
   avatarUrl: null,
 };
 
-// Team Eintrag
+// Team Eintrag (analog zu client.astro)
 let firstTeam = null as null | { name: string; plan?: string | null };
 try {
   const { data: clientRow } = await supabase
@@ -151,19 +151,92 @@ try {
     isAdmin={isAdmin}
     currentPath="/manage/users"
   >
-    <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl">User Management</h1>
-      
-      <!-- Eleganter Dialog Button zum Erstellen -->
-      <CreateUserDialog client:only="react" roles={roleRows ?? []} />
-    </div>
+    <div class="space-y-6">
+      <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+        <div>
+          <h1 class="text-3xl font-bold tracking-tight">User Management</h1>
+          <p class="text-muted-foreground">
+            Manage your team members, roles and access.
+          </p>
+        </div>
+        <div class="shrink-0">
+          <CreateUserDialog client:only="react" roles={roleRows ?? []} />
+        </div>
+      </div>
 
-    <div class="container mx-auto pb-6 min-h-[300px]">
-      <ClientUsersTable 
-        client:only="react" 
-        data={TableData} 
-        roles={roleRows ?? []} 
-      />
+      <!-- Wrapper enthält Skeleton + React-Insel (Design identisch zu client.astro) -->
+      <div id="users-table-mount" class="w-full relative">
+        <!-- SKELETON: sichtbar bis die React-Tabelle gerendert ist -->
+        <div id="users-table-skeleton" aria-hidden="true" class="space-y-6">
+          <div class="border rounded-xl p-6 bg-card">
+            <!-- Header-Zeile -->
+            <div class="mb-4 flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <div class="h-5 w-5 rounded-md bg-muted animate-pulse"></div>
+                <div class="h-6 w-48 rounded bg-muted animate-pulse"></div>
+              </div>
+              <div class="h-10 w-36 rounded-md bg-muted animate-pulse"></div>
+            </div>
+
+            <!-- Tabellenkopf -->
+            <div class="grid grid-cols-4 gap-4 mb-3">
+              <div class="h-4 w-24 rounded bg-muted animate-pulse"></div>
+              <div class="h-4 w-24 rounded bg-muted animate-pulse"></div>
+              <div class="h-4 w-24 rounded bg-muted animate-pulse"></div>
+              <div class="h-4 w-16 rounded bg-muted animate-pulse"></div>
+            </div>
+
+            <!-- Tabellenzeilen -->
+            <div class="space-y-2">
+              {Array.from({ length: 7 }).map((_, i) => (
+                <div class="grid grid-cols-4 gap-4">
+                  <div class="h-10 w-full rounded-md bg-muted animate-pulse"></div>
+                  <div class="h-10 w-full rounded-md bg-muted animate-pulse"></div>
+                  <div class="h-10 w-full rounded-md bg-muted animate-pulse"></div>
+                  <div class="h-10 w-full rounded-md bg-muted animate-pulse"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <!-- REACT-TABELLE -->
+        <div id="users-table-root">
+          <ClientUsersTable 
+            client:only="react" 
+            data={TableData} 
+            roles={roleRows ?? []} 
+          />
+        </div>
+
+        <!-- Script blendet Skeleton aus, sobald ein <table> (oder role="table") gefunden wird -->
+        <script>
+          (() => {
+            const wrap = document.getElementById("users-table-mount");
+            const skel = document.getElementById("users-table-skeleton");
+            if (!wrap || !skel) return;
+
+            const hide = () => {
+              const hasTable = wrap.querySelector("table, [role='table']");
+              if (hasTable) {
+                skel.style.display = "none";
+                return true;
+              }
+              return false;
+            };
+
+            if (!hide()) {
+              const obs = new MutationObserver(() => {
+                if (hide()) obs.disconnect();
+              });
+              obs.observe(wrap, { childList: true, subtree: true });
+              window.addEventListener("load", hide);
+              // Fallback nach 3s, falls die Tabelle kein table-Element rendert
+              setTimeout(hide, 3000);
+            }
+          })();
+        </script>
+      </div>
     </div>
 
   </AdminShell>

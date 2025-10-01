@@ -52,10 +52,10 @@ if (rolesErr) {
 const isAdmin = !!myRoles?.some((r) => r.role_id === 1);
 if (!isAdmin) return new Response("Forbidden", { status: 403 });
 
-// Company-Daten laden
+// Company-Daten laden – jetzt mit allen Feldern
 const { data: companyData, error: companyErr } = await supabase
   .from("clients")
-  .select("id, name")
+  .select("id, name, address_street, address_city, address_zip, address_country, vat, website, isActive")
   .eq("id", me.client_id)
   .single();
 
@@ -101,23 +101,96 @@ const firstTeam = companyData?.name
         </p>
       </div>
 
-      <div class="max-w-2x2">
+      <!-- Wrapper enthält Skeleton + React-Insel -->
+      <div id="company-form-mount" class="w-full relative">
+        <!-- SKELETON: sichtbar bis das React-Form gerendert ist -->
+        <div id="company-form-skeleton" aria-hidden="true" class="space-y-6">
+          <div class="border rounded-xl p-6 bg-card">
+            <div class="mb-4 flex items-center gap-2">
+              <div class="h-5 w-5 rounded-md bg-muted animate-pulse"></div>
+              <div class="h-6 w-48 rounded bg-muted animate-pulse"></div>
+            </div>
+
+            <div class="space-y-4">
+              <!-- Section: Basic Information -->
+              <div class="space-y-3">
+                <div class="h-5 w-40 rounded bg-muted animate-pulse"></div>
+                <div class="h-10 w-full rounded-md bg-muted animate-pulse"></div>
+              </div>
+
+              <div class="h-px w-full bg-border my-4"></div>
+
+              <!-- Section: Address -->
+              <div class="space-y-3">
+                <div class="h-5 w-28 rounded bg-muted animate-pulse"></div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div class="h-10 w-full rounded-md bg-muted animate-pulse md:col-span-2"></div>
+                  <div class="h-10 w-full rounded-md bg-muted animate-pulse"></div>
+                  <div class="h-10 w-full rounded-md bg-muted animate-pulse"></div>
+                  <div class="h-10 w-full rounded-md bg-muted animate-pulse md:col-span-2"></div>
+                </div>
+              </div>
+
+              <div class="h-px w-full bg-border my-4"></div>
+
+              <!-- Section: Tax and Web -->
+              <div class="space-y-3">
+                <div class="h-5 w-32 rounded bg-muted animate-pulse"></div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div class="h-10 w-full rounded-md bg-muted animate-pulse"></div>
+                  <div class="h-10 w-full rounded-md bg-muted animate-pulse"></div>
+                </div>
+              </div>
+
+              <div class="flex justify-end pt-6">
+                <div class="h-10 w-36 rounded-md bg-muted animate-pulse"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- REACT-FORM -->
         <CompanyManagementForm 
           client:only="react" 
           initialData={{
-            id: companyData?.id || me.client_id,
-            name: companyData?.name || "",
-            address: "",
-            city: "",
-            postalCode: "",
-            country: "",
-            taxNumber: "",
-            vatNumber: "",
-            phone: "",
-            email: "",
-            website: ""
+            id: companyData?.id ?? me.client_id,
+            name: companyData?.name ?? "",
+            address_street: companyData?.address_street ?? "",
+            address_city: companyData?.address_city ?? "",
+            address_zip: companyData?.address_zip ? String(companyData.address_zip) : "",
+            address_country: companyData?.address_country ?? "",
+            vat: companyData?.vat ?? "",
+            website: companyData?.website ?? "",
+            isActive: companyData?.isActive ?? true,
           }}
         />
+
+        <!-- kleines Script blendet Skeleton aus, sobald ein <form> im Wrapper existiert -->
+        <script>
+          (() => {
+            const wrap = document.getElementById("company-form-mount");
+            const skel = document.getElementById("company-form-skeleton");
+
+            if (!wrap || !skel) return;
+
+            const hide = () => {
+              if (wrap.querySelector("form")) {
+                skel.style.display = "none";
+                return true;
+              }
+              return false;
+            };
+
+            if (!hide()) {
+              const obs = new MutationObserver(() => {
+                if (hide()) obs.disconnect();
+              });
+              obs.observe(wrap, { childList: true, subtree: true });
+              window.addEventListener("load", hide);
+              setTimeout(hide, 3000);
+            }
+          })();
+        </script>
       </div>
     </div>
 
