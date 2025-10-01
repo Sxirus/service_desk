@@ -209,6 +209,380 @@ const createEmployee = async (
   }
 };
 
+/* ----------------------- ADMIN: UPDATE EMPLOYEE ----------------------- */
+
+// Schema for validating employee update input
+const updateEmployeeSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  email: z.string().email(),
+  name: z.string().min(1),
+  role_id: z.coerce.number().int().refine((v) => v === 1 || v === 2, {
+    message: "invalid role_id",
+  }),
+});
+
+type UpdateEmployeeInput = z.infer<typeof updateEmployeeSchema>;
+
+/**
+ * Admin-only function to update existing employees
+ * Validates admin permissions and updates employee data
+ */
+const updateEmployee = async (
+  { id, email, name, role_id }: UpdateEmployeeInput,
+  context: ActionAPIContext
+) => {
+  console.log("[actions.updateEmployee] start for employee:", id);
+  try {
+    // 1) Verify the current user is authenticated
+    const ssr = createSSR({ request: context.request, cookies: context.cookies });
+    const { data: { user }, error: userErr } = await ssr.auth.getUser();
+    if (userErr || !user) {
+      console.error("[actions.updateEmployee] getUser error:", userErr?.message);
+      return { success: false, message: "Unauthorized" };
+    }
+  
+    // 2) Get current employee record and client ID
+    const { data: me, error: meErr } = await ssr
+      .from("employees")
+      .select("id, client_id")
+      .eq("user_id", user.id)
+      .single();
+
+    if (meErr || !me) {
+      console.error("[actions.updateEmployee] employees lookup:", meErr?.message);
+      return { success: false, message: "Forbidden" };
+    }
+
+    // 3) Check if current user has admin role (role_id = 1)
+    const { data: myRoles, error: rolesErr } = await ssr
+      .from("roles-employees")
+      .select("role_id")
+      .eq("employee_id", me.id);
+
+    if (rolesErr) {
+      console.error("[actions.updateEmployee] roles lookup:", rolesErr.message);
+      return { success: false, message: "Forbidden" };
+    }
+
+    // Verify admin permissions
+    const amIAdmin = !!myRoles?.some((r) => r.role_id === 1);
+    if (!amIAdmin) return { success: false, message: "Forbidden" };
+
+    // 4) Verify target employee belongs to same client
+    const { data: targetEmployee, error: targetErr } = await ssr
+      .from("employees")
+      .select("user_id, client_id")
+      .eq("id", id)
+      .single();
+
+    if (targetErr || !targetEmployee) {
+      console.error("[actions.updateEmployee] target employee lookup:", targetErr?.message);
+      return { success: false, message: "Employee not found" };
+    }
+
+    if (targetEmployee.client_id !== me.client_id) {
+      console.error("[actions.updateEmployee] cross-client update attempt");
+      return { success: false, message: "Forbidden: Different client" };
+    }
+
+    // 5) Create admin client using service role key
+    const admin = createAdmin(
+      import.meta.env.SUPABASE_URL!,
+      import.meta.env.SUPABASE_KEY!,
+      { auth: { persistSession: false } }
+    );
+
+    // 6) Update user email and metadata in auth.users
+    const { error: authUpdateErr } = await admin.auth.admin.updateUserById(
+      targetEmployee.user_id,
+      {
+        email,
+        user_metadata: { name },
+      }
+    );
+    if (authUpdateErr) {
+      console.error("[actions.updateEmployee] auth update error:", authUpdateErr.message);
+      return { success: false, message: "Failed to update user auth data" };
+    }
+
+    // 7) Update employee name
+    const { error: empUpdateErr } = await admin
+      .from("employees")
+      .update({ name })
+      .eq("id", id);
+
+    if (empUpdateErr) {
+      console.error("[actions.updateEmployee] employee update error:", empUpdateErr.message);
+      return { success: false, message: "Failed to update employee data" };
+    }
+
+    // 8) Update role assignment
+    // First delete existing role assignments for this employee
+    const { error: deleteRoleErr } = await admin
+      .from("roles-employees")
+      .delete()
+      .eq("employee_id", id);
+
+    if (deleteRoleErr) {
+      console.error("[actions.updateEmployee] role deletion error:", deleteRoleErr.message);
+      return { success: false, message: "Failed to update role assignments" };
+    }
+
+    // Then insert new role
+    const { error: insertRoleErr } = await admin
+      .from("roles-employees")
+      .insert({ role_id, employee_id: id });
+
+    if (insertRoleErr) {
+      console.error("[actions.updateEmployee] role insertion error:", insertRoleErr.message);
+      return { success: false, message: "Failed to assign new role" };
+    }
+
+    console.log("[actions.updateEmployee] ok");
+    return { success: true, message: "Employee updated successfully" };
+  } catch (e: any) {
+    console.error("[actions.updateEmployee] unexpected:", e?.message ?? e);
+    return { success: false, message: "Unexpected error" };
+  }
+};
+
+/* ----------------------- ADMIN: DELETE EMPLOYEE ----------------------- */
+
+// Schema for validating employee deletion input
+const deleteEmployeeSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
+type DeleteEmployeeInput = z.infer<typeof deleteEmployeeSchema>;
+
+/**
+ * Admin-only function to delete employees
+ * Validates admin permissions and removes employee data
+ */
+const deleteEmployee = async (
+  { id }: DeleteEmployeeInput,
+  context: ActionAPIContext
+) => {
+  console.log("[actions.deleteEmployee] start for employee:", id);
+  try {
+    // 1) Verify the current user is authenticated
+    const ssr = createSSR({ request: context.request, cookies: context.cookies });
+    const { data: { user }, error: userErr } = await ssr.auth.getUser();
+    if (userErr || !user) {
+      console.error("[actions.deleteEmployee] getUser error:", userErr?.message);
+      return { success: false, message: "Unauthorized" };
+    }
+  
+    // 2) Get current employee record and client ID
+    const { data: me, error: meErr } = await ssr
+      .from("employees")
+      .select("id, client_id")
+      .eq("user_id", user.id)
+      .single();
+
+    if (meErr || !me) {
+      console.error("[actions.deleteEmployee] employees lookup:", meErr?.message);
+      return { success: false, message: "Forbidden" };
+    }
+
+    // 3) Check if current user has admin role (role_id = 1)
+    const { data: myRoles, error: rolesErr } = await ssr
+      .from("roles-employees")
+      .select("role_id")
+      .eq("employee_id", me.id);
+
+    if (rolesErr) {
+      console.error("[actions.deleteEmployee] roles lookup:", rolesErr.message);
+      return { success: false, message: "Forbidden" };
+    }
+
+    // Verify admin permissions
+    const amIAdmin = !!myRoles?.some((r) => r.role_id === 1);
+    if (!amIAdmin) return { success: false, message: "Forbidden" };
+
+    // 4) Prevent self-deletion
+    if (id === me.id) {
+      console.error("[actions.deleteEmployee] self-deletion attempt");
+      return { success: false, message: "Cannot delete your own account" };
+    }
+
+    // 5) Verify target employee belongs to same client
+    const { data: targetEmployee, error: targetErr } = await ssr
+      .from("employees")
+      .select("user_id, client_id")
+      .eq("id", id)
+      .single();
+
+    if (targetErr || !targetEmployee) {
+      console.error("[actions.deleteEmployee] target employee lookup:", targetErr?.message);
+      return { success: false, message: "Employee not found" };
+    }
+
+    if (targetEmployee.client_id !== me.client_id) {
+      console.error("[actions.deleteEmployee] cross-client deletion attempt");
+      return { success: false, message: "Forbidden: Different client" };
+    }
+
+    // 6) Create admin client using service role key
+    const admin = createAdmin(
+      import.meta.env.SUPABASE_URL!,
+      import.meta.env.SUPABASE_KEY!,
+      { auth: { persistSession: false } }
+    );
+
+    // 7) Delete role assignments first (foreign key constraint)
+    const { error: deleteRoleErr } = await admin
+      .from("roles-employees")
+      .delete()
+      .eq("employee_id", id);
+
+    if (deleteRoleErr) {
+      console.error("[actions.deleteEmployee] role deletion error:", deleteRoleErr.message);
+      return { success: false, message: "Failed to remove role assignments" };
+    }
+
+    // 8) Delete employee record
+    const { error: empDeleteErr } = await admin
+      .from("employees")
+      .delete()
+      .eq("id", id);
+
+    if (empDeleteErr) {
+      console.error("[actions.deleteEmployee] employee deletion error:", empDeleteErr.message);
+      return { success: false, message: "Failed to delete employee" };
+    }
+
+    // 9) Delete user from auth.users (optional - you might want to keep auth records)
+    const { error: authDeleteErr } = await admin.auth.admin.deleteUser(targetEmployee.user_id);
+    if (authDeleteErr) {
+      console.warn("[actions.deleteEmployee] auth deletion warning:", authDeleteErr.message);
+      // Don't fail the entire operation if auth deletion fails
+    }
+
+    console.log("[actions.deleteEmployee] ok");
+    return { success: true, message: "Employee deleted successfully" };
+  } catch (e: any) {
+    console.error("[actions.deleteEmployee] unexpected:", e?.message ?? e);
+    return { success: false, message: "Unexpected error" };
+  }
+};
+
+/* ----------------------- ADMIN: UPDATE COMPANY ----------------------- */
+
+// Schema for validating company update input
+const updateCompanySchema = z.object({
+  id: z.coerce.number().int().positive(),
+  name: z.string().min(2, "Company name must be at least 2 characters"),
+});
+
+type UpdateCompanyInput = z.infer<typeof updateCompanySchema>;
+
+/**
+ * Admin-only function to update company information
+ * Validates admin permissions and updates company data
+ */
+const updateCompany = async (
+  { id, name }: UpdateCompanyInput,
+  context: ActionAPIContext
+) => {
+  console.log("[actions.updateCompany] start for company:", id);
+  try {
+    // 1) Verify the current user is authenticated
+    const ssr = createSSR({ request: context.request, cookies: context.cookies });
+    const { data: { user }, error: userErr } = await ssr.auth.getUser();
+    if (userErr || !user) {
+      console.error("[actions.updateCompany] getUser error:", userErr?.message);
+      return { success: false, message: "Unauthorized" };
+    }
+  
+    // 2) Get current employee record and client ID
+    let me: { id: number; client_id: number } | null = null;
+
+    // Try RPC first, fallback to direct query
+    try {
+      const rpc = await ssr.rpc("get_my_employee").single();
+      if (!rpc.error) me = rpc.data as any;
+    } catch {}
+
+    if (!me) {
+      const { data: empData, error: meErr } = await ssr
+        .from("employees")
+        .select("id, client_id")
+        .eq("user_id", user.id)
+        .single();
+      me = empData as any;
+      if (meErr) {
+        console.error("[actions.updateCompany] employees lookup:", meErr?.message);
+        return { success: false, message: "Forbidden" };
+      }
+    }
+
+    if (!me) {
+      return { success: false, message: "Employee not found" };
+    }
+
+    // 3) Check if current user has admin role (role_id = 1)
+    const { data: myRoles, error: rolesErr } = await ssr
+      .from("roles-employees")
+      .select("role_id")
+      .eq("employee_id", me.id);
+
+    if (rolesErr) {
+      console.error("[actions.updateCompany] roles lookup:", rolesErr.message);
+      return { success: false, message: "Forbidden" };
+    }
+
+    // Verify admin permissions
+    const amIAdmin = !!myRoles?.some((r) => r.role_id === 1);
+    if (!amIAdmin) return { success: false, message: "Forbidden: Admin role required" };
+
+    // 4) Verify user can only update their own company
+    if (me.client_id !== id) {
+      console.error("[actions.updateCompany] cross-client update attempt");
+      return { success: false, message: "Forbidden: Can only update own company" };
+    }
+
+    // 5) Create admin client using service role key
+    const admin = createAdmin(
+      import.meta.env.SUPABASE_URL!,
+      import.meta.env.SUPABASE_KEY!,
+      { auth: { persistSession: false } }
+    );
+
+    // 6) Update company name
+    const { data, error } = await admin
+      .from("clients")
+      .update({ 
+        name
+      })
+      .eq("id", id)
+      .select("id, name")
+      .single();
+
+    if (error) {
+      console.error("[actions.updateCompany] update error:", error.message);
+      return { success: false, message: `Database error: ${error.message}` };
+    }
+
+    if (!data) {
+      return { success: false, message: "Company not found or update failed" };
+    }
+
+    console.log("[actions.updateCompany] ok");
+    return { 
+      success: true, 
+      message: "Company updated successfully",
+      data: {
+        id: data.id,
+        name: data.name,
+      }
+    };
+  } catch (e: any) {
+    console.error("[actions.updateCompany] unexpected:", e?.message ?? e);
+    return { success: false, message: "Unexpected error" };
+  }
+};
+
 /* ----------------------- EXPORTS ----------------------- */
 
 export const server = {
@@ -251,5 +625,26 @@ export const server = {
     accept: "form",
     input: createEmployeeSchema,
     handler: (input, context) => createEmployee(input, context),
+  }),
+
+  // Admin-only employee update
+  updateEmployee: defineAction({
+    accept: "form",
+    input: updateEmployeeSchema,
+    handler: (input, context) => updateEmployee(input, context),
+  }),
+
+  // Admin-only employee deletion
+  deleteEmployee: defineAction({
+    accept: "form",
+    input: deleteEmployeeSchema,
+    handler: (input, context) => deleteEmployee(input, context),
+  }),
+
+  // Admin-only company update
+  updateCompany: defineAction({
+    accept: "json",
+    input: updateCompanySchema,
+    handler: (input, context) => updateCompany(input, context),
   }),
 };

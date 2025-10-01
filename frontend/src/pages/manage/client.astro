@@ -1,0 +1,125 @@
+---
+import Layout from "../../layouts/BaseLayout.astro";
+import { createClient } from "../../lib/supabase.ts";
+
+// Company Form Component
+import CompanyManagementForm from "@/components/CompanyManagementForm";
+
+// Sidebar Shell
+import AdminShell from "@/components/AdminShell";
+
+const supabase = createClient({ request: Astro.request, cookies: Astro.cookies });
+
+console.log("[admin-panel] accessed");
+
+// Verifizierter User
+const { data: { user }, error: userErr } = await supabase.auth.getUser();
+if (userErr || !user) return Astro.redirect("/");
+
+// "me" ermitteln. Erst RPC, sonst Fallback
+let me: { id: number; client_id: number } | null = null;
+
+try {
+  const rpc = await supabase.rpc("get_my_employee").single();
+  if (!rpc.error) me = rpc.data as any;
+} catch {}
+
+if (!me) {
+  const res = await supabase
+    .from("employees")
+    .select("id, client_id")
+    .eq("user_id", user.id)
+    .single();
+  me = res.data as any;
+  if (res.error) {
+    console.error("[admin-panel] employees lookup:", res.error.message);
+  }
+}
+
+if (!me) return Astro.redirect("/");
+
+// Admin Rolle prüfen. Rolle 1 = admin
+const { data: myRoles, error: rolesErr } = await supabase
+  .from("roles-employees")
+  .select("role_id")
+  .eq("employee_id", me.id);
+
+if (rolesErr) {
+  console.error("[admin-panel] roles lookup:", rolesErr.message);
+  return new Response("Forbidden", { status: 403 });
+}
+
+const isAdmin = !!myRoles?.some((r) => r.role_id === 1);
+if (!isAdmin) return new Response("Forbidden", { status: 403 });
+
+// Company-Daten laden
+const { data: companyData, error: companyErr } = await supabase
+  .from("clients")
+  .select("id, name")
+  .eq("id", me.client_id)
+  .single();
+
+if (companyErr) {
+  console.error("[admin-panel] company lookup:", companyErr.message);
+}
+
+// Sidebar Infos
+const { data: employees } = await supabase
+  .from("employees")
+  .select("id, name")
+  .eq("client_id", me.client_id)
+  .order("name");
+
+const meName = employees?.find((e) => e.id === me?.id)?.name ?? user?.email ?? "Nutzer";
+const sidebarUser = {
+  name: meName,
+  email: user?.email ?? null,
+  avatarUrl: null,
+};
+
+// Team Eintrag
+const firstTeam = companyData?.name 
+  ? { name: companyData.name, plan: "Enterprise" } 
+  : null;
+---
+
+<Layout>
+  <AdminShell client:load
+    user={sidebarUser}
+    firstTeam={firstTeam ?? undefined}
+    crumbParentLabel="Administration"
+    crumbParentHref="/manage"
+    crumbCurrent="Company"
+    isAdmin={isAdmin}
+    currentPath="/manage/client"
+  >
+    <div class="space-y-6">
+      <div>
+        <h1 class="text-3xl font-bold tracking-tight">Company Settings</h1>
+        <p class="text-muted-foreground">
+          Manage your company information and settings.
+        </p>
+      </div>
+
+      <div class="max-w-2x2">
+        <CompanyManagementForm 
+          client:only="react" 
+          initialData={{
+            id: companyData?.id || me.client_id,
+            name: companyData?.name || "",
+            address: "",
+            city: "",
+            postalCode: "",
+            country: "",
+            taxNumber: "",
+            vatNumber: "",
+            phone: "",
+            email: "",
+            website: ""
+          }}
+        />
+      </div>
+    </div>
+
+  </AdminShell>
+</Layout>
