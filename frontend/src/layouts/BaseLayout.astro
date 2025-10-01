@@ -1,6 +1,6 @@
 ---
 //props
-const {title} = Astro.props;
+const { title, overflowHidden = false } = Astro.props;
 import '../styles/global.css';
 ---
 <!-- Base layout of every page -->
@@ -17,7 +17,7 @@ import '../styles/global.css';
 			defer>
 		</script>
 	</head>
-    <body class="h-screen overflow-hidden">
+  	<body class:list={["h-screen", overflowHidden && "overflow-hidden"]}>
         <slot />
     </body>
 </html>

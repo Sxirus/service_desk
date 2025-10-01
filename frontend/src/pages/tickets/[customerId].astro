@@ -23,7 +23,7 @@ const emailAdress = lastMail.email_adress;
 const newSubject = `RE: ${lastMail.subject}`
 ---
 
-<BaseLayout title={customer.name}>
+<BaseLayout title={customer.name} overflowHidden>
   <!-- the right side -->
   <div class="fixed right-0 bg-gray-100 h-full w-1/5 outline outline-2 outline-gray-300 flex justify-center">
     <ul>
@@ -46,7 +46,7 @@ const newSubject = `RE: ${lastMail.subject}`
   <div class="relative w-4/5 h-screen">
     <h1 class="text-6xl w-full h-[5%] m-4">{lastMail.subject}</h1>
     <ul id='mailList' class="w-full h-[70%] overflow-y-auto mb-2">
-      {emailArray.map(mail => {
+      {emailArray.map((mail: any) => {
       if (mail.type == 'sent') return (      
       <li class="outline outline-2 outline-gray-300 mb-2">
         <p>{formatDate(mail.date)}</p>
