@@ -14,6 +14,7 @@ const clientId = parseInt(url.searchParams.get('clientId') ?? 'null');
 const resultCustomer = await fetch(`http://localhost:3000/api/customers/getCustomerById?customerId=${customerId}`);
 const customerArray = await resultCustomer.json();
 const customer = customerArray[0];
+
 //getting all the emails from a customer
 const resultMails = await fetch(`http://localhost:3000/api/emails/getEmailsFromCustomer?customerId=${customerId}`);
 const emailArray = await resultMails.json()
@@ -27,6 +28,11 @@ if (lastMail['type'] != 'incoming'){
 };
 const emailAdress = lastMail.email_adress;
 const newSubject = `RE: ${lastMail.subject}`
+
+//getting macros per client
+const resultMacros = await fetch (`http://localhost:3000/api/macros/getMacros?client_id=${clientId}`);
+const macroArray = await resultMacros.json();
+console.log(macroArray);
 ---
 
 <BaseLayout title={customer.name} overflowHidden>
