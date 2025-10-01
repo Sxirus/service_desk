@@ -7,7 +7,7 @@ router.get('/getMacros', async (req, res) => {
   const client_id = req.query.client_id;
 
   //fetching from db
-    try {
+  try {
     const { data, error } = await supabase
       .from('macros') 
       .select('*')
