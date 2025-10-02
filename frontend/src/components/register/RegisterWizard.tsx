@@ -15,6 +15,10 @@ import {
   MapPin,
   Globe,
   Landmark,
+  Inbox,
+  ServerCog,
+  CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 
 // shadcn/ui
@@ -24,6 +28,8 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 type UserLite = { id: string; email: string };
@@ -70,7 +76,21 @@ const companySchema = z.object({
 type CompanyFormData = z.infer<typeof companySchema>;
 
 /* =========================
-   Turnstile (compact)
+   STEP 3: Support mailbox schema
+   ========================= */
+const supportSchema = z.object({
+  provider_id: z.coerce.number().int().positive("Choose a provider."),
+  email_address: z.string().email("Please enter a valid email."),
+  password: z.string().min(1, "Please enter the mailbox password."),
+  imap: z.string().min(1, "IMAP host required."),
+  imap_port: z.coerce.number().int().min(1),
+  smtp: z.string().min(1, "SMTP host required."),
+  smtp_port: z.coerce.number().int().min(1),
+});
+type SupportFormData = z.infer<typeof supportSchema>;
+
+/* =========================
+   Turnstile (sichtbar, normal)
    ========================= */
 type TurnstileApi = {
   render: (el: HTMLElement, opts: any) => string;
@@ -181,15 +201,6 @@ function StepDots({ step }: { step: number }) {
   return (
     <div className="space-y-3">
       <Progress value={pct} />
-      <div className="flex items-center justify-center gap-2">
-        {items.map((i) => (
-          <div
-            key={i}
-            className={cn("h-2 w-2 rounded-full", i <= step ? "bg-primary" : "bg-muted")}
-            aria-label={`Step ${i}`}
-          />
-        ))}
-      </div>
     </div>
   );
 }
@@ -466,11 +477,171 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
       try {
         localStorage.removeItem(compStorageKey);
       } catch {}
-      setStep(3); // proceed to Support email step next (to be implemented)
+      setStep(3); // proceed to Support email
     } catch (e: any) {
       alert(e?.message ?? "Unexpected error");
     } finally {
       setSubmittingCompany(false);
+    }
+  };
+
+  /* ---- Step 3 (Support email) ---- */
+  type Provider = {
+    id: number;
+    name: string;
+    logo_url?: string | null;
+    imap: string;
+    imap_port: number;
+    smtp: string;
+    smtp_port: number;
+  };
+
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [loadingProviders, setLoadingProviders] = useState(false);
+  const [supportIdx, setSupportIdx] = useState<number>(0); // 0..4
+  const [submittingSupport, setSubmittingSupport] = useState(false);
+  const [testStatus, setTestStatus] = useState<null | { ok: boolean; message?: string }>(null);
+  const [clientEmailId, setClientEmailId] = useState<number | null>(null);
+  const supStorageKey = useMemo(() => `reg:${regNonce}:support`, [regNonce]);
+
+  const supportForm = useForm<SupportFormData>({
+    resolver: zodResolver(supportSchema),
+    defaultValues: (() => {
+      if (typeof window !== "undefined") {
+        const raw = localStorage.getItem(supStorageKey);
+        if (raw) {
+          try {
+            return JSON.parse(raw) as SupportFormData;
+          } catch {}
+        }
+      }
+      return {
+        provider_id: 0 as any,
+        email_address: "",
+        password: "",
+        imap: "",
+        imap_port: 993,
+        smtp: "",
+        smtp_port: 587,
+      };
+    })(),
+    mode: "onBlur",
+  });
+
+  React.useEffect(() => {
+    const sub = supportForm.watch((values) => {
+      try {
+        localStorage.setItem(supStorageKey, JSON.stringify(values));
+      } catch {}
+    });
+    return () => sub.unsubscribe();
+  }, [supportForm, supStorageKey]);
+
+  React.useEffect(() => {
+    if (step !== 3) return;
+    (async () => {
+      setLoadingProviders(true);
+      try {
+        const { actions } = await import("astro:actions");
+        const res = await actions.getEmailProviders({});
+        if (res?.data?.success && Array.isArray(res.data.providers)) {
+          setProviders(res.data.providers);
+          // defaults einmalig setzen
+          const current = supportForm.getValues("provider_id");
+          if (!current && res.data.providers.length > 0) {
+            const p = res.data.providers[0];
+            supportForm.setValue("provider_id", p.id);
+            supportForm.setValue("imap", p.imap);
+            supportForm.setValue("imap_port", p.imap_port);
+            supportForm.setValue("smtp", p.smtp);
+            supportForm.setValue("smtp_port", p.smtp_port);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load providers", e);
+      } finally {
+        setLoadingProviders(false);
+      }
+    })();
+  }, [step, supportForm]);
+
+  const onSelectProvider = (idStr: string) => {
+    const id = Number(idStr);
+    supportForm.setValue("provider_id", id);
+    const p = providers.find((x) => x.id === id);
+    if (p) {
+      supportForm.setValue("imap", p.imap);
+      supportForm.setValue("imap_port", p.imap_port);
+      supportForm.setValue("smtp", p.smtp);
+      supportForm.setValue("smtp_port", p.smtp_port);
+    }
+  };
+
+  const backSupport = () => {
+    if (supportIdx > 0) setSupportIdx((i) => i - 1);
+    else setStep(2);
+  };
+
+  const nextSupport = async () => {
+    const fields: (keyof SupportFormData)[] = [
+      "provider_id",
+      "email_address",
+      "password",
+      "imap", // advanced screen validiert alle advanced Felder in einem Rutsch
+    ];
+    const fieldName = fields[supportIdx];
+    if (supportIdx === 3) {
+      // advanced: validiere alle advanced Felder
+      const ok = await supportForm.trigger([
+        "imap",
+        "imap_port",
+        "smtp",
+        "smtp_port",
+      ]);
+      if (!ok) return;
+      return onSaveAndTest();
+    } else {
+      const ok = await supportForm.trigger(fieldName);
+      if (!ok) return;
+      setSupportIdx((i) => Math.min(4, i + 1));
+    }
+  };
+
+  const onSaveAndTest = async () => {
+    setSubmittingSupport(true);
+    setTestStatus(null);
+    try {
+      const { actions } = await import("astro:actions");
+      // 1) speichern
+      const createRes = await actions.registerCreateSupportMailbox({
+        provider_id: supportForm.getValues("provider_id"),
+        email_address: supportForm.getValues("email_address"),
+        password: supportForm.getValues("password"),
+        imap: supportForm.getValues("imap"),
+        imap_port: supportForm.getValues("imap_port"),
+        smtp: supportForm.getValues("smtp"),
+        smtp_port: supportForm.getValues("smtp_port"),
+      });
+      if (!createRes?.data?.success || !createRes.data.client_email_id) {
+        throw new Error(createRes?.data?.message || "Could not save mailbox");
+      }
+      setClientEmailId(createRes.data.client_email_id);
+
+      // 2) testen
+      const testRes = await actions.registerTestSupportMailbox({
+        client_email_id: createRes.data.client_email_id,
+      });
+      if (testRes?.data?.success) {
+        setTestStatus({ ok: true, message: "Connection successful." });
+      } else {
+        setTestStatus({ ok: false, message: (testRes?.data as any)?.message || "Connection failed." });
+      }
+      setSupportIdx(4); // Ergebnis-Screen
+    } catch (e: any) {
+      setTestStatus({ ok: false, message: e?.message || "Unexpected error" });
+      setSupportIdx(4);
+    } finally {
+      setSubmittingSupport(false);
     }
   };
 
@@ -486,6 +657,9 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
       {/* ---------- STEP 1: ACCOUNT ---------- */}
       {step === 1 && (
         <>
+          {/* (unchanged) */}
+          {/* ... alle vier Micro-Screens aus deinem aktuellen Code ... */}
+          {/* First name */}
           {accountIdx === 0 && (
             <OneQuestionLayout
               icon={<UserIcon className="h-5 w-5" />}
@@ -511,7 +685,7 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
               </Form>
             </OneQuestionLayout>
           )}
-
+          {/* Last name */}
           {accountIdx === 1 && (
             <OneQuestionLayout
               icon={<UserIcon className="h-5 w-5" />}
@@ -537,7 +711,7 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
               </Form>
             </OneQuestionLayout>
           )}
-
+          {/* Email */}
           {accountIdx === 2 && (
             <OneQuestionLayout
               icon={<Mail className="h-5 w-5" />}
@@ -563,7 +737,7 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
               </Form>
             </OneQuestionLayout>
           )}
-
+          {/* Password + Turnstile */}
           {accountIdx === 3 && (
             <OneQuestionLayout
               icon={<Lock className="h-5 w-5" />}
@@ -591,7 +765,6 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                 />
               </Form>
 
-              {/* Compact Turnstile on the last account screen */}
               {siteKey ? (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">Please complete the captcha to continue.</p>
@@ -610,6 +783,7 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
       {/* ---------- STEP 2: COMPANY (one question per screen) ---------- */}
       {step === 2 && (
         <>
+          {/* (unchanged, exakt wie in deiner Datei) */}
           {companyIdx === 0 && (
             <OneQuestionLayout
               icon={<Building2 className="h-5 w-5" />}
@@ -803,19 +977,241 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
         </>
       )}
 
+      {/* ---------- STEP 3: SUPPORT EMAIL ---------- */}
+      {step === 3 && (
+        <>
+          {/* 0) Provider auswählen */}
+          {supportIdx === 0 && (
+            <OneQuestionLayout
+              icon={<Inbox className="h-5 w-5" />}
+              title="Choose your email provider"
+              description="We will prefill IMAP/SMTP using this provider."
+              onBack={() => setStep(2)}
+              onSubmit={nextSupport}
+              nextDisabled={loadingProviders}
+            >
+              {loadingProviders ? (
+                <div className="h-9 w-full animate-pulse rounded-md bg-muted" />
+              ) : (
+                <Form {...supportForm}>
+                  <FormField
+                    control={supportForm.control}
+                    name="provider_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Provider</FormLabel>
+                        <Select value={String(field.value || "")} onValueChange={onSelectProvider}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a provider" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {providers.map((p) => (
+                              <SelectItem key={p.id} value={String(p.id)}>
+                                {p.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </Form>
+              )}
+            </OneQuestionLayout>
+          )}
+
+          {/* 1) Support E-Mail */}
+          {supportIdx === 1 && (
+            <OneQuestionLayout
+              icon={<Mail className="h-5 w-5" />}
+              title="Support email address"
+              description="This will be the shared mailbox for your helpdesk."
+              onBack={backSupport}
+              onSubmit={nextSupport}
+            >
+              <Form {...supportForm}>
+                <FormField
+                  control={supportForm.control}
+                  name="email_address"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input autoFocus type="email" placeholder="support@yourcompany.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </Form>
+            </OneQuestionLayout>
+          )}
+
+          {/* 2) Passwort */}
+          {supportIdx === 2 && (
+            <OneQuestionLayout
+              icon={<Lock className="h-5 w-5" />}
+              title="Mailbox password"
+              description="Dev only: stored in plaintext. We will hash & encrypt in production."
+              onBack={backSupport}
+              onSubmit={nextSupport}
+            >
+              <Form {...supportForm}>
+                <FormField
+                  control={supportForm.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <FormControl>
+                        <Input autoFocus type="password" placeholder="••••••••" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </Form>
+            </OneQuestionLayout>
+          )}
+
+          {/* 3) Advanced (IMAP/SMTP) */}
+          {supportIdx === 3 && (
+            <OneQuestionLayout
+              icon={<ServerCog className="h-5 w-5" />}
+              title="Advanced (optional)"
+              description="IMAP/SMTP settings are prefilled from your provider. Adjust only if needed."
+              onBack={backSupport}
+              onNextLabel="Save & test"
+              onSubmit={nextSupport}
+              submitting={submittingSupport}
+            >
+              <Form {...supportForm}>
+                {/* IMAP */}
+                <div className="grid grid-cols-1 gap-3">
+                  <FormItem>
+                    <FormLabel className="text-xs uppercase text-muted-foreground">IMAP</FormLabel>
+                  </FormItem>
+                  <FormField
+                    control={supportForm.control}
+                    name="imap"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Host</FormLabel>
+                        <FormControl>
+                          <Input autoFocus placeholder="imap.example.com" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="flex gap-3">
+                    <FormField
+                      control={supportForm.control}
+                      name="imap_port"
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <FormLabel>Port</FormLabel>
+                          <FormControl>
+                            <Input type="number" placeholder="993" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  {/* SMTP */}
+                  <FormItem className="mt-4">
+                    <FormLabel className="text-xs uppercase text-muted-foreground">SMTP</FormLabel>
+                  </FormItem>
+                  <FormField
+                    control={supportForm.control}
+                    name="smtp"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Host</FormLabel>
+                        <FormControl>
+                          <Input placeholder="smtp.example.com" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="flex gap-3">
+                    <FormField
+                      control={supportForm.control}
+                      name="smtp_port"
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <FormLabel>Port</FormLabel>
+                          <FormControl>
+                            <Input type="number" placeholder="587" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+              </Form>
+            </OneQuestionLayout>
+          )}
+
+          {/* 4) Testergebnis */}
+          {supportIdx === 4 && (
+            <Card className="w-full max-w-md shadow-lg">
+              <CardHeader className="text-center space-y-2">
+                {testStatus?.ok ? (
+                  <div className="mx-auto h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 flex items-center justify-center">
+                    <CheckCircle2 className="h-5 w-5" />
+                  </div>
+                ) : (
+                  <div className="mx-auto h-10 w-10 rounded-full bg-amber-100 dark:bg-amber-900/20 text-amber-600 flex items-center justify-center">
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                )}
+                <CardTitle className="text-xl">
+                  {testStatus?.ok ? "Mailbox connected" : "Connection failed"}
+                </CardTitle>
+                <CardDescription className="text-sm">
+                  {testStatus?.message || (testStatus?.ok ? "Connection successful." : "Please review your settings.")}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex items-center justify-between">
+                <Button variant="outline" onClick={() => setSupportIdx(3)}>
+                  <ChevronLeft className="mr-2 h-4 w-4" />
+                  Back
+                </Button>
+                {testStatus?.ok ? (
+                  <Button onClick={() => setStep(4)}>
+                    Continue
+                    <ChevronRight className="ml-2 h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button onClick={onSaveAndTest} disabled={submittingSupport}>
+                    Retry test
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
+
       {/* ---------- NEXT STEPS PLACEHOLDER ---------- */}
-      {step > 2 && (
+      {step > 3 && (
         <Card className="w-full max-w-md shadow-lg">
           <CardHeader className="text-center">
-            <CardTitle className="text-xl">Next: Support email</CardTitle>
-            <CardDescription>Choose a provider and connect your shared inbox.</CardDescription>
+            <CardTitle className="text-xl">Next: Team invites</CardTitle>
+            <CardDescription>Invite your teammates and assign roles.</CardDescription>
           </CardHeader>
           <CardContent className="flex items-center justify-between">
-            <Button variant="outline" onClick={() => setStep(2)}>
+            <Button variant="outline" onClick={() => setStep(3)}>
               <ChevronLeft className="mr-2 h-4 w-4" />
               Back
             </Button>
-            <Button onClick={() => setStep(3)}>
+            <Button onClick={() => setStep(4)}>
               Continue
               <ChevronRight className="ml-2 h-4 w-4" />
             </Button>
