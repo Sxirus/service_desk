@@ -33,7 +33,6 @@ const newSubject = `RE: ${lastMail.subject}`
 //getting macros per client
 const resultMacros = await fetch (`http://localhost:3000/api/macros/getMacros?client_id=${clientId}`);
 const macroArray = await resultMacros.json();
-console.log(macroArray);
 ---
 
 <BaseLayout title={customer.name} overflowHidden>
@@ -83,8 +82,7 @@ console.log(macroArray);
     <TypeaheadSearch
       client:load
       items={macroArray}          
-      placeholder="Makro-Titel suchen…"
-      itemUrlBase="/items/"    
+      placeholder="Makro-Titel suchen…"   
     />
     <textarea
       id="answer"
@@ -97,47 +95,117 @@ console.log(macroArray);
 
 
   <script>
-    //mail list standartmäßig nach unten gescrollt
-    document.addEventListener('DOMContentLoaded', () => {
-      const list = document.getElementById('mailList');
-      if (list) {
-        list.scrollTop = list.scrollHeight; // ganz nach unten springen
-      }
-    });
+  // Elemente holen (reines JS, keine TS-Casts)
+  /** @type {HTMLTextAreaElement|null} */
+  const textarea = document.getElementById('answer');
+  /** @type {HTMLButtonElement|null} */
+  const button = document.getElementById('sendButton');
 
-    //button functionalität
-    document.addEventListener('DOMContentLoaded', () => {
-      const button = document.getElementById('sendButton') as HTMLButtonElement;
-      const textarea = document.getElementById('answer') as HTMLTextAreaElement;
+  // ✅ React-Event empfangen und Text anhängen
+  window.addEventListener('appendToAstroInput', (e) => {
+    console.log('appendToAstroInput empfangen:', e?.detail);
+    const text = e?.detail?.text || '';
+    if (!textarea || !text) return;
 
-      //send button action
-      button?.addEventListener('click', async() => {
-        const emailAdress = button.dataset.email;
-        const newSubject = button.dataset.subject;
-        const customerId = button.dataset.customerid;
+    // hier: mit Zeilenumbruch anhängen (oder ersetze "\n" durch " ")
+    textarea.value += (textarea.value ? '\n' : '') + text;
 
-        const body = textarea.value;
-        if(body.trim() != '') {
-          //sending mail
-          await fetch(`http://localhost:3000/api/emails/sendMail?customerId=${customerId}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              to: emailAdress,
-              subject: newSubject,
-              text: body,
-            }),
-          });
-        }
-        //making all mails read
-        var result = await fetch(`http://localhost:3000/api/emails/makeRead?customerId=${customerId}`, {
-          method: 'POST'
-        });
-        //change window to main screen
-        window.location.assign('/');
+    // Cursor ans Ende
+    textarea.focus();
+    const end = textarea.value.length;
+    textarea.setSelectionRange(end, end);
+
+    // Falls andere Listener zuhören
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    textarea.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  // Mail-Liste nach unten scrollen
+  (function () {
+    const list = document.getElementById('mailList');
+    if (list) list.scrollTop = list.scrollHeight;
+  })();
+
+  // Senden-Button
+  button?.addEventListener('click', async () => {
+    const emailAdress = button.dataset.email;
+    const newSubject = button.dataset.subject;
+    const customerId = button.dataset.customerid;
+
+    const body = textarea?.value || '';
+    if (body.trim() !== '') {
+      await fetch(`http://localhost:3000/api/emails/sendMail?customerId=${customerId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: emailAdress, subject: newSubject, text: body }),
       });
-    });
-  </script>
+    }
+
+    await fetch(`http://localhost:3000/api/emails/makeRead?customerId=${customerId}`, { method: 'POST' });
+    window.location.assign('/');
+  });
+</script>
+
+    // //mail list standartmäßig nach unten gescrollt
+    // document.addEventListener('DOMContentLoaded', () => {
+    //   const list = document.getElementById('mailList');
+    //   if (list) {
+    //     list.scrollTop = list.scrollHeight; // ganz nach unten springen
+    //   }
+    // });
+
+    //   //listen für macros
+    //   window.addEventListener("appendToInput", (e: any) => {
+    //   const textarea = document.getElementById('answer') as HTMLTextAreaElement;
+    //   const text = e?.detail?.text ?? "";
+    //   if (!textarea) return;
+
+    //   // Text anhängen mit Space/Zeilenumbruch
+    //   const needsSpace =
+    //     textarea.value && !textarea.value.endsWith(" ") && !text.startsWith(" ");
+    //   textarea.value += (needsSpace ? " " : "") + text;
+    //   console.log(textarea.value)
+
+    //   // Cursor ans Ende setzen
+    //   textarea.focus();
+    //   textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+
+    //   // Events feuern, falls andere Listener zuhören
+    //   textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    //   textarea.dispatchEvent(new Event("change", { bubbles: true }));
+    // });
+    // //button functionalität
+    // document.addEventListener('DOMContentLoaded', () => {
+    //   const button = document.getElementById('sendButton') as HTMLButtonElement;
+    //   const textarea = document.getElementById('answer') as HTMLTextAreaElement;
+
+    //   //send button action
+    //   button?.addEventListener('click', async() => {
+    //     const emailAdress = button.dataset.email;
+    //     const newSubject = button.dataset.subject;
+    //     const customerId = button.dataset.customerid;
+
+    //     const body = textarea.value;
+    //     if(body.trim() != '') {
+    //       //sending mail
+    //       await fetch(`http://localhost:3000/api/emails/sendMail?customerId=${customerId}`, {
+    //         method: 'POST',
+    //         headers: {
+    //           'Content-Type': 'application/json',
+    //         },
+    //         body: JSON.stringify({
+    //           to: emailAdress,
+    //           subject: newSubject,
+    //           text: body,
+    //         }),
+    //       });
+    //     }
+    //     //making all mails read
+    //     var result = await fetch(`http://localhost:3000/api/emails/makeRead?customerId=${customerId}`, {
+    //       method: 'POST'
+    //     });
+    //     //change window to main screen
+    //     window.location.assign('/');
+    //   });
+    // });
 </BaseLayout>
