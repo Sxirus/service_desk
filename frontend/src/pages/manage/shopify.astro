@@ -1,0 +1,153 @@
+---
+// src/pages/manage/shopify.astro
+
+/**
+ * Shopify Integration Page
+ * Allows admin users to connect and manage Shopify store integration
+ * 
+ * Security: Admin-only access (role_id = 1)
+ * Uses: Auth helper for DRY authentication/authorization
+ */
+
+import Layout from "../../layouts/BaseLayout.astro";
+import { createClient } from "../../lib/supabase.ts";
+import { getAuthContext, getSidebarData } from "../../lib/auth-helpers.ts";
+
+// Components
+import ShopifyManagementPanel from "@/components/ShopifyManagementPanel";
+import AdminShell from "@/components/AdminShell";
+
+// Initialize Supabase client with request context
+const supabase = createClient({ 
+  request: Astro.request, 
+  cookies: Astro.cookies 
+});
+
+console.log("[shopify-integration] Page accessed");
+
+// ============================================================================
+// AUTHENTICATION & AUTHORIZATION
+// ============================================================================
+
+// Get authenticated user and employee context
+console.log("[shopify-integration] Verifying authentication");
+const authContext = await getAuthContext(supabase, Astro.cookies);
+
+if (!authContext) {
+  console.error("[shopify-integration] Authentication failed, redirecting to login");
+  return Astro.redirect("/");
+}
+
+console.log("[shopify-integration] User authenticated:", {
+  userId: authContext.user.id,
+  employeeId: authContext.employee.id,
+  clientId: authContext.employee.client_id,
+  isAdmin: authContext.isAdmin
+});
+
+// Verify admin role
+if (!authContext.isAdmin) {
+  console.warn("[shopify-integration] Access denied - user is not admin:", {
+    userId: authContext.user.id,
+    employeeId: authContext.employee.id
+  });
+  return new Response("Forbidden: Admin access required", { status: 403 });
+}
+
+console.log("[shopify-integration] Admin access verified");
+
+// ============================================================================
+// DATA LOADING
+// ============================================================================
+
+// Load client data including Shopify integration fields
+console.log("[shopify-integration] Loading client data with Shopify fields for client_id:", 
+  authContext.employee.client_id
+);
+
+const { data: clientData, error: clientErr } = await supabase
+  .from("clients")
+  .select(`
+    id, 
+    name, 
+    address_street, 
+    address_city, 
+    address_zip, 
+    address_country, 
+    website,
+    shopify_store_url, 
+    shopify_access_token, 
+    shopify_connected, 
+    shopify_scope
+  `)
+  .eq("id", authContext.employee.client_id)
+  .single();
+
+if (clientErr) {
+  console.error("[shopify-integration] Failed to load client data:", {
+    error: clientErr.message,
+    code: clientErr.code,
+    clientId: authContext.employee.client_id
+  });
+} else {
+  console.log("[shopify-integration] Client data loaded successfully:", {
+    clientId: clientData?.id,
+    clientName: clientData?.name,
+    shopifyConnected: clientData?.shopify_connected,
+    hasShopifyUrl: !!clientData?.shopify_store_url,
+    hasShopifyToken: !!clientData?.shopify_access_token,
+    shopifyScope: clientData?.shopify_scope
+  });
+}
+
+// Load sidebar data (user info and team details)
+console.log("[shopify-integration] Loading sidebar data");
+const sidebarData = await getSidebarData(supabase, authContext);
+
+console.log("[shopify-integration] Page setup complete, rendering");
+
+// ============================================================================
+// PREPARE COMPONENT DATA
+// ============================================================================
+
+// Prepare initial data for Shopify management panel
+const initialPanelData = {
+  id: clientData?.id ?? authContext.employee.client_id,
+  name: clientData?.name ?? "",
+  shopifyStoreUrl: clientData?.shopify_store_url ?? null,
+  shopifyConnected: clientData?.shopify_connected ?? false,
+  shopifyScope: clientData?.shopify_scope ?? null,
+};
+---
+
+<Layout title="Shopify Integration">
+  <AdminShell 
+    client:load
+    user={sidebarData.user}
+    firstTeam={sidebarData.team ?? undefined}
+    crumbParentLabel="Administration"
+    crumbParentHref="/manage"
+    crumbCurrent="Shopify"
+    isAdmin={authContext.isAdmin}
+    currentPath="/manage/shopify"
+  >
+    <div class="space-y-6">
+      <!-- Page Header -->
+      <div>
+        <h1 class="text-3xl font-bold tracking-tight">Shopify Integration</h1>
+        <p class="text-muted-foreground">
+          Connect and manage your Shopify store integration.
+        </p>
+      </div>
+
+      <!-- Shopify Management Panel -->
+      <div class="max-w-2xl">
+        <ShopifyManagementPanel 
+          client:only="react" 
+          clientId={authContext.employee.client_id}
+          initialData={initialPanelData}
+        />
+      </div>
+    </div>
+  </AdminShell>
+</Layout>

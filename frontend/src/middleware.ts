@@ -2,39 +2,65 @@
 import { defineMiddleware } from "astro:middleware";
 import { createClient } from "./lib/supabase";
 
-// Define middleware to handle authentication for protected routes
+/**
+ * Protected routes that require authentication
+ * Routes are checked using startsWith for nested paths
+ */
+const PROTECTED_ROUTES = ["/dashboard", "/tickets", "/manage"];
+
+/**
+ * Authentication middleware
+ * Verifies user authentication for protected routes using Supabase
+ * Only trusts verified user data from the Supabase API (not session cookies alone)
+ */
 export const onRequest = defineMiddleware(async (ctx, next) => {
   const { pathname } = ctx.url;
-  console.log("Middleware executing for path:", pathname);
+  
+  // Log all requests for debugging purposes
+  console.log("[middleware] Processing request:", pathname);
 
-  // Check if the current path requires authentication
-  if (pathname === "/dashboard" || pathname.startsWith("/tickets/") || pathname.startsWith("/manage/")) {
-    console.log("Checking auth for protected route");
+  // Check if the current route requires authentication
+  const isProtected = PROTECTED_ROUTES.some(route => 
+    pathname === route || pathname.startsWith(`${route}/`)
+  );
+
+  if (isProtected) {
+    console.log("[middleware] Protected route detected, verifying authentication");
 
     // Create Supabase client with request context
     const supabase = createClient({ request: ctx.request, cookies: ctx.cookies });
 
-    // Parallel fetch: Get both session and user data simultaneously for better performance
-    // 1) Fast: local session from cookie (no network request)
-    // 2) Verified: user data from Supabase API (with network request)
-    const [{ data: sessionData }, { data: userData, error: userErr }] = await Promise.all([
-      supabase.auth.getSession(),
-      supabase.auth.getUser(),
-    ]);
+    // SECURITY: Only trust verified user data from the Supabase API
+    // We do NOT fallback to session data to prevent stale/invalid session exploitation
+    const { data: { user }, error } = await supabase.auth.getUser();
 
-    // Log any errors from user verification
-    if (userErr) console.warn("[auth] getUser error:", userErr.message);
-    
-    // Get user ID from either verified user data or session data as fallback
-    const userId = userData?.user?.id ?? sessionData?.session?.user?.id;
-
-    // If no valid user ID found, redirect to login page
-    if (!userId) {
-      // Neither verified user nor session available -> redirect to login
+    if (error) {
+      console.error("[middleware] Authentication error:", {
+        path: pathname,
+        error: error.message,
+        code: error.status
+      });
       return ctx.redirect("/");
     }
+
+    if (!user) {
+      console.warn("[middleware] Unauthorized access attempt:", {
+        path: pathname,
+        timestamp: new Date().toISOString()
+      });
+      return ctx.redirect("/");
+    }
+
+    // Authentication successful
+    console.log("[middleware] Authentication successful:", {
+      userId: user.id,
+      email: user.email,
+      path: pathname
+    });
+  } else {
+    console.log("[middleware] Public route, skipping authentication");
   }
 
-  // Continue to the requested route if not protected or authentication passed
+  // Continue to the requested route
   return next();
 });
