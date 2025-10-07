@@ -61,6 +61,7 @@ const signature = signatureArray[0].email_signature;
       data-email={emailAdress}
       data-subject={newSubject}
       data-customerid={customerId}
+      data-signature={signature}
       id="sendButton"
       class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 sticky bottom-7 w-4/5 hover:cursor-pointer">
       Senden
@@ -139,8 +140,10 @@ const signature = signatureArray[0].email_signature;
       const emailAdress = button.dataset.email;
       const newSubject = button.dataset.subject;
       const customerId = button.dataset.customerid;
+      const signature = button.dataset.signature;
 
-      const body = textarea?.value || '';
+      var body = textarea?.value || '';
+      body = body + '\n\n' + signature
       if (body.trim() !== '') {
         await fetch(`http://localhost:3000/api/emails/sendMail?customerId=${customerId}`, {
           method: 'POST',
