@@ -160,8 +160,8 @@ export async function GET({ request, redirect, cookies }) {
       return redirect(redirectUrl, 302);
     } else {
       // No clientId provided - redirect to generic success page
-      console.log('[SHOPIFY_CALLBACK] No clientId provided, redirecting to success page');
-      return redirect(`/shopify-success?shop=${shop}`, 302);
+      console.log('[SHOPIFY_CALLBACK] No clientId provided, redirecting to generic Shopify connected page');
+      return redirect(`/manage/shopify?shopify=connected&shop=${shop}`, 302);
     }
     
   } catch (error) {
