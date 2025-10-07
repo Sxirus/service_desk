@@ -32,6 +32,11 @@ const newSubject = `RE: ${lastMail.subject}`
 //getting macros per client
 const resultMacros = await fetch (`http://localhost:3000/api/macros/getMacros?client_id=${clientId}`);
 const macroArray = await resultMacros.json();
+
+//getting the signature
+const resultSignature = await fetch (`http://localhost:3000/api/settings/getSignature?client_id=${clientId}`);
+const signatureArray = await resultSignature.json();
+const signature = signatureArray[0].email_signature;
 ---
 
 <BaseLayout title={customer.name} overflowHidden>
