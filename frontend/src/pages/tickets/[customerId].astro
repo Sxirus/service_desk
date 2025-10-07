@@ -8,84 +8,102 @@
  * - Shopify order history (if store is connected)
  * - Macro search for quick responses
  * - Reply functionality
+ * 
+ * Security: Authenticated users only
+ * Uses: Auth helper for DRY authentication/authorization
  */
 
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { formatDate } from "../../utils/formatDate.js";
 import { TypeaheadSearch } from "../../components/macroSearch.jsx";
 import { createClient } from "../../lib/supabase.ts";
-import { getAuthContext } from "../../lib/auth-helpers.ts";
+import { getCompletePageContext } from "../../lib/auth-helpers.ts";
+import AdminShell from "@/components/AdminShell";
 
-console.log("[TICKET_VIEW] Loading ticket view");
+console.log("[customer-ticket] Page accessed");
 
-// Get route parameters
+// ============================================================================
+// ROUTE PARAMETERS
+// ============================================================================
+
 const { params } = Astro;
 const customerId = params.customerId;
 
-console.log("[TICKET_VIEW] Customer ID:", customerId);
+console.log("[customer-ticket] Customer ID:", customerId);
 
-const supabaseAuth = createClient({ 
+// ============================================================================
+// AUTHENTICATION & AUTHORIZATION
+// ============================================================================
+
+const supabase = createClient({ 
   request: Astro.request, 
   cookies: Astro.cookies 
 });
 
-console.log("[general-settings] Verifying authentication");
-const authContext = await getAuthContext(supabaseAuth, Astro.cookies);
+console.log("[customer-ticket] Verifying authentication");
+const pageContext = await getCompletePageContext(supabase, Astro.cookies);
 
-if (!authContext) {
-  console.error("[general-settings] Authentication failed, redirecting to login");
+if (!pageContext) {
+  console.error("[customer-ticket] Authentication failed, redirecting to login");
   return Astro.redirect("/");
 }
 
+const { authContext, sidebarData } = pageContext;
+
+console.log("[customer-ticket] User authenticated:", {
+  userId: authContext.user.id,
+  employeeId: authContext.employee.id,
+  clientId: authContext.employee.client_id
+});
+
 const clientId = authContext.employee.client_id;
 
-console.log("[TICKET_VIEW] Client ID from query:", clientId);
-
-// Initialize Supabase client for database access
-const supabase = createClient({ request: Astro.request, cookies: Astro.cookies });
+// ============================================================================
+// DATA LOADING
+// ============================================================================
 
 // Fetch customer data
-console.log("[TICKET_VIEW] Fetching customer data");
+console.log("[customer-ticket] Fetching customer data");
 const resultCustomer = await fetch(`http://localhost:3000/api/customers/getCustomerById?customerId=${customerId}`);
 const customerArray = await resultCustomer.json();
 const customer = customerArray[0];
 
-console.log("[TICKET_VIEW] Customer loaded:", customer?.name);
+console.log("[customer-ticket] Customer loaded:", customer?.name);
 
 // Fetch all emails for this customer
-console.log("[TICKET_VIEW] Fetching customer emails");
+console.log("[customer-ticket] Fetching customer emails");
 const resultMails = await fetch(`http://localhost:3000/api/emails/getEmailsFromCustomer?customerId=${customerId}`);
 const emailArray = await resultMails.json();
 
 // Find the last incoming mail to determine reply-to address and subject
-var lastMail = emailArray[emailArray.length - 1];
-if (lastMail['type'] != 'incoming') {
+let lastMail = emailArray[emailArray.length - 1];
+if (lastMail['type'] !== 'incoming') {
   for (let mail of emailArray) {
-    if (mail.type == 'incoming') {
+    if (mail.type === 'incoming') {
       lastMail = mail;
     }
   }
 }
 
-const emailAdress = lastMail.email_adress;
+const emailAddress = lastMail.email_adress;
 const newSubject = `RE: ${lastMail.subject}`;
 
-console.log("[TICKET_VIEW] Email thread loaded:", emailArray.length, "messages");
+console.log("[customer-ticket] Email thread loaded:", emailArray.length, "messages");
 
 // Fetch macros for this client
-console.log("[TICKET_VIEW] Fetching macros for client:", clientId);
+console.log("[customer-ticket] Fetching macros for client:", clientId);
 const resultMacros = await fetch(`http://localhost:3000/api/macros/getMacros?client_id=${clientId}`);
 const macroArray = await resultMacros.json();
 
-//getting the signature
-const resultSignature = await fetch (`http://localhost:3000/api/settings/getSignature?client_id=${clientId}`);
+// Getting the signature
+const resultSignature = await fetch(`http://localhost:3000/api/settings/getSignature?client_id=${clientId}`);
 const signatureArray = await resultSignature.json();
-const signature = signatureArray[0].email_signature;
+const signature = signatureArray[0]?.email_signature || "";
 
-console.log("[TICKET_VIEW] Macros loaded:", macroArray?.length || 0);
+console.log("[customer-ticket] Macros loaded:", macroArray?.length || 0);
 
 // Fetch client data to check Shopify connection status
-console.log("[TICKET_VIEW] Fetching client data for Shopify integration");
+console.log("[customer-ticket] Fetching client data for Shopify integration");
 const { data: clientData, error: clientError } = await supabase
   .from("clients")
   .select("id, name, shopify_store_url, shopify_access_token, shopify_connected, shopify_scope")
@@ -93,9 +111,9 @@ const { data: clientData, error: clientError } = await supabase
   .single();
 
 if (clientError) {
-  console.error("[TICKET_VIEW] Error fetching client data:", clientError);
+  console.error("[customer-ticket] Error fetching client data:", clientError);
 } else {
-  console.log("[TICKET_VIEW] Client data loaded:", {
+  console.log("[customer-ticket] Client data loaded:", {
     name: clientData?.name,
     shopifyConnected: clientData?.shopify_connected
   });
@@ -106,7 +124,7 @@ let shopifyOrders = [];
 let shopifyError = null;
 
 if (clientData && clientData.shopify_connected) {
-  console.log("[TICKET_VIEW] Shopify is connected, fetching orders");
+  console.log("[customer-ticket] Shopify is connected, fetching orders");
   try {
     const shopifyResponse = await fetch(
       `http://localhost:4321/api/shopify/getCustomerOrders?customerId=${customerId}`
@@ -114,245 +132,336 @@ if (clientData && clientData.shopify_connected) {
     const shopifyData = await shopifyResponse.json();
     
     if (shopifyData.error) {
-      console.error("[TICKET_VIEW] Shopify API error:", shopifyData.error);
+      console.error("[customer-ticket] Shopify API error:", shopifyData.error);
       shopifyError = shopifyData.error;
     } else {
       shopifyOrders = shopifyData.orders || [];
-      console.log("[TICKET_VIEW] Shopify orders loaded:", shopifyOrders.length);
+      console.log("[customer-ticket] Shopify orders loaded:", shopifyOrders.length);
     }
   } catch (error) {
-    console.error("[TICKET_VIEW] Exception fetching Shopify orders:", error);
+    console.error("[customer-ticket] Exception fetching Shopify orders:", error);
     shopifyError = "Failed to load orders";
   }
 } else {
-  console.log("[TICKET_VIEW] Shopify not connected, skipping order fetch");
+  console.log("[customer-ticket] Shopify not connected, skipping order fetch");
 }
 
-console.log("[TICKET_VIEW] Page data preparation complete");
+console.log("[customer-ticket] Page setup complete, rendering");
 ---
 
-<BaseLayout title={customer.name} overflowHidden>
-  <!-- Right Sidebar -->
-  <div class="fixed right-0 bg-gray-100 h-full w-1/5 outline-2 outline-gray-300 flex flex-col overflow-y-auto">
-    
-    <!-- Customer Information Section -->
-    <div class="p-4 border-b border-gray-300">
-      <h3 class="text-sm font-semibold text-gray-700 mb-3">Customer Information</h3>
-      <ul class="space-y-2">
-        <li class="text-sm">
-          <span class="text-gray-600">Name:</span>
-          <span class="ml-2 font-medium">{customer.name}</span>
-        </li>
-        <li class="text-sm">
-          <span class="text-gray-600">Email:</span>
-          <span class="ml-2 font-medium text-blue-600">{emailAdress}</span>
-        </li>
-      </ul>
-    </div>
-
-    <!-- Shopify Orders Section -->
-    {clientData && clientData.shopify_connected ? (
-      <div class="p-4 border-b border-gray-300">
-        <h3 class="text-sm font-semibold text-gray-700 mb-3">Order History</h3>
-        
-        {shopifyError ? (
-          <div class="bg-red-50 border border-red-200 rounded p-3">
-            <p class="text-xs text-red-600">Failed to load orders</p>
-          </div>
-        ) : shopifyOrders.length > 0 ? (
-          <div class="space-y-2 max-h-96 overflow-y-auto">
-            {shopifyOrders.slice(0, 10).map((order: any) => (
-              <div class="bg-white rounded-lg p-3 shadow-sm border border-gray-200 hover:border-blue-300 transition-colors">
-                {/* Order Header */}
-                <div class="flex justify-between items-start mb-2">
-                  <div>
-                    <p class="text-sm font-semibold text-gray-900">
-                      Order #{order.order_number}
-                    </p>
-                    <p class="text-xs text-gray-500">
-                      {new Date(order.created_at).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
-                      })}
-                    </p>
-                  </div>
-                  {/* Financial Status Badge */}
-                  <span class={`text-xs px-2 py-1 rounded-full font-medium ${
-                    order.financial_status === 'paid' 
-                      ? 'bg-green-100 text-green-800' 
-                      : order.financial_status === 'pending'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : order.financial_status === 'refunded'
-                      ? 'bg-red-100 text-red-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}>
-                    {order.financial_status}
-                  </span>
-                </div>
-
-                {/* Order Details */}
-                <div class="space-y-1">
-                  {/* Total Price */}
-                  <div class="flex justify-between items-center">
-                    <span class="text-xs text-gray-600">Total:</span>
-                    <span class="text-sm font-semibold text-gray-900">
-                      {order.total_price} {order.currency}
-                    </span>
-                  </div>
-
-                  {/* Fulfillment Status */}
-                  {order.fulfillment_status && (
-                    <div class="flex justify-between items-center">
-                      <span class="text-xs text-gray-600">Fulfillment:</span>
-                      <span class={`text-xs px-2 py-0.5 rounded ${
-                        order.fulfillment_status === 'fulfilled'
-                          ? 'bg-green-100 text-green-800'
-                          : order.fulfillment_status === 'partial'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {order.fulfillment_status}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Item Count */}
-                  {order.line_items && order.line_items.length > 0 && (
-                    <div class="mt-2 pt-2 border-t border-gray-200">
-                      <p class="text-xs text-gray-600">
-                        {order.line_items.length} item{order.line_items.length !== 1 ? 's' : ''}
-                      </p>
-                      {/* Show first 2 items */}
-                      <ul class="mt-1 space-y-1">
-                        {order.line_items.slice(0, 2).map((item: any) => (
-                          <li class="text-xs text-gray-700">
-                            • {item.quantity}x {item.name}
-                          </li>
-                        ))}
-                        {order.line_items.length > 2 && (
-                          <li class="text-xs text-gray-500 italic">
-                            + {order.line_items.length - 2} more
-                          </li>
-                        )}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* View in Shopify Link */}
-                  {order.id && (
-                    <div class="mt-2 pt-2 border-t border-gray-200">
-                      <a
-                        href={`https://${clientData.shopify_store_url}/admin/orders/${order.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-                      >
-                        View in Shopify
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                        </svg>
-                      </a>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div class="bg-gray-50 border border-gray-200 rounded p-3">
-            <p class="text-xs text-gray-600 text-center">No orders found for this customer</p>
-          </div>
-        )}
-      </div>
-    ) : (
-      <div class="p-4 border-b border-gray-300">
-        <h3 class="text-sm font-semibold text-gray-700 mb-3">Order History</h3>
-        <div class="bg-gray-50 border border-gray-200 rounded p-3">
-          <p class="text-xs text-gray-600 text-center">
-            Shopify not connected
-          </p>
-          <p class="text-xs text-gray-500 text-center mt-1">
-            Connect your store in settings to view orders
+<BaseLayout title={customer?.name || "Customer Ticket"}>
+  <AdminShell 
+    client:load
+    user={sidebarData.user}
+    firstTeam={sidebarData.team ?? undefined}
+    crumbParentLabel="Tickets"
+    crumbParentHref="/tickets"
+    crumbCurrent={customer?.name || "Ticket"}
+    isAdmin={authContext.isAdmin}
+    currentPath={`/tickets/${customerId}`}
+  >
+    <div class="flex gap-6 h-[calc(100vh-5rem)] -mx-6 -mb-6">
+      <!-- Main Content Area - Email Thread -->
+      <div class="flex-1 flex flex-col min-w-0">
+        <!-- Page Header -->
+        <div class="px-6 pt-0 pb-4">
+          <h1 class="text-3xl font-bold tracking-tight">{lastMail.subject}</h1>
+          <p class="text-muted-foreground mt-1">
+            Conversation with {customer?.name}
           </p>
         </div>
-      </div>
-    )}
 
-    <!-- Macro Search Section -->
-    <div class="p-4 border-b border-gray-300 flex-grow">
-      <h3 class="text-sm font-semibold text-gray-700 mb-3">Quick Responses</h3>
-      <TypeaheadSearch
-        client:load
-        items={macroArray}
-        placeholder="Search macros..."
-      />
-    </div>
+        <!-- Email Thread -->
+        <div class="flex-1 px-6 overflow-y-auto">
+          <div id="mailList" class="space-y-4 pb-4">
+            {emailArray.map((mail: any) => {
+              const isOutgoing = mail.type === 'sent';
+              
+              return (
+                <div class={`rounded-lg border ${
+                  isOutgoing 
+                    ? 'bg-blue-50 border-blue-200' 
+                    : 'bg-card border-border'
+                } shadow-sm`}>
+                  <div class="p-4">
+                    <!-- Message Header -->
+                    <div class="flex items-start justify-between mb-3">
+                      <div class="flex items-center gap-2">
+                        <div class={`flex h-8 w-8 items-center justify-center rounded-full ${
+                          isOutgoing ? 'bg-blue-600' : 'bg-muted'
+                        }`}>
+                          <svg
+                            class={`h-4 w-4 ${isOutgoing ? 'text-white' : 'text-muted-foreground'}`}
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke-width="1.5"
+                            stroke="currentColor"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
+                            />
+                          </svg>
+                        </div>
+                        <div>
+                          <p class={`text-sm font-semibold ${
+                            isOutgoing ? 'text-blue-900' : 'text-foreground'
+                          }`}>
+                            {isOutgoing ? 'You' : customer?.name || 'Customer'}
+                          </p>
+                          <p class="text-xs text-muted-foreground">
+                            {isOutgoing ? 'Support Agent' : 'Customer'}
+                          </p>
+                        </div>
+                      </div>
+                      <time class="text-xs text-muted-foreground">
+                        {formatDate(mail.date)}
+                      </time>
+                    </div>
 
-    <!-- Send Button (Sticky at bottom) -->
-    <div class="p-4 bg-white border-t border-gray-300 sticky bottom-0">
-      <button
-        data-email={emailAdress}
-        data-subject={newSubject}
-        data-customerid={customerId}
-        data-signature={signature}
-      id="sendButton"
-        class="w-full bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-      >
-        Send Reply
-      </button>
-    </div>
-  </div>
+                    <!-- Message Body -->
+                    <div class="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                      {mail.text}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
-  <!-- Email Thread Section (Left Side) -->
-  <div class="relative w-4/5 h-screen flex flex-col">
-    <!-- Email Subject Header -->
-    <h1 class="text-4xl font-bold w-full p-4 border-b border-gray-200">{lastMail.subject}</h1>
-
-    <!-- Email List -->
-    <ul id="mailList" class="flex-1 overflow-y-auto p-4 space-y-4">
-      {emailArray.map((mail: any) => {
-        if (mail.type == 'sent') {
-          return (
-            <li class="bg-blue-50 border-l-4 border-blue-500 rounded p-4">
-              <div class="flex justify-between items-start mb-2">
-                <p class="text-sm font-semibold text-blue-900">Employee</p>
-                <p class="text-xs text-gray-600">{formatDate(mail.date)}</p>
-              </div>
-              <p class="text-sm text-gray-800 whitespace-pre-wrap">{mail.text}</p>
-            </li>
-          );
-        }
-        return (
-          <li class="bg-white border-l-4 border-gray-300 rounded p-4 shadow-sm">
-            <div class="flex justify-between items-start mb-2">
-              <p class="text-sm font-semibold text-gray-900">Customer</p>
-              <p class="text-xs text-gray-600">{formatDate(mail.date)}</p>
+        <!-- Reply Area -->
+        <div class="border-t bg-card px-6 py-4">
+          <div class="space-y-3">
+            <label for="answer" class="text-sm font-medium leading-none">
+              Your Reply
+            </label>
+            <textarea
+              id="answer"
+              class="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+              placeholder="Type your reply..."
+              rows="4"
+            ></textarea>
+            <div class="flex items-center justify-end">
+              <button
+                data-email={emailAddress}
+                data-subject={newSubject}
+                data-customerid={customerId}
+                data-signature={signature}
+                id="sendButton"
+                type="button"
+                class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+              >
+                <svg
+                  class="mr-2 h-4 w-4"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
+                  />
+                </svg>
+                Send Reply
+              </button>
             </div>
-            <p class="text-sm text-gray-800 whitespace-pre-wrap">{mail.text}</p>
-          </li>
-        );
-      })}
-    </ul>
+          </div>
+        </div>
+      </div>
 
-    <!-- Reply Textarea (Sticky at bottom) -->
-    <div class="sticky bottom-0 bg-white border-t border-gray-200 p-4">
-      <textarea
-        id="answer"
-        class="w-full h-40 resize-none p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        placeholder="Type your reply..."
-      ></textarea>
+      <!-- Right Sidebar -->
+      <div class="w-80 flex-shrink-0 border-l bg-muted/30 flex flex-col overflow-hidden">
+        <div class="flex-1 overflow-y-auto p-6 space-y-6">
+          
+          <!-- Customer Information Card -->
+          <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+            <div class="p-4 space-y-3">
+              <h3 class="font-semibold leading-none tracking-tight">
+                Customer Information
+              </h3>
+              <div class="space-y-2">
+                <div>
+                  <p class="text-xs text-muted-foreground">Name</p>
+                  <p class="text-sm font-medium">{customer?.name}</p>
+                </div>
+                <div>
+                  <p class="text-xs text-muted-foreground">Email</p>
+                  <p class="text-sm font-medium text-blue-600">{emailAddress}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Order History Card -->
+          {clientData && clientData.shopify_connected ? (
+            <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+              <div class="p-4 space-y-3">
+                <h3 class="font-semibold leading-none tracking-tight">
+                  Order History
+                </h3>
+                
+                {shopifyError ? (
+                  <div class="rounded-lg border border-destructive/50 bg-destructive/10 p-3">
+                    <p class="text-xs text-destructive">Failed to load orders</p>
+                  </div>
+                ) : shopifyOrders.length > 0 ? (
+                  <div class="space-y-2 max-h-96 overflow-y-auto">
+                    {shopifyOrders.slice(0, 10).map((order: any) => (
+                      <div class="rounded-lg border bg-background p-3 hover:bg-accent transition-colors">
+                        <!-- Order Header -->
+                        <div class="flex justify-between items-start mb-2">
+                          <div>
+                            <p class="text-sm font-semibold">
+                              Order #{order.order_number}
+                            </p>
+                            <p class="text-xs text-muted-foreground">
+                              {new Date(order.created_at).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric'
+                              })}
+                            </p>
+                          </div>
+                          <!-- Financial Status Badge -->
+                          <span class={`text-xs px-2 py-1 rounded-full font-medium ${
+                            order.financial_status === 'paid' 
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
+                              : order.financial_status === 'pending'
+                              ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                              : order.financial_status === 'refunded'
+                              ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                              : 'bg-muted text-muted-foreground'
+                          }`}>
+                            {order.financial_status}
+                          </span>
+                        </div>
+
+                        <!-- Order Details -->
+                        <div class="space-y-2">
+                          <!-- Total Price -->
+                          <div class="flex justify-between items-center">
+                            <span class="text-xs text-muted-foreground">Total:</span>
+                            <span class="text-sm font-semibold">
+                              {order.total_price} {order.currency}
+                            </span>
+                          </div>
+
+                          {/* Fulfillment Status */}
+                          {order.fulfillment_status && (
+                            <div class="flex justify-between items-center">
+                              <span class="text-xs text-muted-foreground">Fulfillment:</span>
+                              <span class={`text-xs px-2 py-0.5 rounded ${
+                                order.fulfillment_status === 'fulfilled'
+                                  ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                  : order.fulfillment_status === 'partial'
+                                  ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                                  : 'bg-muted text-muted-foreground'
+                              }`}>
+                                {order.fulfillment_status}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Item Count */}
+                          {order.line_items && order.line_items.length > 0 && (
+                            <div class="mt-2 pt-2 border-t">
+                              <p class="text-xs text-muted-foreground mb-1">
+                                {order.line_items.length} item{order.line_items.length !== 1 ? 's' : ''}
+                              </p>
+                              <ul class="space-y-1">
+                                {order.line_items.slice(0, 2).map((item: any) => (
+                                  <li class="text-xs">
+                                    • {item.quantity}x {item.name}
+                                  </li>
+                                ))}
+                                {order.line_items.length > 2 && (
+                                  <li class="text-xs text-muted-foreground italic">
+                                    + {order.line_items.length - 2} more
+                                  </li>
+                                )}
+                              </ul>
+                            </div>
+                          )}
+
+                          {/* View in Shopify Link */}
+                          {order.id && (
+                            <div class="mt-2 pt-2 border-t">
+                              <a
+                                href={`https://${clientData.shopify_store_url}/admin/orders/${order.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="text-xs text-primary hover:underline font-medium flex items-center gap-1"
+                              >
+                                View in Shopify
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div class="rounded-lg border bg-muted p-3 text-center">
+                    <p class="text-xs text-muted-foreground">
+                      No orders found for this customer
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+              <div class="p-4 space-y-3">
+                <h3 class="font-semibold leading-none tracking-tight">
+                  Order History
+                </h3>
+                <div class="rounded-lg border bg-muted p-3 text-center">
+                  <p class="text-xs text-muted-foreground">
+                    Shopify not connected
+                  </p>
+                  <p class="text-xs text-muted-foreground mt-1">
+                    Connect your store in settings to view orders
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <!-- Quick Responses Card -->
+          <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+            <div class="p-4 space-y-3">
+              <h3 class="font-semibold leading-none tracking-tight">
+                Quick Responses
+              </h3>
+              <TypeaheadSearch
+                client:load
+                items={macroArray}
+                placeholder="Search macros..."
+              />
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-  </div>
+  </AdminShell>
 
   <script>
-    console.log("[TICKET_VIEW_CLIENT] Client-side script initialized");
+    console.log("[customer-ticket-client] Client-side script initialized");
 
     // Get DOM elements
     const textarea = document.getElementById('answer') as HTMLTextAreaElement;
     const button = document.getElementById('sendButton');
 
-    console.log("[TICKET_VIEW_CLIENT] DOM elements found:", {
+    console.log("[customer-ticket-client] DOM elements found:", {
       textarea: !!textarea,
       button: !!button
     });
@@ -362,17 +471,17 @@ console.log("[TICKET_VIEW] Page data preparation complete");
      * When a macro is chosen, append its text to the textarea
      */
     window.addEventListener('MacroChoosen', (e) => {
-      console.log("[TICKET_VIEW_CLIENT] MacroChoosen event received");
+      console.log("[customer-ticket-client] MacroChoosen event received");
       
       const macrochoosen = e as CustomEvent;
       const text = macrochoosen?.detail?.text || '';
       
       if (!textarea || !text) {
-        console.log("[TICKET_VIEW_CLIENT] Missing textarea or text, skipping");
+        console.log("[customer-ticket-client] Missing textarea or text, skipping");
         return;
       }
 
-      console.log("[TICKET_VIEW_CLIENT] Appending macro text to textarea");
+      console.log("[customer-ticket-client] Appending macro text to textarea");
 
       // Append text to textarea (with newline if content exists)
       textarea.value += (textarea.value ? '\n\n' : '') + text;
@@ -392,11 +501,11 @@ console.log("[TICKET_VIEW] Page data preparation complete");
      * Shows the most recent messages first
      */
     (function () {
-      console.log("[TICKET_VIEW_CLIENT] Auto-scrolling mail list to bottom");
+      console.log("[customer-ticket-client] Auto-scrolling mail list to bottom");
       const list = document.getElementById('mailList');
       if (list) {
         list.scrollTop = list.scrollHeight;
-        console.log("[TICKET_VIEW_CLIENT] Mail list scrolled to:", list.scrollHeight);
+        console.log("[customer-ticket-client] Mail list scrolled to:", list.scrollHeight);
       }
     })();
 
@@ -405,49 +514,75 @@ console.log("[TICKET_VIEW] Page data preparation complete");
      * Sends the reply email and marks conversation as read
      */
     button?.addEventListener('click', async () => {
-      console.log("[TICKET_VIEW_CLIENT] Send button clicked");
+      console.log("[customer-ticket-client] Send button clicked");
 
-      const emailAdress = button.dataset.email;
+      const emailAddress = button.dataset.email;
       const newSubject = button.dataset.subject;
       const customerId = button.dataset.customerid;
       const signature = button.dataset.signature;
 
-      var body = textarea?.value || '';
-      body = body + '\n\n' + signature
-            //sending mail if contend in
+      let body = textarea?.value || '';
+      body = body + '\n\n' + signature;
 
-      console.log("[TICKET_VIEW_CLIENT] Email data:", {
-        to: emailAdress,
+      console.log("[customer-ticket-client] Email data:", {
+        to: emailAddress,
         subject: newSubject,
         customerId: customerId,
         bodyLength: body.length
       });
 
-      // Only send if there's content
-      if (body.trim() !== '') {
-        console.log("[TICKET_VIEW_CLIENT] Sending email");
-        
-        await fetch(`http://localhost:3000/api/emails/sendMail?customerId=${customerId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to: emailAdress, subject: newSubject, text: body }),
-        });
-
-        console.log("[TICKET_VIEW_CLIENT] Email sent successfully");
-      } else {
-        console.log("[TICKET_VIEW_CLIENT] Empty message, skipping send");
+      // Disable button during send
+      if (button) {
+        button.setAttribute('disabled', 'true');
+        button.innerHTML = `
+          <svg class="mr-2 h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          Sending...
+        `;
       }
 
-      // Mark conversation as read
-      console.log("[TICKET_VIEW_CLIENT] Marking conversation as read");
-      await fetch(`http://localhost:3000/api/emails/makeRead?customerId=${customerId}`, { 
-        method: 'POST' 
-      });
+      try {
+        // Only send if there's content
+        if (body.trim() !== '') {
+          console.log("[customer-ticket-client] Sending email");
+          
+          await fetch(`http://localhost:3000/api/emails/sendMail?customerId=${customerId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: emailAddress, subject: newSubject, text: body }),
+          });
 
-      console.log("[TICKET_VIEW_CLIENT] Redirecting to inbox");
-      window.location.assign('/');
+          console.log("[customer-ticket-client] Email sent successfully");
+        } else {
+          console.log("[customer-ticket-client] Empty message, skipping send");
+        }
+
+        // Mark conversation as read
+        console.log("[customer-ticket-client] Marking conversation as read");
+        await fetch(`http://localhost:3000/api/emails/makeRead?customerId=${customerId}`, { 
+          method: 'POST' 
+        });
+
+        console.log("[customer-ticket-client] Redirecting to dashboard");
+        window.location.assign('/dashboard');
+      } catch (error) {
+        console.error("[customer-ticket-client] Error sending email:", error);
+        
+        // Re-enable button on error
+        if (button) {
+          button.removeAttribute('disabled');
+          button.innerHTML = `
+            <svg class="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+            </svg>
+            Send Reply
+          `;
+        }
+      }
     });
 
-    console.log("[TICKET_VIEW_CLIENT] All event listeners attached");
+    console.log("[customer-ticket-client] All event listeners attached");
   </script>
 </BaseLayout>
