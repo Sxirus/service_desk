@@ -103,7 +103,7 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
    */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('connected') === 'success') {
+    if (params.get('shopify') === 'connected') {
       console.log('[SHOPIFY_PANEL] OAuth connection successful');
       
       // Show success notification
