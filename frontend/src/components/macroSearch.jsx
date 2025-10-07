@@ -146,7 +146,7 @@ export function TypeaheadSearch({
         <input
           ref={inputRef}
           type="search"
-          className="w-full rounded-2xl border border-gray-300 px-4 py-2 outline-none focus:ring-4 focus:ring-gray-200 shadow-sm"
+          className="w-full bg-white rounded-2xl border border-gray-300 px-4 py-2 outline-none focus:ring-4 focus:ring-gray-200 shadow-sm"
           placeholder={placeholder}
           value={query}
           onChange={(e) => setQuery(e.target.value)}

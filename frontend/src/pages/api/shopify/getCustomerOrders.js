@@ -92,7 +92,7 @@ export async function GET({ request }) {
   // Step 3: Get customer email address from incomingmails table
   console.log('[SHOPIFY_ORDERS] Fetching customer email from incomingmails');
   const { data: emails, error: emailError } = await supabase
-    .from('incomingmails')
+    .from('incoming-mails')
     .select('email_address')
     .eq('customer_id', customerId)
     .order('send_at', { ascending: false })
