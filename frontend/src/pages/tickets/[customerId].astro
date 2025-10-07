@@ -1,5 +1,4 @@
 ---
-import { AtRule } from "postcss";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { formatDate } from "../../utils/formatDate.js";
 import { TypeaheadSearch } from "../../components/macroSearch.jsx";
@@ -37,19 +36,28 @@ const macroArray = await resultMacros.json();
 
 <BaseLayout title={customer.name} overflowHidden>
   <!-- the right side -->
-  <div class="fixed right-0 bg-gray-100 h-full w-1/5 outline-2 outline-gray-300 flex justify-center">
-    <ul>
-    <li>
-      Name: {customer.name}
-    </li>
-    <li>{emailAdress}</li>
+  <div class="fixed right-0 bg-gray-100 h-full w-1/5 outline-2 outline-gray-300 flex flex-col justify-between mb-52 items-center">
+    <ul class="w-full">
+      <li class="flex justify-center m-3">
+        Name: {customer.name}
+      </li>
+      <li class="flex justify-center m-3">{emailAdress}</li>
     </ul>
+
+    <div class="m-3 flex w-full size">   
+      <TypeaheadSearch
+      client:load
+      items={macroArray}          
+      placeholder="Makro-Titel suchen…"   
+      />
+    </div>
+
     <button
       data-email={emailAdress}
       data-subject={newSubject}
       data-customerid={customerId}
       id="sendButton"
-      class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 absolute bottom-7 w-4/5">
+      class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 sticky bottom-7 w-4/5">
       Senden
     </button>
   </div>
@@ -79,14 +87,9 @@ const macroArray = await resultMacros.json();
 
   <!-- Sticky Footer: Suche + Textfeld sichtbar am unteren Rand -->
   <div class="sticky bottom-0 bg-white border-t p-2">
-    <TypeaheadSearch
-      client:load
-      items={macroArray}          
-      placeholder="Makro-Titel suchen…"   
-    />
     <textarea
       id="answer"
-      class="mt-2 w-full h-32 resize-none overflow-y-auto p-2 border border-gray-300"
+      class="mt-2 w-full h-60 resize-none overflow-y-auto p-2 border border-gray-300"
       placeholder="Answer..."
     ></textarea>
   </div>
@@ -108,7 +111,7 @@ const macroArray = await resultMacros.json();
       if (!textarea || !text) return;
 
       // hier: mit Zeilenumbruch anhängen (oder ersetze "\n" durch " ")
-      textarea.value += (textarea.value ? '\n' : '') + text;
+      textarea.value += (textarea.value ? '' : '') + text;
 
       // Cursor ans Ende
       textarea.focus();
