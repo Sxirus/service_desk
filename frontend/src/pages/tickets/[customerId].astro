@@ -65,6 +65,11 @@ console.log("[TICKET_VIEW] Fetching macros for client:", clientId);
 const resultMacros = await fetch(`http://localhost:3000/api/macros/getMacros?client_id=${clientId}`);
 const macroArray = await resultMacros.json();
 
+//getting the signature
+const resultSignature = await fetch (`http://localhost:3000/api/settings/getSignature?client_id=${clientId}`);
+const signatureArray = await resultSignature.json();
+const signature = signatureArray[0].email_signature;
+
 console.log("[TICKET_VIEW] Macros loaded:", macroArray?.length || 0);
 
 // Fetch client data to check Shopify connection status
@@ -278,7 +283,8 @@ console.log("[TICKET_VIEW] Page data preparation complete");
         data-email={emailAdress}
         data-subject={newSubject}
         data-customerid={customerId}
-        id="sendButton"
+        data-signature={signature}
+      id="sendButton"
         class="w-full bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
       >
         Send Reply
@@ -392,7 +398,11 @@ console.log("[TICKET_VIEW] Page data preparation complete");
       const emailAdress = button.dataset.email;
       const newSubject = button.dataset.subject;
       const customerId = button.dataset.customerid;
-      const body = textarea?.value || '';
+      const signature = button.dataset.signature;
+
+      var body = textarea?.value || '';
+      body = body + '\n\n' + signature
+            //sending mail if contend in
 
       console.log("[TICKET_VIEW_CLIENT] Email data:", {
         to: emailAdress,

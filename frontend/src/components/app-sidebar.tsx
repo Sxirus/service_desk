@@ -103,6 +103,10 @@ export function AppSidebar({
             title: "Shopify Integration", 
             url: "/manage/shopify",
           },
+          {
+            title: "Settings",
+            url: "/manage/settings"
+          },
         ],
       });
     }
