@@ -31,10 +31,7 @@ const formSchema = z.object({
   city: z.string(),
   postalCode: z.string(),
   country: z.string(),
-  taxNumber: z.string(),
-  vatNumber: z.string(),
-  phone: z.string(),
-  email: z.string(),
+  vat: z.string(),
   website: z.string(),
 })
 
@@ -48,10 +45,7 @@ interface CompanyManagementFormProps {
     city: string
     postalCode: string
     country: string
-    taxNumber: string
-    vatNumber: string
-    phone: string
-    email: string
+    vat: string
     website: string
   }
 }
@@ -67,10 +61,7 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
       city: initialData.city,
       postalCode: initialData.postalCode,
       country: initialData.country,
-      taxNumber: initialData.taxNumber,
-      vatNumber: initialData.vatNumber,
-      phone: initialData.phone,
-      email: initialData.email,
+      vat: initialData.vat,
       website: initialData.website,
     },
   })
@@ -242,83 +233,20 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
             {/* Tax Information */}
             <div className="space-y-4">
               <div className="flex items-center space-x-2">
-                <h3 className="text-lg font-medium">Tax Information</h3>
+                <h3 className="text-lg font-medium">Other Information</h3>
                 <Badge variant="secondary">Coming Soon</Badge>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
-                  name="taxNumber"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Tax Number</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="Tax number" 
-                          {...field} 
-                          disabled 
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="vatNumber"
+                  name="vat"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>VAT Number</FormLabel>
                       <FormControl>
                         <Input 
-                          placeholder="VAT number" 
-                          {...field} 
-                          disabled 
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Contact Information */}
-            <div className="space-y-4">
-              <div className="flex items-center space-x-2">
-                <h3 className="text-lg font-medium">Contact Information</h3>
-                <Badge variant="secondary">Coming Soon</Badge>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Phone</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="+1 (555) 123-4567" 
-                          {...field} 
-                          disabled 
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="contact@company.com" 
+                          placeholder="DE123456789" 
                           {...field} 
                           disabled 
                         />
@@ -331,7 +259,7 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
                   control={form.control}
                   name="website"
                   render={({ field }) => (
-                    <FormItem className="md:col-span-2">
+                    <FormItem>
                       <FormLabel>Website</FormLabel>
                       <FormControl>
                         <Input 

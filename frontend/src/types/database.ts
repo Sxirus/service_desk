@@ -25,13 +25,10 @@ export interface Client {
   address_country?: string;
   
   // Contact fields
-  phone?: string;
-  email?: string;
   website?: string;
   
   // Tax fields
-  tax_number?: string;
-  vat_number?: string;
+  vat?: string;
   
   // Shopify integration fields
   shopify_store_url?: string;
@@ -117,10 +114,7 @@ export interface CompanyFormData {
   city: string;
   postalCode: string;
   country: string;
-  taxNumber: string;
-  vatNumber: string;
-  phone: string;
-  email: string;
+  vat: string;
   website: string;
 }
 

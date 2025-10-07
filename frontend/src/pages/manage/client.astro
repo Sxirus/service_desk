@@ -75,10 +75,7 @@ const { data: companyData, error: companyErr } = await supabase
     address_city, 
     address_zip, 
     address_country, 
-    tax_number, 
-    vat_number, 
-    phone, 
-    email, 
+    vat,
     website
   `)
   .eq("id", authContext.employee.client_id)
@@ -111,10 +108,7 @@ const initialFormData = {
   city: companyData?.address_city ?? "",
   postalCode: companyData?.address_zip ?? "",
   country: companyData?.address_country ?? "",
-  taxNumber: companyData?.tax_number ?? "",
-  vatNumber: companyData?.vat_number ?? "",
-  phone: companyData?.phone ?? "",
-  email: companyData?.email ?? "",
+  vat: companyData?.vat ?? "",
   website: companyData?.website ?? ""
 };
 ---
@@ -140,7 +134,7 @@ const initialFormData = {
       </div>
 
       <!-- Company Management Form -->
-      <div class="max-w-2xl">
+      <div class="max-w">
         <CompanyManagementForm 
           client:only="react" 
           initialData={initialFormData}
