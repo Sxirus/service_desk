@@ -71,3 +71,63 @@ export const ROLE_IDS = {
   USER: 2,
   // Add other role IDs as needed
 } as const;
+
+export type RoleId = typeof ROLE_IDS[keyof typeof ROLE_IDS];
+
+// ============================================================================
+// RPC RESPONSE TYPES
+// ============================================================================
+
+/**
+ * Response type for get_my_employee RPC
+ */
+export interface GetMyEmployeeResponse {
+  id: number;
+  client_id: number;
+}
+
+/**
+ * Response type for get_employee_emails RPC
+ */
+export interface EmployeeEmailRow {
+  employee_id: number;
+  email: string;
+}
+
+// ============================================================================
+// API RESPONSE TYPES
+// ============================================================================
+
+/**
+ * Email signature API response
+ */
+export interface EmailSignatureResponse {
+  email_signature: string;
+  client_id: number;
+  updated_at?: string;
+}
+
+/**
+ * Form data types for components
+ */
+export interface CompanyFormData {
+  id: number;
+  name: string;
+  address: string;
+  city: string;
+  postalCode: string;
+  country: string;
+  taxNumber: string;
+  vatNumber: string;
+  phone: string;
+  email: string;
+  website: string;
+}
+
+export interface ShopifyFormData {
+  id: number;
+  name: string;
+  shopifyStoreUrl: string | null;
+  shopifyConnected: boolean;
+  shopifyScope: string | null;
+}
