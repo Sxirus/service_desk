@@ -1,170 +1,263 @@
 ---
+// src/pages/manage/users.astro
+
+/**
+ * User Management Page
+ * Allows admin users to view, create, and manage employee users
+ * 
+ * Security: Admin-only access (role_id = 1)
+ * Uses: Auth helper for DRY authentication/authorization
+ * 
+ * Features:
+ * - View all employees in the company
+ * - See assigned roles for each employee
+ * - Create new users
+ * - Manage user roles
+ */
+
 import Layout from "../../layouts/BaseLayout.astro";
 import { createClient } from "../../lib/supabase.ts";
+import { getAuthContext, getSidebarData } from "../../lib/auth-helpers.ts";
 
-// DataTable
+// Components
 import type { User } from "@/components/datatable/columns";
 import ClientUsersTable from "@/components/datatable/ClientUsersTable";
-
-// Create User Dialog
 import CreateUserDialog from "@/components/UserDialog";
-
-// Sidebar Shell
 import AdminShell from "@/components/AdminShell";
 
-const supabase = createClient({ request: Astro.request, cookies: Astro.cookies });
+// Initialize Supabase client with request context
+const supabase = createClient({ 
+  request: Astro.request, 
+  cookies: Astro.cookies 
+});
 
-console.log("[admin-panel] accessed");
+console.log("[user-management] Page accessed");
 
-// Verifizierter User
-const { data: { user }, error: userErr } = await supabase.auth.getUser();
-if (userErr || !user) return Astro.redirect("/");
+// ============================================================================
+// AUTHENTICATION & AUTHORIZATION
+// ============================================================================
 
-// "me" ermitteln. Erst RPC, sonst Fallback
-let me: { id: number; client_id: number } | null = null;
+// Get authenticated user and employee context
+console.log("[user-management] Verifying authentication");
+const authContext = await getAuthContext(supabase, Astro.cookies);
 
-try {
-  const rpc = await supabase.rpc("get_my_employee").single();
-  if (!rpc.error) me = rpc.data as any;
-} catch {}
-
-if (!me) {
-  const res = await supabase
-    .from("employees")
-    .select("id, client_id")
-    .eq("user_id", user.id)
-    .single();
-  me = res.data as any;
-  if (res.error) {
-    console.error("[admin-panel] employees lookup:", res.error.message);
-  }
+if (!authContext) {
+  console.error("[user-management] Authentication failed, redirecting to login");
+  return Astro.redirect("/");
 }
 
-if (!me) return Astro.redirect("/");
+console.log("[user-management] User authenticated:", {
+  userId: authContext.user.id,
+  employeeId: authContext.employee.id,
+  clientId: authContext.employee.client_id,
+  isAdmin: authContext.isAdmin
+});
 
-// Admin Rolle prüfen. Rolle 1 = admin
-const { data: myRoles, error: rolesErr } = await supabase
-  .from("roles-employees")
-  .select("role_id")
-  .eq("employee_id", me.id);
-
-if (rolesErr) {
-  console.error("[admin-panel] roles lookup:", rolesErr.message);
-  return new Response("Forbidden", { status: 403 });
+// Verify admin role
+if (!authContext.isAdmin) {
+  console.warn("[user-management] Access denied - user is not admin:", {
+    userId: authContext.user.id,
+    employeeId: authContext.employee.id
+  });
+  return new Response("Forbidden: Admin access required", { status: 403 });
 }
 
-const isAdmin = !!myRoles?.some((r) => r.role_id === 1);
-if (!isAdmin) return new Response("Forbidden", { status: 403 });
+console.log("[user-management] Admin access verified");
 
-// Rollen, Mitarbeiter, Zuordnungen laden
+// ============================================================================
+// DATA LOADING - ROLES
+// ============================================================================
+
+// Load all available roles
+console.log("[user-management] Loading roles list");
 const { data: roleRows, error: rolesListErr } = await supabase
   .from("roles")
   .select("id, name")
   .order("id");
 
-if (rolesListErr) console.error("[admin-panel] roles list:", rolesListErr.message);
+if (rolesListErr) {
+  console.error("[user-management] Failed to load roles:", {
+    error: rolesListErr.message,
+    code: rolesListErr.code
+  });
+} else {
+  console.log("[user-management] Roles loaded:", {
+    count: roleRows?.length ?? 0,
+    roles: roleRows?.map(r => r.name).join(", ")
+  });
+}
 
+// ============================================================================
+// DATA LOADING - EMPLOYEES
+// ============================================================================
+
+// Load all employees for the client
+console.log("[user-management] Loading employees for client_id:", authContext.employee.client_id);
 const { data: employees, error: empsErr } = await supabase
   .from("employees")
   .select("id, name")
-  .eq("client_id", me.client_id)
+  .eq("client_id", authContext.employee.client_id)
   .order("name");
 
-if (empsErr) console.error("[admin-panel] employees list:", empsErr.message);
+if (empsErr) {
+  console.error("[user-management] Failed to load employees:", {
+    error: empsErr.message,
+    code: empsErr.code,
+    clientId: authContext.employee.client_id
+  });
+} else {
+  console.log("[user-management] Employees loaded:", {
+    count: employees?.length ?? 0,
+    clientId: authContext.employee.client_id
+  });
+}
 
-const { data: rels, error: relsErr } = await supabase
+// ============================================================================
+// DATA LOADING - ROLE ASSIGNMENTS
+// ============================================================================
+
+// Load role-employee relationships
+console.log("[user-management] Loading role-employee assignments");
+const { data: roleAssignments, error: assignmentsErr } = await supabase
   .from("roles-employees")
   .select("employee_id, role_id");
 
-if (relsErr) console.error("[admin-panel] roles-employees list:", relsErr.message);
-
-// Helper
-function rolesFor(empId: number) {
-  const map = new Map<number, number[]>();
-  rels?.forEach((r) => {
-    if (!map.has(r.employee_id)) map.set(r.employee_id, []);
-    map.get(r.employee_id)!.push(r.role_id);
+if (assignmentsErr) {
+  console.error("[user-management] Failed to load role assignments:", {
+    error: assignmentsErr.message,
+    code: assignmentsErr.code
   });
-  return map.get(empId) ?? [];
+} else {
+  console.log("[user-management] Role assignments loaded:", {
+    count: roleAssignments?.length ?? 0
+  });
 }
 
-// Emails per SECURITY DEFINER RPC holen
+// ============================================================================
+// DATA LOADING - EMPLOYEE EMAILS (SECURITY DEFINER RPC)
+// ============================================================================
+
+/**
+ * Load employee emails via SECURITY DEFINER RPC
+ * This is necessary because auth.users table is not directly accessible
+ * The RPC function runs with elevated privileges to safely retrieve emails
+ */
 const empIds = (employees ?? []).map((e) => e.id);
 let emailMap = new Map<number, string>();
 
-if (empIds.length) {
+if (empIds.length > 0) {
+  console.log("[user-management] Fetching employee emails via RPC for", empIds.length, "employees");
+  
   const { data: emailRows, error: emailErr } = await supabase.rpc("get_employee_emails", {
     emp_ids: empIds
   });
+  
   if (emailErr) {
-    console.error("[admin-panel] get_employee_emails RPC error:", emailErr.message);
+    console.error("[user-management] Failed to fetch employee emails:", {
+      error: emailErr.message,
+      code: emailErr.code,
+      employeeCount: empIds.length
+    });
+  } else {
+    // Build email lookup map for efficient access
+    emailMap = new Map<number, string>(
+      (emailRows ?? []).map((row: any) => [
+        row.employee_id as number, 
+        row.email as string
+      ])
+    );
+    console.log("[user-management] Employee emails retrieved:", {
+      count: emailMap.size
+    });
   }
-  emailMap = new Map<number, string>(
-    (emailRows ?? []).map((row: any) => [row.employee_id as number, row.email as string])
-  );
 }
 
-// DataTable Daten bauen
-const TableData: User[] =
-  employees?.map((e) => {
-    const roleNames = rolesFor(e.id)
-      .map((rid) => roleRows?.find((r) => r.id === rid)?.name)
-      .filter(Boolean)
-      .join(", ");
-    return {
-      id: String(e.id),
-      name: e.name,
-      email: emailMap.get(e.id) ?? "",
-      role: roleNames || "—",
-    } as User;
-  }) ?? [];
+// ============================================================================
+// DATA TRANSFORMATION
+// ============================================================================
 
-// Sidebar Infos
-const meName = employees?.find((e) => e.id === me?.id)?.name ?? user?.email ?? "Nutzer";
-const sidebarUser = {
-  name: meName,
-  email: user?.email ?? null,
-  avatarUrl: null,
-};
+/**
+ * Helper function to get role names for an employee
+ * @param empId - Employee ID
+ * @returns Array of role IDs assigned to the employee
+ */
+function getRolesForEmployee(empId: number): number[] {
+  const assignmentMap = new Map<number, number[]>();
+  
+  roleAssignments?.forEach((assignment) => {
+    if (!assignmentMap.has(assignment.employee_id)) {
+      assignmentMap.set(assignment.employee_id, []);
+    }
+    assignmentMap.get(assignment.employee_id)!.push(assignment.role_id);
+  });
+  
+  return assignmentMap.get(empId) ?? [];
+}
 
-// Team Eintrag
-let firstTeam = null as null | { name: string; plan?: string | null };
-try {
-  const { data: clientRow } = await supabase
-    .from("clients")
-    .select("id, name")
-    .eq("id", me.client_id)
-    .single();
-  if (clientRow?.name) {
-    firstTeam = { name: clientRow.name, plan: "Enterprise" };
-  }
-} catch {}
+// Transform employee data for the DataTable component
+console.log("[user-management] Transforming employee data for table");
+const tableData: User[] = (employees ?? []).map((employee) => {
+  // Get role IDs for this employee
+  const employeeRoleIds = getRolesForEmployee(employee.id);
+  
+  // Map role IDs to role names
+  const roleNames = employeeRoleIds
+    .map((roleId) => roleRows?.find((role) => role.id === roleId)?.name)
+    .filter(Boolean) // Remove undefined values
+    .join(", ");
+  
+  return {
+    id: String(employee.id),
+    name: employee.name,
+    email: emailMap.get(employee.id) ?? "",
+    role: roleNames || "—", // Use em dash if no roles assigned
+  } as User;
+});
+
+console.log("[user-management] Table data prepared:", {
+  rowCount: tableData.length
+});
+
+// ============================================================================
+// SIDEBAR DATA
+// ============================================================================
+
+// Load sidebar data (user info and team details)
+console.log("[user-management] Loading sidebar data");
+const sidebarData = await getSidebarData(supabase, authContext);
+
+console.log("[user-management] Page setup complete, rendering");
 ---
 
-<Layout>
-  <AdminShell client:load
-    user={sidebarUser}
-    firstTeam={firstTeam ?? undefined}
+<Layout title="User Management">
+  <AdminShell 
+    client:load
+    user={sidebarData.user}
+    firstTeam={sidebarData.team ?? undefined}
     crumbParentLabel="Administration"
     crumbParentHref="/manage"
     crumbCurrent="Users"
-    isAdmin={isAdmin}
+    isAdmin={authContext.isAdmin}
     currentPath="/manage/users"
   >
+    <!-- Page Header with Action Button -->
     <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl">User Management</h1>
+      <h1 class="text-2xl font-bold">User Management</h1>
       
-      <!-- Eleganter Dialog Button zum Erstellen -->
-      <CreateUserDialog client:only="react" roles={roleRows ?? []} />
-    </div>
-
-    <div class="container mx-auto pb-6 min-h-[300px]">
-      <ClientUsersTable 
+      <!-- Create User Dialog Button -->
+      <CreateUserDialog 
         client:only="react" 
-        data={TableData} 
         roles={roleRows ?? []} 
       />
     </div>
 
+    <!-- Users DataTable -->
+    <div class="container mx-auto pb-6 min-h-[300px]">
+      <ClientUsersTable 
+        client:only="react" 
+        data={tableData} 
+        roles={roleRows ?? []} 
+      />
+    </div>
   </AdminShell>
 </Layout>

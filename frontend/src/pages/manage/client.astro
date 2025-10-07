@@ -1,99 +1,138 @@
 ---
+// src/pages/manage/client.astro
+
+/**
+ * Company Settings Page
+ * Allows admin users to manage company information and settings
+ * 
+ * Security: Admin-only access (role_id = 1)
+ * Uses: Auth helper for DRY authentication/authorization
+ */
+
 import Layout from "../../layouts/BaseLayout.astro";
 import { createClient } from "../../lib/supabase.ts";
+import { getAuthContext, getSidebarData } from "../../lib/auth-helpers.ts";
 
-// Company Form Component
+// Components
 import CompanyManagementForm from "@/components/CompanyManagementForm";
-
-// Sidebar Shell
 import AdminShell from "@/components/AdminShell";
 
-const supabase = createClient({ request: Astro.request, cookies: Astro.cookies });
+// Initialize Supabase client with request context
+const supabase = createClient({ 
+  request: Astro.request, 
+  cookies: Astro.cookies 
+});
 
-console.log("[admin-panel] accessed");
+console.log("[client-settings] Page accessed");
 
-// Verifizierter User
-const { data: { user }, error: userErr } = await supabase.auth.getUser();
-if (userErr || !user) return Astro.redirect("/");
+// ============================================================================
+// AUTHENTICATION & AUTHORIZATION
+// ============================================================================
 
-// "me" ermitteln. Erst RPC, sonst Fallback
-let me: { id: number; client_id: number } | null = null;
+// Get authenticated user and employee context
+console.log("[client-settings] Verifying authentication");
+const authContext = await getAuthContext(supabase, Astro.cookies);
 
-try {
-  const rpc = await supabase.rpc("get_my_employee").single();
-  if (!rpc.error) me = rpc.data as any;
-} catch {}
-
-if (!me) {
-  const res = await supabase
-    .from("employees")
-    .select("id, client_id")
-    .eq("user_id", user.id)
-    .single();
-  me = res.data as any;
-  if (res.error) {
-    console.error("[admin-panel] employees lookup:", res.error.message);
-  }
+if (!authContext) {
+  console.error("[client-settings] Authentication failed, redirecting to login");
+  return Astro.redirect("/");
 }
 
-if (!me) return Astro.redirect("/");
+console.log("[client-settings] User authenticated:", {
+  userId: authContext.user.id,
+  employeeId: authContext.employee.id,
+  clientId: authContext.employee.client_id,
+  isAdmin: authContext.isAdmin
+});
 
-// Admin Rolle prüfen. Rolle 1 = admin
-const { data: myRoles, error: rolesErr } = await supabase
-  .from("roles-employees")
-  .select("role_id")
-  .eq("employee_id", me.id);
-
-if (rolesErr) {
-  console.error("[admin-panel] roles lookup:", rolesErr.message);
-  return new Response("Forbidden", { status: 403 });
+// Verify admin role
+if (!authContext.isAdmin) {
+  console.warn("[client-settings] Access denied - user is not admin:", {
+    userId: authContext.user.id,
+    employeeId: authContext.employee.id
+  });
+  return new Response("Forbidden: Admin access required", { status: 403 });
 }
 
-const isAdmin = !!myRoles?.some((r) => r.role_id === 1);
-if (!isAdmin) return new Response("Forbidden", { status: 403 });
+console.log("[client-settings] Admin access verified");
 
-// Company-Daten laden
+// ============================================================================
+// DATA LOADING
+// ============================================================================
+
+// Load company data with all relevant fields
+console.log("[client-settings] Loading company data for client_id:", authContext.employee.client_id);
+
 const { data: companyData, error: companyErr } = await supabase
   .from("clients")
-  .select("id, name")
-  .eq("id", me.client_id)
+  .select(`
+    id, 
+    name, 
+    address_street, 
+    address_city, 
+    address_zip, 
+    address_country, 
+    tax_number, 
+    vat_number, 
+    phone, 
+    email, 
+    website
+  `)
+  .eq("id", authContext.employee.client_id)
   .single();
 
 if (companyErr) {
-  console.error("[admin-panel] company lookup:", companyErr.message);
+  console.error("[client-settings] Failed to load company data:", {
+    error: companyErr.message,
+    code: companyErr.code,
+    clientId: authContext.employee.client_id
+  });
+} else {
+  console.log("[client-settings] Company data loaded successfully:", {
+    companyId: companyData?.id,
+    companyName: companyData?.name
+  });
 }
 
-// Sidebar Infos
-const { data: employees } = await supabase
-  .from("employees")
-  .select("id, name")
-  .eq("client_id", me.client_id)
-  .order("name");
+// Load sidebar data (user info and team details)
+console.log("[client-settings] Loading sidebar data");
+const sidebarData = await getSidebarData(supabase, authContext);
 
-const meName = employees?.find((e) => e.id === me?.id)?.name ?? user?.email ?? "Nutzer";
-const sidebarUser = {
-  name: meName,
-  email: user?.email ?? null,
-  avatarUrl: null,
+console.log("[client-settings] Page setup complete, rendering");
+
+// ============================================================================
+// PREPARE FORM DATA
+// ============================================================================
+
+// Prepare initial form data with fallbacks for missing fields
+const initialFormData = {
+  id: companyData?.id ?? authContext.employee.client_id,
+  name: companyData?.name ?? "",
+  address: companyData?.address_street ?? "",
+  city: companyData?.address_city ?? "",
+  postalCode: companyData?.address_zip ?? "",
+  country: companyData?.address_country ?? "",
+  taxNumber: companyData?.tax_number ?? "",
+  vatNumber: companyData?.vat_number ?? "",
+  phone: companyData?.phone ?? "",
+  email: companyData?.email ?? "",
+  website: companyData?.website ?? ""
 };
-
-// Team Eintrag
-const firstTeam = companyData?.name 
-  ? { name: companyData.name, plan: "Enterprise" } 
-  : null;
 ---
 
-<Layout>
-  <AdminShell client:load
-    user={sidebarUser}
-    firstTeam={firstTeam ?? undefined}
+<Layout title="Company Settings">
+  <AdminShell 
+    client:load
+    user={sidebarData.user}
+    firstTeam={sidebarData.team ?? undefined}
     crumbParentLabel="Administration"
     crumbParentHref="/manage"
     crumbCurrent="Company"
-    isAdmin={isAdmin}
+    isAdmin={authContext.isAdmin}
     currentPath="/manage/client"
   >
     <div class="space-y-6">
+      <!-- Page Header -->
       <div>
         <h1 class="text-3xl font-bold tracking-tight">Company Settings</h1>
         <p class="text-muted-foreground">
@@ -101,25 +140,13 @@ const firstTeam = companyData?.name
         </p>
       </div>
 
-      <div class="max-w-2x2">
+      <!-- Company Management Form -->
+      <div class="max-w-2xl">
         <CompanyManagementForm 
           client:only="react" 
-          initialData={{
-            id: companyData?.id || me.client_id,
-            name: companyData?.name || "",
-            address: "",
-            city: "",
-            postalCode: "",
-            country: "",
-            taxNumber: "",
-            vatNumber: "",
-            phone: "",
-            email: "",
-            website: ""
-          }}
+          initialData={initialFormData}
         />
       </div>
     </div>
-
   </AdminShell>
 </Layout>

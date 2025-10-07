@@ -1,133 +1,138 @@
 ---
+// src/pages/manage/shopify.astro
+
+/**
+ * Shopify Integration Page
+ * Allows admin users to connect and manage Shopify store integration
+ * 
+ * Security: Admin-only access (role_id = 1)
+ * Uses: Auth helper for DRY authentication/authorization
+ */
+
 import Layout from "../../layouts/BaseLayout.astro";
 import { createClient } from "../../lib/supabase.ts";
+import { getAuthContext, getSidebarData } from "../../lib/auth-helpers.ts";
 
-// Shopify Management Component
+// Components
 import ShopifyManagementPanel from "@/components/ShopifyManagementPanel";
-
-// Sidebar Shell
 import AdminShell from "@/components/AdminShell";
 
-const supabase = createClient({ request: Astro.request, cookies: Astro.cookies });
+// Initialize Supabase client with request context
+const supabase = createClient({ 
+  request: Astro.request, 
+  cookies: Astro.cookies 
+});
 
-console.log("[shopify-admin] Page accessed");
+console.log("[shopify-integration] Page accessed");
 
-// Authenticated user verification
-const { data: { user }, error: userErr } = await supabase.auth.getUser();
-if (userErr || !user) {
-  console.log("[shopify-admin] No authenticated user, redirecting to login");
+// ============================================================================
+// AUTHENTICATION & AUTHORIZATION
+// ============================================================================
+
+// Get authenticated user and employee context
+console.log("[shopify-integration] Verifying authentication");
+const authContext = await getAuthContext(supabase, Astro.cookies);
+
+if (!authContext) {
+  console.error("[shopify-integration] Authentication failed, redirecting to login");
   return Astro.redirect("/");
 }
 
-console.log("[shopify-admin] Authenticated user ID:", user.id);
+console.log("[shopify-integration] User authenticated:", {
+  userId: authContext.user.id,
+  employeeId: authContext.employee.id,
+  clientId: authContext.employee.client_id,
+  isAdmin: authContext.isAdmin
+});
 
-// Determine "me" - first try RPC, then fallback to direct query
-let me: { id: number; client_id: number } | null = null;
-
-try {
-  console.log("[shopify-admin] Attempting to get employee via RPC");
-  const rpc = await supabase.rpc("get_my_employee").single();
-  if (!rpc.error) {
-    me = rpc.data as any;
-    console.log("[shopify-admin] Employee found via RPC:", me);
-  }
-} catch (e) {
-  console.log("[shopify-admin] RPC failed, will try direct query");
+// Verify admin role
+if (!authContext.isAdmin) {
+  console.warn("[shopify-integration] Access denied - user is not admin:", {
+    userId: authContext.user.id,
+    employeeId: authContext.employee.id
+  });
+  return new Response("Forbidden: Admin access required", { status: 403 });
 }
 
-if (!me) {
-  console.log("[shopify-admin] Fetching employee via direct query");
-  const res = await supabase
-    .from("employees")
-    .select("id, client_id")
-    .eq("user_id", user.id)
-    .single();
-  me = res.data as any;
-  if (res.error) {
-    console.error("[shopify-admin] Employees lookup error:", res.error.message);
-  } else {
-    console.log("[shopify-admin] Employee found via direct query:", me);
-  }
-}
+console.log("[shopify-integration] Admin access verified");
 
-if (!me) {
-  console.error("[shopify-admin] No employee record found, redirecting");
-  return Astro.redirect("/");
-}
+// ============================================================================
+// DATA LOADING
+// ============================================================================
 
-// Check admin role - Role 1 = admin
-console.log("[shopify-admin] Checking admin role for employee:", me.id);
-const { data: myRoles, error: rolesErr } = await supabase
-  .from("roles-employees")
-  .select("role_id")
-  .eq("employee_id", me.id);
+// Load client data including Shopify integration fields
+console.log("[shopify-integration] Loading client data with Shopify fields for client_id:", 
+  authContext.employee.client_id
+);
 
-if (rolesErr) {
-  console.error("[shopify-admin] Roles lookup error:", rolesErr.message);
-  return new Response("Forbidden", { status: 403 });
-}
-
-const isAdmin = !!myRoles?.some((r) => r.role_id === 1);
-console.log("[shopify-admin] Is admin:", isAdmin);
-
-if (!isAdmin) {
-  console.log("[shopify-admin] User is not admin, returning 403");
-  return new Response("Forbidden", { status: 403 });
-}
-
-// Load client data including Shopify fields
-console.log("[shopify-admin] Loading client data for client_id:", me.client_id);
 const { data: clientData, error: clientErr } = await supabase
   .from("clients")
-  .select("id, name, address_street, address_city, address_zip, address_country, website, shopify_store_url, shopify_access_token, shopify_connected, shopify_scope")
-  .eq("id", me.client_id)
+  .select(`
+    id, 
+    name, 
+    address_street, 
+    address_city, 
+    address_zip, 
+    address_country, 
+    website,
+    shopify_store_url, 
+    shopify_access_token, 
+    shopify_connected, 
+    shopify_scope
+  `)
+  .eq("id", authContext.employee.client_id)
   .single();
 
 if (clientErr) {
-  console.error("[shopify-admin] Client lookup error:", clientErr.message);
+  console.error("[shopify-integration] Failed to load client data:", {
+    error: clientErr.message,
+    code: clientErr.code,
+    clientId: authContext.employee.client_id
+  });
+} else {
+  console.log("[shopify-integration] Client data loaded successfully:", {
+    clientId: clientData?.id,
+    clientName: clientData?.name,
+    shopifyConnected: clientData?.shopify_connected,
+    hasShopifyUrl: !!clientData?.shopify_store_url,
+    hasShopifyToken: !!clientData?.shopify_access_token,
+    shopifyScope: clientData?.shopify_scope
+  });
 }
 
-console.log("[shopify-admin] Client data loaded:", {
-  id: clientData?.id,
-  name: clientData?.name,
-  shopifyConnected: clientData?.shopify_connected,
-  hasShopifyToken: !!clientData?.shopify_access_token
-});
+// Load sidebar data (user info and team details)
+console.log("[shopify-integration] Loading sidebar data");
+const sidebarData = await getSidebarData(supabase, authContext);
 
-// Sidebar user info
-console.log("[shopify-admin] Loading sidebar data");
-const { data: employees } = await supabase
-  .from("employees")
-  .select("id, name")
-  .eq("client_id", me.client_id)
-  .order("name");
+console.log("[shopify-integration] Page setup complete, rendering");
 
-const meName = employees?.find((e) => e.id === me?.id)?.name ?? user?.email ?? "User";
-const sidebarUser = {
-  name: meName,
-  email: user?.email ?? null,
-  avatarUrl: null,
+// ============================================================================
+// PREPARE COMPONENT DATA
+// ============================================================================
+
+// Prepare initial data for Shopify management panel
+const initialPanelData = {
+  id: clientData?.id ?? authContext.employee.client_id,
+  name: clientData?.name ?? "",
+  shopifyStoreUrl: clientData?.shopify_store_url ?? null,
+  shopifyConnected: clientData?.shopify_connected ?? false,
+  shopifyScope: clientData?.shopify_scope ?? null,
 };
-
-// Team entry for sidebar
-const firstTeam = clientData?.name 
-  ? { name: clientData.name, plan: "Enterprise" } 
-  : null;
-
-console.log("[shopify-admin] Page setup complete, rendering");
 ---
 
-<Layout>
-  <AdminShell client:load
-    user={sidebarUser}
-    firstTeam={firstTeam ?? undefined}
+<Layout title="Shopify Integration">
+  <AdminShell 
+    client:load
+    user={sidebarData.user}
+    firstTeam={sidebarData.team ?? undefined}
     crumbParentLabel="Administration"
     crumbParentHref="/manage"
     crumbCurrent="Shopify"
-    isAdmin={isAdmin}
+    isAdmin={authContext.isAdmin}
     currentPath="/manage/shopify"
   >
     <div class="space-y-6">
+      <!-- Page Header -->
       <div>
         <h1 class="text-3xl font-bold tracking-tight">Shopify Integration</h1>
         <p class="text-muted-foreground">
@@ -135,20 +140,14 @@ console.log("[shopify-admin] Page setup complete, rendering");
         </p>
       </div>
 
+      <!-- Shopify Management Panel -->
       <div class="max-w-2xl">
         <ShopifyManagementPanel 
           client:only="react" 
-          clientId={me.client_id}
-          initialData={{
-            id: clientData?.id || me.client_id,
-            name: clientData?.name || "",
-            shopifyStoreUrl: clientData?.shopify_store_url || null,
-            shopifyConnected: clientData?.shopify_connected || false,
-            shopifyScope: clientData?.shopify_scope || null,
-          }}
+          clientId={authContext.employee.client_id}
+          initialData={initialPanelData}
         />
       </div>
     </div>
-
   </AdminShell>
 </Layout>
