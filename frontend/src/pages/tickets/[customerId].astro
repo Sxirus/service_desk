@@ -1,13 +1,20 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { formatDate } from "../../utils/formatDate.js";
-//parameters
+import { TypeaheadSearch } from "../../components/macroSearch.jsx";
+//parameters (pfad)
 const { params } = Astro;
 const customerId = params.customerId;
+
+//parameter(query)
+const url = Astro.url;
+const clientId = parseInt(url.searchParams.get('clientId') ?? 'null');
+
 //getting the customer
 const resultCustomer = await fetch(`http://localhost:3000/api/customers/getCustomerById?customerId=${customerId}`);
 const customerArray = await resultCustomer.json();
 const customer = customerArray[0];
+
 //getting all the emails from a customer
 const resultMails = await fetch(`http://localhost:3000/api/emails/getEmailsFromCustomer?customerId=${customerId}`);
 const emailArray = await resultMails.json()
@@ -21,92 +28,124 @@ if (lastMail['type'] != 'incoming'){
 };
 const emailAdress = lastMail.email_adress;
 const newSubject = `RE: ${lastMail.subject}`
+
+//getting macros per client
+const resultMacros = await fetch (`http://localhost:3000/api/macros/getMacros?client_id=${clientId}`);
+const macroArray = await resultMacros.json();
 ---
 
 <BaseLayout title={customer.name} overflowHidden>
   <!-- the right side -->
-  <div class="fixed right-0 bg-gray-100 h-full w-1/5 outline-2 outline-gray-300 flex justify-center">
-    <ul>
-    <li>
-      Name: {customer.name}
-    </li>
-    <li>{emailAdress}</li>
+  <div class="fixed right-0 bg-gray-100 h-full w-1/5 outline-2 outline-gray-300 flex flex-col justify-between mb-52 items-center">
+    <ul class="w-full">
+      <li class="flex justify-center m-3">
+        Name: {customer.name}
+      </li>
+      <li class="flex justify-center m-3">{emailAdress}</li>
     </ul>
+
+    <div class="m-3 flex w-full size">   
+      <TypeaheadSearch
+      client:load
+      items={macroArray}          
+      placeholder="Makro-Titel suchen…"   
+      />
+    </div>
+
     <button
       data-email={emailAdress}
       data-subject={newSubject}
       data-customerid={customerId}
       id="sendButton"
-      class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 absolute bottom-7 w-4/5">
+      class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 sticky bottom-7 w-4/5 hover:cursor-pointer">
       Senden
     </button>
   </div>
   
   <!-- all the mails of the customer -->
-  <div class="relative w-4/5 h-screen">
-    <h1 class="text-6xl w-full h-[5%] m-4">{lastMail.subject}</h1>
-    <ul id='mailList' class="w-full h-[70%] overflow-y-auto mb-2">
-      {emailArray.map((mail: any) => {
-      if (mail.type == 'sent') return (      
-      <li class="outline-2 outline-gray-300 mb-2">
-        <p>{formatDate(mail.date)}</p>
-        <p>Employee</p> 
-        <p class="text-black">{mail.text}</p>
-      </li>);
+  <div class="relative w-4/5 h-screen flex flex-col">
+  <h1 class="text-6xl w-full h-[5%] m-4">{lastMail.subject}</h1>
+
+  <ul id="mailList" class="flex-1 overflow-y-auto mb-2">
+    {emailArray.map((mail: any) => {
+      if (mail.type == 'sent') return (
+        <li class="outline-2 outline-gray-300 mb-2">
+          <p>{formatDate(mail.date)}</p>
+          <p>Employee</p>
+          <p class="text-black">{mail.text}</p>
+        </li>
+      );
       return (
-      <li class="outline-2 outline-gray-300 mb-2">
-        <p>{formatDate(mail.date)}</p>
-        <p>Customer</p>
-        <p class="text-black">{mail.text}</p>
-      </li>
-    )})}
-    </ul>
-    <!-- Text field to write text for new mail -->
-    <textarea class="w-full h-[20%] absolut bottom-3 resize-none overflow-y-auto p-2 border border-gray-300" placeholder="Answer..." id="answer"></textarea>
+        <li class="outline-2 outline-gray-300 mb-2">
+          <p>{formatDate(mail.date)}</p>
+          <p>Customer</p>
+          <p class="text-black">{mail.text}</p>
+        </li>
+      );
+    })}
+  </ul>
+
+  <!-- Sticky Footer: Suche + Textfeld sichtbar am unteren Rand -->
+  <div class="sticky bottom-0 bg-white border-t p-2">
+    <textarea
+      id="answer"
+      class="mt-2 w-full h-60 resize-none overflow-y-auto p-2 border border-gray-300"
+      placeholder="Answer..."
+    ></textarea>
   </div>
+</div>
+
+
 
   <script>
-    //mail list standartmäßig nach unten gescrollt
-    document.addEventListener('DOMContentLoaded', () => {
-      const list = document.getElementById('mailList');
-      if (list) {
-        list.scrollTop = list.scrollHeight; // ganz nach unten springen
-      }
+    // Elemente holen
+    /** @type {HTMLTextAreaElement|null} */
+    const textarea = document.getElementById('answer') as HTMLTextAreaElement;
+    /** @type {HTMLButtonElement|null} */
+    const button = document.getElementById('sendButton');
+
+    // ✅ React-Event empfangen und Text anhängen
+    window.addEventListener('MacroChoosen', (e) => {
+      const macrochoosen = e as CustomEvent;
+      const text = macrochoosen?.detail?.text || '';
+      if (!textarea || !text) return;
+
+      // hier: mit Zeilenumbruch anhängen (oder ersetze "\n" durch " ")
+      textarea.value += (textarea.value ? '' : '') + text;
+
+      // Cursor ans Ende
+      textarea.focus();
+      const end = textarea.value.length;
+      textarea.setSelectionRange(end, end);
+
+      // Falls andere Listener zuhören
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      textarea.dispatchEvent(new Event('change', { bubbles: true }));
     });
 
-    //button functionalität
-    document.addEventListener('DOMContentLoaded', () => {
-      const button = document.getElementById('sendButton') as HTMLButtonElement;
-      const textarea = document.getElementById('answer') as HTMLTextAreaElement;
+    // Mail-Liste nach unten scrollen
+    (function () {
+      const list = document.getElementById('mailList');
+      if (list) list.scrollTop = list.scrollHeight;
+    })();
 
-      //send button action
-      button?.addEventListener('click', async() => {
-        const emailAdress = button.dataset.email;
-        const newSubject = button.dataset.subject;
-        const customerId = button.dataset.customerid;
+    // Senden-Button
+    button?.addEventListener('click', async () => {
+      const emailAdress = button.dataset.email;
+      const newSubject = button.dataset.subject;
+      const customerId = button.dataset.customerid;
 
-        const body = textarea.value;
-        if(body.trim() != '') {
-          //sending mail
-          await fetch(`http://localhost:3000/api/emails/sendMail?customerId=${customerId}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              to: emailAdress,
-              subject: newSubject,
-              text: body,
-            }),
-          });
-        }
-        //making all mails read
-        var result = await fetch(`http://localhost:3000/api/emails/makeRead?customerId=${customerId}`, {
-          method: 'POST'
+      const body = textarea?.value || '';
+      if (body.trim() !== '') {
+        await fetch(`http://localhost:3000/api/emails/sendMail?customerId=${customerId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to: emailAdress, subject: newSubject, text: body }),
         });
-        //change window to main screen
-        window.location.assign('/');
-      });
+      }
+
+      await fetch(`http://localhost:3000/api/emails/makeRead?customerId=${customerId}`, { method: 'POST' });
+      window.location.assign('/');
     });
   </script>
 </BaseLayout>
