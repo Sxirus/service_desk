@@ -1,0 +1,154 @@
+---
+import Layout from "../../layouts/BaseLayout.astro";
+import { createClient } from "../../lib/supabase.ts";
+
+// Shopify Management Component
+import ShopifyManagementPanel from "@/components/ShopifyManagementPanel";
+
+// Sidebar Shell
+import AdminShell from "@/components/AdminShell";
+
+const supabase = createClient({ request: Astro.request, cookies: Astro.cookies });
+
+console.log("[shopify-admin] Page accessed");
+
+// Authenticated user verification
+const { data: { user }, error: userErr } = await supabase.auth.getUser();
+if (userErr || !user) {
+  console.log("[shopify-admin] No authenticated user, redirecting to login");
+  return Astro.redirect("/");
+}
+
+console.log("[shopify-admin] Authenticated user ID:", user.id);
+
+// Determine "me" - first try RPC, then fallback to direct query
+let me: { id: number; client_id: number } | null = null;
+
+try {
+  console.log("[shopify-admin] Attempting to get employee via RPC");
+  const rpc = await supabase.rpc("get_my_employee").single();
+  if (!rpc.error) {
+    me = rpc.data as any;
+    console.log("[shopify-admin] Employee found via RPC:", me);
+  }
+} catch (e) {
+  console.log("[shopify-admin] RPC failed, will try direct query");
+}
+
+if (!me) {
+  console.log("[shopify-admin] Fetching employee via direct query");
+  const res = await supabase
+    .from("employees")
+    .select("id, client_id")
+    .eq("user_id", user.id)
+    .single();
+  me = res.data as any;
+  if (res.error) {
+    console.error("[shopify-admin] Employees lookup error:", res.error.message);
+  } else {
+    console.log("[shopify-admin] Employee found via direct query:", me);
+  }
+}
+
+if (!me) {
+  console.error("[shopify-admin] No employee record found, redirecting");
+  return Astro.redirect("/");
+}
+
+// Check admin role - Role 1 = admin
+console.log("[shopify-admin] Checking admin role for employee:", me.id);
+const { data: myRoles, error: rolesErr } = await supabase
+  .from("roles-employees")
+  .select("role_id")
+  .eq("employee_id", me.id);
+
+if (rolesErr) {
+  console.error("[shopify-admin] Roles lookup error:", rolesErr.message);
+  return new Response("Forbidden", { status: 403 });
+}
+
+const isAdmin = !!myRoles?.some((r) => r.role_id === 1);
+console.log("[shopify-admin] Is admin:", isAdmin);
+
+if (!isAdmin) {
+  console.log("[shopify-admin] User is not admin, returning 403");
+  return new Response("Forbidden", { status: 403 });
+}
+
+// Load client data including Shopify fields
+console.log("[shopify-admin] Loading client data for client_id:", me.client_id);
+const { data: clientData, error: clientErr } = await supabase
+  .from("clients")
+  .select("id, name, address_street, address_city, address_zip, address_country, website, shopify_store_url, shopify_access_token, shopify_connected, shopify_scope")
+  .eq("id", me.client_id)
+  .single();
+
+if (clientErr) {
+  console.error("[shopify-admin] Client lookup error:", clientErr.message);
+}
+
+console.log("[shopify-admin] Client data loaded:", {
+  id: clientData?.id,
+  name: clientData?.name,
+  shopifyConnected: clientData?.shopify_connected,
+  hasShopifyToken: !!clientData?.shopify_access_token
+});
+
+// Sidebar user info
+console.log("[shopify-admin] Loading sidebar data");
+const { data: employees } = await supabase
+  .from("employees")
+  .select("id, name")
+  .eq("client_id", me.client_id)
+  .order("name");
+
+const meName = employees?.find((e) => e.id === me?.id)?.name ?? user?.email ?? "User";
+const sidebarUser = {
+  name: meName,
+  email: user?.email ?? null,
+  avatarUrl: null,
+};
+
+// Team entry for sidebar
+const firstTeam = clientData?.name 
+  ? { name: clientData.name, plan: "Enterprise" } 
+  : null;
+
+console.log("[shopify-admin] Page setup complete, rendering");
+---
+
+<Layout>
+  <AdminShell client:load
+    user={sidebarUser}
+    firstTeam={firstTeam ?? undefined}
+    crumbParentLabel="Administration"
+    crumbParentHref="/manage"
+    crumbCurrent="Shopify"
+    isAdmin={isAdmin}
+    currentPath="/manage/shopify"
+  >
+    <div class="space-y-6">
+      <div>
+        <h1 class="text-3xl font-bold tracking-tight">Shopify Integration</h1>
+        <p class="text-muted-foreground">
+          Connect and manage your Shopify store integration.
+        </p>
+      </div>
+
+      <div class="max-w-2xl">
+        <ShopifyManagementPanel 
+          client:only="react" 
+          clientId={me.client_id}
+          initialData={{
+            id: clientData?.id || me.client_id,
+            name: clientData?.name || "",
+            shopifyStoreUrl: clientData?.shopify_store_url || null,
+            shopifyConnected: clientData?.shopify_connected || false,
+            shopifyScope: clientData?.shopify_scope || null,
+          }}
+        />
+      </div>
+    </div>
+
+  </AdminShell>
+</Layout>

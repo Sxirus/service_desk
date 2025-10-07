@@ -1,6 +1,7 @@
 ---
 //props
 const { title, overflowHidden = false } = Astro.props;
+import { Toaster } from "sonner";
 import '../styles/global.css';
 ---
 <!-- Base layout of every page -->
@@ -19,5 +20,6 @@ import '../styles/global.css';
 	</head>
   	<body class:list={["h-screen", overflowHidden && "overflow-hidden"]}>
         <slot />
+		<Toaster client:load />
     </body>
 </html>
