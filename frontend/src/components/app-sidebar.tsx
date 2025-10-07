@@ -99,6 +99,10 @@ export function AppSidebar({
             title: "Company", 
             url: "/manage/client",
           },
+          {
+            title: "Settings",
+            url: "/manage/settings"
+          },
         ],
       });
     }

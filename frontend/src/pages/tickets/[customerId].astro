@@ -49,7 +49,7 @@ const signature = signatureArray[0].email_signature;
       <li class="flex justify-center m-3">{emailAdress}</li>
     </ul>
 
-    <div class="m-3 flex w-full size">   
+    <div class="m-3 flex w-full">   
       <TypeaheadSearch
       client:load
       items={macroArray}          
@@ -101,8 +101,6 @@ const signature = signatureArray[0].email_signature;
   </div>
 </div>
 
-
-
   <script>
     // Elemente holen
     /** @type {HTMLTextAreaElement|null} */
@@ -144,6 +142,8 @@ const signature = signatureArray[0].email_signature;
 
       var body = textarea?.value || '';
       body = body + '\n\n' + signature
+      
+      //sending mail if contend in
       if (body.trim() !== '') {
         await fetch(`http://localhost:3000/api/emails/sendMail?customerId=${customerId}`, {
           method: 'POST',
@@ -152,6 +152,7 @@ const signature = signatureArray[0].email_signature;
         });
       }
 
+      //making all customer mails read
       await fetch(`http://localhost:3000/api/emails/makeRead?customerId=${customerId}`, { method: 'POST' });
       window.location.assign('/');
     });
