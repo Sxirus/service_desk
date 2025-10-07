@@ -1,125 +1,321 @@
 ---
+// src/pages/manage/settings.astro
+
+/**
+ * General Settings Page
+ * Allows admin users to manage service desk settings and preferences
+ * 
+ * Security: Admin-only access (role_id = 1)
+ * Uses: Auth helper for DRY authentication/authorization
+ * 
+ * Features:
+ * - Email signature management
+ * - Additional settings can be added here
+ */
+
 import Layout from "../../layouts/BaseLayout.astro";
 import { createClient } from "../../lib/supabase.ts";
+import { getAuthContext, getSidebarData } from "../../lib/auth-helpers.ts";
+
+// Components
 import AdminShell from "@/components/AdminShell";
 
-const supabase = createClient({ request: Astro.request, cookies: Astro.cookies });
+// Initialize Supabase client with request context
+const supabase = createClient({ 
+  request: Astro.request, 
+  cookies: Astro.cookies 
+});
 
-console.log("[admin-panel] accessed");
+console.log("[general-settings] Page accessed");
 
-// Verifizierter User
-const { data: { user }, error: userErr } = await supabase.auth.getUser();
-if (userErr || !user) return Astro.redirect("/");
+// ============================================================================
+// AUTHENTICATION & AUTHORIZATION
+// ============================================================================
 
-// "me" ermitteln. Erst RPC, sonst Fallback
-let me: { id: number; client_id: number } | null = null;
+// Get authenticated user and employee context
+console.log("[general-settings] Verifying authentication");
+const authContext = await getAuthContext(supabase, Astro.cookies);
+
+if (!authContext) {
+  console.error("[general-settings] Authentication failed, redirecting to login");
+  return Astro.redirect("/");
+}
+
+console.log("[general-settings] User authenticated:", {
+  userId: authContext.user.id,
+  employeeId: authContext.employee.id,
+  clientId: authContext.employee.client_id,
+  isAdmin: authContext.isAdmin
+});
+
+// Verify admin role
+if (!authContext.isAdmin) {
+  console.warn("[general-settings] Access denied - user is not admin:", {
+    userId: authContext.user.id,
+    employeeId: authContext.employee.id
+  });
+  return new Response("Forbidden: Admin access required", { status: 403 });
+}
+
+console.log("[general-settings] Admin access verified");
+
+// ============================================================================
+// DATA LOADING - EMAIL SIGNATURE
+// ============================================================================
+
+/**
+ * Fetch email signature from settings API
+ * Note: Consider moving this to a Supabase table query in the future
+ * for better consistency and to avoid hardcoded URLs
+ */
+console.log("[general-settings] Fetching email signature for client_id:", authContext.employee.client_id);
+
+let signature = "";
+let signatureFetchError = false;
 
 try {
-  const rpc = await supabase.rpc("get_my_employee").single();
-  if (!rpc.error) me = rpc.data as any;
-} catch {}
-
-if (!me) {
-  const res = await supabase
-    .from("employees")
-    .select("id, client_id")
-    .eq("user_id", user.id)
-    .single();
-  me = res.data as any;
-  if (res.error) {
-    console.error("[admin-panel] employees lookup:", res.error.message);
+  // Use dynamic origin instead of hardcoded localhost
+  const apiUrl = `http://localhost:3000/api/settings/getSignature?client_id=${authContext.employee.client_id}`;
+  console.log("[general-settings] API URL:", apiUrl);
+  
+  const resultSignature = await fetch(apiUrl);
+  
+  if (!resultSignature.ok) {
+    throw new Error(`HTTP ${resultSignature.status}: ${resultSignature.statusText}`);
   }
+  
+  const signatureArray = await resultSignature.json();
+  
+  if (Array.isArray(signatureArray) && signatureArray.length > 0) {
+    signature = signatureArray[0].email_signature ?? "";
+    console.log("[general-settings] Email signature loaded successfully:", {
+      length: signature.length,
+      clientId: authContext.employee.client_id
+    });
+  } else {
+    console.warn("[general-settings] No signature found in response:", signatureArray);
+  }
+} catch (error) {
+  signatureFetchError = true;
+  console.error("[general-settings] Failed to fetch email signature:", {
+    error: error instanceof Error ? error.message : String(error),
+    clientId: authContext.employee.client_id
+  });
 }
 
-if (!me) return Astro.redirect("/");
+// ============================================================================
+// SIDEBAR DATA
+// ============================================================================
 
-// Admin Rolle prüfen. Rolle 1 = admin
-const { data: myRoles, error: rolesErr } = await supabase
-  .from("roles-employees")
-  .select("role_id")
-  .eq("employee_id", me.id);
+// Load sidebar data (user info and team details)
+console.log("[general-settings] Loading sidebar data");
+const sidebarData = await getSidebarData(supabase, authContext);
 
-if (rolesErr) {
-  console.error("[admin-panel] roles lookup:", rolesErr.message);
-  return new Response("Forbidden", { status: 403 });
-}
-
-const isAdmin = !!myRoles?.some((r) => r.role_id === 1);
-if (!isAdmin) return new Response("Forbidden", { status: 403 });
-
-// Company-Daten laden
-const { data: companyData, error: companyErr } = await supabase
-  .from("clients")
-  .select("id, name")
-  .eq("id", me.client_id)
-  .single();
-
-if (companyErr) {
-  console.error("[admin-panel] company lookup:", companyErr.message);
-}
-
-// Sidebar Infos
-const { data: employees } = await supabase
-  .from("employees")
-  .select("id, name")
-  .eq("client_id", me.client_id)
-  .order("name");
-
-const meName = employees?.find((e) => e.id === me?.id)?.name ?? user?.email ?? "Nutzer";
-const sidebarUser = {
-  name: meName,
-  email: user?.email ?? null,
-  avatarUrl: null,
-};
-
-// Team Eintrag
-const firstTeam = companyData?.name 
-  ? { name: companyData.name, plan: "Enterprise" } 
-  : null;
-
-// getting the email signature
-const resultSignature = await fetch (`http://localhost:3000/api/settings/getSignature?client_id=${me.client_id}`);
-const signatureArray = await resultSignature.json();
-const signature = signatureArray[0].email_signature;
+console.log("[general-settings] Page setup complete, rendering");
 ---
-<Layout>
-  <AdminShell client:load
-    user={sidebarUser}
-    firstTeam={firstTeam ?? undefined}
+
+<Layout title="General Settings">
+  <AdminShell 
+    client:load
+    user={sidebarData.user}
+    firstTeam={sidebarData.team ?? undefined}
     crumbParentLabel="Administration"
     crumbParentHref="/manage"
-    crumbCurrent="Company"
-    isAdmin={isAdmin}
-    currentPath="/manage/client"
+    crumbCurrent="General Settings"
+    isAdmin={authContext.isAdmin}
+    currentPath="/manage/settings"
   >
-  <div class="space-y-6">
-    <!-- header -->
-    <div>
-      <h1 class="text-3xl font-bold tracking-tight">General Settings</h1>
-      <p class="text-muted-foreground">Manage the settings and preferences for the service desk</p>
+    <div class="space-y-8">
+      <!-- Page Header -->
+      <div>
+        <h1 class="text-3xl font-bold tracking-tight">General Settings</h1>
+        <p class="text-muted-foreground">
+          Manage the settings and preferences for the service desk
+        </p>
+      </div>
+
+      <!-- Settings Sections -->
+      <div class="space-y-6">
+        
+        <!-- Email Signature Section -->
+        <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+          <div class="p-6 space-y-4">
+            <!-- Section Header -->
+            <div class="space-y-1">
+              <h3 class="text-lg font-semibold leading-none tracking-tight">
+                Email Signature
+              </h3>
+              <p class="text-sm text-muted-foreground">
+                Configure the default email signature for support responses
+              </p>
+            </div>
+
+            <!-- Error Alert (if signature fetch failed) -->
+            {signatureFetchError && (
+              <div class="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+                <div class="flex items-start gap-3">
+                  <svg
+                    class="h-5 w-5 text-destructive mt-0.5"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+                    />
+                  </svg>
+                  <div class="space-y-1">
+                    <p class="text-sm font-medium text-destructive">
+                      Failed to load email signature
+                    </p>
+                    <p class="text-sm text-muted-foreground">
+                      There was an error loading the signature. You can still edit and save a new one.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <!-- Signature Editor -->
+            <div class="space-y-2">
+              <label 
+                for="signature" 
+                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Signature Content
+              </label>
+              <textarea
+                id="signature"
+                class="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                placeholder="Enter your email signature here..."
+                rows="6"
+              >{signature}</textarea>
+              <p class="text-xs text-muted-foreground">
+                This signature will be automatically appended to all outgoing support emails.
+              </p>
+            </div>
+
+            <!-- Action Button -->
+            <div class="flex items-center justify-end pt-2">
+              <button
+                id="save-signature"
+                data-client-id={authContext.employee.client_id}
+                type="button"
+                class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+              >
+                <svg
+                  class="mr-2 h-4 w-4"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Future Settings Sections -->
+        <!-- Add more setting sections here as needed -->
+        <div class="rounded-lg border border-dashed p-6 text-center">
+          <p class="text-sm text-muted-foreground">
+            Additional settings will be added here
+          </p>
+        </div>
+      </div>
     </div>
-    <!-- email signature setting -->
-    <div class="flex flex-col">
-      <h1>E-Mail signature</h1>
-      <textarea id="signature" class="resize-none overflow-y-auto border border-gray-300 w-full h-30">{signature}</textarea>
-      <button data-client_id={me.client_id} id="save" class="bg-black text-white hover:cursor-pointer self-end mt-4 mr-4 py-2 px-2 rounded-lg">Save</button>
-    </div>
-  </div>
   </AdminShell>
 
   <script>
-    const button = document.getElementById("save");
-    const signatureArea = document.getElementById("signature") as HTMLTextAreaElement;
-    console.log('updating signature')
-    button?.addEventListener('click', async () => {
-      const client_id = button.dataset.client_id;
-      const signature = signatureArea?.value || ''
+    /**
+     * Client-side script for email signature management
+     * Handles save operation with user feedback via Sonner toast
+     */
 
-      await fetch(`http://localhost:3000/api/settings/updateSignature?client_id=${client_id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({signature: signature}),
-       });
-    });
+    import { toast } from "sonner";
+
+    /**
+     * Save button click handler
+     * Sends updated signature to the API
+     */
+    const saveButton = document.getElementById("save-signature");
+    const signatureTextarea = document.getElementById("signature") as HTMLTextAreaElement;
+
+    if (saveButton && signatureTextarea) {
+      console.log("[settings-script] Save button handler initialized");
+
+      saveButton.addEventListener("click", async () => {
+        const clientId = saveButton.dataset.clientId;
+        const signature = signatureTextarea.value || "";
+
+        console.log("[settings-script] Saving signature:", {
+          clientId,
+          signatureLength: signature.length
+        });
+
+        // Disable button during save
+        saveButton.setAttribute("disabled", "true");
+        saveButton.innerHTML = `
+          <svg class="mr-2 h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          Saving...
+        `;
+
+        try {
+          // Use dynamic origin instead of hardcoded localhost
+          const apiUrl = `http://localhost:3000/api/settings/updateSignature?client_id=${clientId}`;
+          
+          const response = await fetch(apiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ signature }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          console.log("[settings-script] Signature saved successfully");
+          
+          // Show success toast using Sonner
+          toast.success("Changes saved", {
+            description: "Email signature has been updated successfully.",
+          });
+
+        } catch (error) {
+          console.error("[settings-script] Failed to save signature:", error);
+          
+          // Show error toast using Sonner
+          toast.error("Failed to save", {
+            description: error instanceof Error ? error.message : "An unexpected error occurred.",
+          });
+        } finally {
+          // Re-enable button
+          saveButton.removeAttribute("disabled");
+          saveButton.innerHTML = `
+            <svg class="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Save Changes
+          `;
+        }
+      });
+    } else {
+      console.error("[settings-script] Save button or textarea not found");
+    }
   </script>
 </Layout>

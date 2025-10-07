@@ -91,6 +91,10 @@ export function AppSidebar({
         icon: Bot,
         isActive: currentPath.startsWith("/manage"),
         items: [
+          {
+            title: "General Settings",
+            url: "/manage/settings"
+          },
           { 
             title: "Users", 
             url: "/manage/users",
@@ -102,10 +106,6 @@ export function AppSidebar({
           { 
             title: "Shopify Integration", 
             url: "/manage/shopify",
-          },
-          {
-            title: "Settings",
-            url: "/manage/settings"
           },
         ],
       });
