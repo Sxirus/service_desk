@@ -12,7 +12,7 @@
 
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { formatDate } from "../../utils/formatDate.js";
-import { TypeaheadSearch } from "../../components/macroSearch.jsx";
+import { TypeaheadSearch } from "../../components/TypeheadSearch.jsx";
 import { createClient } from "../../lib/supabase.ts";
 import { getAuthContext } from "../../lib/auth-helpers.ts";
 
@@ -286,6 +286,7 @@ console.log("[TICKET_VIEW] Page data preparation complete");
         client:load
         items={macroArray}
         placeholder="Search macros..."
+        eventName='MacroChoosen'
       />
     </div>
 

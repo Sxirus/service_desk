@@ -16,6 +16,7 @@ export function TypeaheadSearch({
   placeholder = "Suchen…",
   maxSuggestions = 3,
   minChars = 1,
+  eventName,
   }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -90,7 +91,7 @@ export function TypeaheadSearch({
     const text = s.text && s.text.length > 0 ? s.text : s.title;
     console.log(text)
     window.dispatchEvent(
-      new CustomEvent("MacroChoosen", {
+      new CustomEvent(eventName, {
         detail: { text }
       })
     );
