@@ -154,25 +154,22 @@ console.log("[customer-ticket] Page setup complete, rendering");
     client:load
     user={sidebarData.user}
     firstTeam={sidebarData.team ?? undefined}
-    crumbParentLabel="Tickets"
-    crumbParentHref="/tickets"
+    crumbParentLabel="Dashboard"
+    crumbParentHref="/dashboard"
     crumbCurrent={customer?.name || "Ticket"}
     isAdmin={authContext.isAdmin}
     currentPath={`/tickets/${customerId}`}
   >
-    <div class="flex gap-6 h-[calc(100vh-5rem)] -mx-6 -mb-6">
+    <div class="flex gap-6 h-[calc(100vh-5rem)] -mx-6 -mb-6 overflow-hidden">
       <!-- Main Content Area - Email Thread -->
-      <div class="flex-1 flex flex-col min-w-0">
+      <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
         <!-- Page Header -->
-        <div class="px-6 pt-0 pb-4">
-          <h1 class="text-3xl font-bold tracking-tight">{lastMail.subject}</h1>
-          <p class="text-muted-foreground mt-1">
-            Conversation with {customer?.name}
-          </p>
+        <div class="px-6 pt-0 py-2">
+          <h1 class="text-2xl font-bold tracking-tight">Conversation with {customer?.name}</h1>
         </div>
 
         <!-- Email Thread -->
-        <div class="flex-1 px-6 overflow-y-auto">
+        <div class="flex-1 px-6 overflow-y-auto overflow-x-hidden">
           <div id="mailList" class="space-y-4 pb-4">
             {emailArray.map((mail: any) => {
               const isOutgoing = mail.type === 'sent';
@@ -222,7 +219,7 @@ console.log("[customer-ticket] Page setup complete, rendering");
                     </div>
 
                     <!-- Message Body -->
-                    <div class="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                    <div class="text-sm text-foreground whitespace-pre-wrap leading-relaxed" style="word-break: break-word; overflow-wrap: anywhere;">
                       {mail.text}
                     </div>
                   </div>
@@ -234,17 +231,17 @@ console.log("[customer-ticket] Page setup complete, rendering");
 
         <!-- Reply Area -->
         <div class="border-t bg-card px-6 py-4">
-          <div class="space-y-3">
-            <label for="answer" class="text-sm font-medium leading-none">
+          <div class="grid">
+            <label for="answer" class="text-sm mb-2 font-medium leading-none">
               Your Reply
             </label>
-            <textarea
-              id="answer"
-              class="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-              placeholder="Type your reply..."
-              rows="4"
-            ></textarea>
-            <div class="flex items-center justify-end">
+            <div class="flex gap-3 items-end">
+              <textarea
+                id="answer"
+                class="flex-1 min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                placeholder="Type your reply..."
+                rows="3"
+              ></textarea>
               <button
                 data-email={emailAddress}
                 data-subject={newSubject}
@@ -252,7 +249,7 @@ console.log("[customer-ticket] Page setup complete, rendering");
                 data-signature={signature}
                 id="sendButton"
                 type="button"
-                class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+                class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
               >
                 <svg
                   class="mr-2 h-4 w-4"
@@ -292,7 +289,7 @@ console.log("[customer-ticket] Page setup complete, rendering");
                 </div>
                 <div>
                   <p class="text-xs text-muted-foreground">Email</p>
-                  <p class="text-sm font-medium text-blue-600">{emailAddress}</p>
+                  <p class="text-sm font-medium text-blue-600" style="word-break: break-word; overflow-wrap: anywhere;">{emailAddress}</p>
                 </div>
               </div>
             </div>
