@@ -37,10 +37,9 @@ if (!me) {
 
 if (!me) return Astro.redirect("/");
 
-// Fetch the last 10 emails from the database for users client
+// Fetch the last 10 emails from the database for the individual employee
 const client_id = me.client_id;
-const result = await fetch(`http://localhost:3000/api/emails/getMails?client_id=${client_id}`);
-const last10mails = await result.json();
+
 
 // Admin Rolle prüfen. Rolle 1 = admin
 const { data: myRoles, error: rolesErr } = await supabase

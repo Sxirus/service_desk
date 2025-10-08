@@ -15,7 +15,7 @@ router.get('/getMails', async (req, res) => {
       .eq("client_id", client_id)
       .eq('read', false)
       .order('send_at', { ascending: true })
-      .limit(100); ;
+      .limit(100);
 
     if (error) {
       console.log('Supabase error:', error.message);
