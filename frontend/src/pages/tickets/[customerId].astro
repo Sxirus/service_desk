@@ -7,7 +7,7 @@
  * - Customer information in the right sidebar
  * - Shopify order history (if store is connected)
  * - Macro search for quick responses
- * - Reply functionality
+ * - Reply functionality (RESIZABLE & COLLAPSIBLE)
  * 
  * Security: Authenticated users only
  * Uses: Auth helper for DRY authentication/authorization
@@ -164,7 +164,7 @@ console.log("[customer-ticket] Page setup complete, rendering");
       <!-- Main Content Area - Email Thread -->
       <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
         <!-- Page Header -->
-        <div class="px-6 pt-0 py-2">
+        <div class="px-6 mt-2 pt-0 py-2">
           <h1 class="text-2xl font-bold tracking-tight">Conversation with {customer?.name}</h1>
         </div>
 
@@ -229,18 +229,53 @@ console.log("[customer-ticket] Page setup complete, rendering");
           </div>
         </div>
 
-        <!-- Reply Area -->
-        <div class="border-t bg-card px-6 py-4">
-          <div class="grid">
-            <label for="answer" class="text-sm mb-2 font-medium leading-none">
+        <!-- Reply Area (Resizable & Collapsible) -->
+        <div id="replyContainer" class="border-t bg-card flex flex-col" style="min-height: 52px; height: 180px;">
+          <!-- Resize Handle -->
+          <div
+            id="resizeHandle"
+            class="h-1.5 bg-border hover:bg-primary cursor-ns-resize transition-colors relative group flex-shrink-0"
+            title="Drag to resize"
+          >
+            <div class="absolute inset-x-0 -top-2 -bottom-2"></div>
+          </div>
+          
+          <!-- Header with Collapse Button -->
+          <div class="flex items-center justify-between px-6 pt-3 pb-2 flex-shrink-0">
+            <label for="answer" class="text-sm font-medium leading-none">
               Your Reply
             </label>
-            <div class="flex gap-3 items-end">
+            <button
+              id="collapseButton"
+              type="button"
+              class="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors"
+              title="Collapse reply area"
+            >
+              <svg
+                id="collapseIcon"
+                class="h-4 w-4 transition-transform duration-200"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="1.5"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M19.5 8.25l-7.5 7.5-7.5-7.5"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <!-- Reply Content -->
+          <div id="replyContent" class="px-6 pb-4 flex-1 flex flex-col min-h-0">
+            <div class="flex gap-3 items-end h-full">
               <textarea
                 id="answer"
-                class="flex-1 min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                class="flex-1 h-full min-h-0 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
                 placeholder="Type your reply..."
-                rows="3"
               ></textarea>
               <button
                 data-email={emailAddress}
@@ -249,7 +284,7 @@ console.log("[customer-ticket] Page setup complete, rendering");
                 data-signature={signature}
                 id="sendButton"
                 type="button"
-                class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+                class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 flex-shrink-0"
               >
                 <svg
                   class="mr-2 h-4 w-4"
@@ -454,14 +489,136 @@ console.log("[customer-ticket] Page setup complete, rendering");
   <script>
     console.log("[customer-ticket-client] Client-side script initialized");
 
-    // Get DOM elements
+    // ============================================================================
+    // GET DOM ELEMENTS
+    // ============================================================================
+    
     const textarea = document.getElementById('answer') as HTMLTextAreaElement;
-    const button = document.getElementById('sendButton');
+    const button = document.getElementById('sendButton') as HTMLButtonElement;
+    const replyContainer = document.getElementById('replyContainer') as HTMLElement;
+    const resizeHandle = document.getElementById('resizeHandle') as HTMLElement;
+    const collapseButton = document.getElementById('collapseButton') as HTMLElement;
+    const collapseIcon = document.getElementById('collapseIcon') as HTMLElement;
+    const replyContent = document.getElementById('replyContent') as HTMLElement;
 
     console.log("[customer-ticket-client] DOM elements found:", {
       textarea: !!textarea,
-      button: !!button
+      button: !!button,
+      replyContainer: !!replyContainer,
+      resizeHandle: !!resizeHandle,
+      collapseButton: !!collapseButton
     });
+
+    // ============================================================================
+    // RESIZE FUNCTIONALITY
+    // ============================================================================
+
+    let isResizing = false;
+    let startY = 0;
+    let startHeight = 0;
+    const MIN_HEIGHT = 100;
+    const MAX_HEIGHT = 600;
+
+    // Load saved height from localStorage
+    const savedHeight = localStorage.getItem('replyAreaHeight');
+    if (savedHeight && replyContainer) {
+      const height = parseInt(savedHeight);
+      if (height >= MIN_HEIGHT && height <= MAX_HEIGHT) {
+        replyContainer.style.height = `${height}px`;
+        console.log("[customer-ticket-client] Loaded saved height:", height);
+      }
+    }
+
+    // Start resize
+    resizeHandle?.addEventListener('mousedown', (e: MouseEvent) => {
+      e.preventDefault();
+      isResizing = true;
+      startY = e.clientY;
+      startHeight = replyContainer?.offsetHeight || 180;
+      document.body.style.cursor = 'ns-resize';
+      document.body.style.userSelect = 'none';
+      
+      console.log("[customer-ticket-client] Resize started at height:", startHeight);
+    });
+
+    // Handle resize
+    document.addEventListener('mousemove', (e: MouseEvent) => {
+      if (!isResizing || !replyContainer) return;
+
+      const deltaY = startY - e.clientY;
+      const newHeight = Math.min(Math.max(startHeight + deltaY, MIN_HEIGHT), MAX_HEIGHT);
+      
+      replyContainer.style.height = `${newHeight}px`;
+    });
+
+    // End resize
+    document.addEventListener('mouseup', () => {
+      if (isResizing) {
+        isResizing = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        
+        // Save height to localStorage
+        if (replyContainer) {
+          const currentHeight = replyContainer.offsetHeight;
+          localStorage.setItem('replyAreaHeight', currentHeight.toString());
+          console.log("[customer-ticket-client] Resize ended, height saved:", currentHeight);
+        }
+      }
+    });
+
+    // ============================================================================
+    // COLLAPSE/EXPAND FUNCTIONALITY
+    // ============================================================================
+
+    let isCollapsed = false;
+    const COLLAPSED_HEIGHT = '52px';
+    
+    // Load saved collapsed state
+    const savedCollapsedState = localStorage.getItem('replyAreaCollapsed');
+    
+    if (savedCollapsedState === 'true') {
+      isCollapsed = true;
+      if (replyContainer && replyContent && collapseIcon) {
+        replyContainer.style.height = COLLAPSED_HEIGHT;
+        replyContent.style.display = 'none';
+        collapseIcon.style.transform = 'rotate(180deg)';
+        console.log("[customer-ticket-client] Loaded collapsed state");
+      }
+    }
+
+    // Toggle collapse/expand
+    collapseButton?.addEventListener('click', () => {
+      isCollapsed = !isCollapsed;
+      
+      console.log("[customer-ticket-client] Toggle collapse:", isCollapsed);
+
+      if (isCollapsed) {
+        // Collapse
+        if (replyContainer && replyContent && collapseIcon) {
+          replyContainer.style.height = COLLAPSED_HEIGHT;
+          replyContent.style.display = 'none';
+          collapseIcon.style.transform = 'rotate(180deg)';
+          collapseButton.setAttribute('title', 'Expand reply area');
+        }
+      } else {
+        // Expand
+        const savedHeight = localStorage.getItem('replyAreaHeight') || '180';
+        if (replyContainer && replyContent && collapseIcon) {
+          replyContainer.style.height = `${savedHeight}px`;
+          replyContent.style.display = 'flex';
+          collapseIcon.style.transform = 'rotate(0deg)';
+          collapseButton.setAttribute('title', 'Collapse reply area');
+        }
+      }
+
+      // Save collapsed state
+      localStorage.setItem('replyAreaCollapsed', isCollapsed.toString());
+    });
+
+    // ============================================================================
+    // MACRO FUNCTIONALITY
+    // ============================================================================
 
     /**
      * Listen for macro selection events from React component
@@ -493,6 +650,10 @@ console.log("[customer-ticket] Page setup complete, rendering");
       textarea.dispatchEvent(new Event('change', { bubbles: true }));
     });
 
+    // ============================================================================
+    // AUTO-SCROLL MAIL LIST
+    // ============================================================================
+
     /**
      * Auto-scroll mail list to bottom on page load
      * Shows the most recent messages first
@@ -505,6 +666,10 @@ console.log("[customer-ticket] Page setup complete, rendering");
         console.log("[customer-ticket-client] Mail list scrolled to:", list.scrollHeight);
       }
     })();
+
+    // ============================================================================
+    // SEND EMAIL FUNCTIONALITY
+    // ============================================================================
 
     /**
      * Send button click handler
