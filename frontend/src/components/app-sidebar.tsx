@@ -79,6 +79,7 @@ export function AppSidebar({
         isActive: currentPath === "/" || currentPath === "/dashboard",
         items: [
           { title: "Dashboard", url: "/dashboard" },
+          {title: 'All Mails', url: '/mail_list'},
         ],
       },
     ];
