@@ -26,6 +26,7 @@ router.get('/getCustomerById', async (req, res) => {
   }
 });
 
+//getting the ids of all the customers assigned to an employee
 router.get('/getAssignedCustomers', async (req, res) => {
   //getting params
   const employee_id = req.query.employee_id;
