@@ -89,7 +89,6 @@ export function TypeaheadSearch({
     if (!s) return;
 
     const text = s.text && s.text.length > 0 ? s.text : s.title;
-    console.log(text)
     window.dispatchEvent(
       new CustomEvent(eventName, {
         detail: { text }
