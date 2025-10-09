@@ -79,7 +79,7 @@ let lastMail = emailArray[emailArray.length - 1];
 
 // Fallback: wenn die letzte Mail nicht vom Kunden ist, such die letzte 'incoming'-Mail
 if (lastMail?.type !== "incoming") {
-  const incomingMails = emailArray.filter(m => m.type === "incoming");
+  const incomingMails = emailArray.filter((m : any) => m.type === "incoming");
   if (incomingMails.length > 0) {
     lastMail = incomingMails[incomingMails.length - 1];
   } else {
@@ -485,6 +485,7 @@ console.log("[customer-ticket] Page setup complete, rendering");
                 client:load
                 items={macroArray}
                 placeholder="Search macros..."
+                eventName='MacroChoosen'
               />
             </div>
           </div>
