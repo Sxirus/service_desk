@@ -89,7 +89,7 @@ if (lastMail?.type !== "incoming") {
 
 // Sicherstellen, dass lastMail existiert
 if (!lastMail) {
-  throw new Error("[customer-ticket] Keine Mails im Verlauf gefunden");
+  throw new Error("[customer-ticket] No emails found in the thread");
 }
 
 const emailAddress = lastMail.email_adress;
