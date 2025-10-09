@@ -684,7 +684,7 @@ console.log("[customer-ticket] Page setup complete, rendering");
       const signature = button.dataset.signature;
 
       let body = textarea?.value || '';
-      body = body + '\n\n' + signature;
+      body = body.trim() ? body + '\n\n' + signature : signature;
 
       console.log("[customer-ticket-client] Email data:", {
         to: emailAddress,
