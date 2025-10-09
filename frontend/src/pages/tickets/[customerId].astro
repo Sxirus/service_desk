@@ -735,8 +735,7 @@ console.log("[customer-ticket] Page setup complete, rendering");
         });
 
         console.log("[customer-ticket-client] Redirecting to dashboard");
-        window.history.pushState({}, '', '/dashboard');
-        window.dispatchEvent(new PopStateEvent('popstate'));
+        window.location.href = '/dashboard';
       } catch (error) {
         console.error("[customer-ticket-client] Error sending email:", error);
         
