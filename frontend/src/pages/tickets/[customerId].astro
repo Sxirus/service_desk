@@ -76,14 +76,23 @@ const resultMails = await fetch(`http://localhost:3000/api/emails/getEmailsFromC
 const emailArray = await resultMails.json();
 
 let lastMail = emailArray[emailArray.length - 1];
-if (lastMail['type'] !== 'incoming') {
-  for (let mail of emailArray) {
-    if (mail.type === 'incoming') {
-      lastMail = mail;
-    }
-  }
 
-const emailAddress = lastMail.email_address;
+// Fallback: wenn die letzte Mail nicht vom Kunden ist, such die letzte 'incoming'-Mail
+if (lastMail?.type !== "incoming") {
+  const incomingMails = emailArray.filter(m => m.type === "incoming");
+  if (incomingMails.length > 0) {
+    lastMail = incomingMails[incomingMails.length - 1];
+  } else {
+    console.warn("[customer-ticket] Keine eingehenden Mails gefunden, nutze letzte gesendete Mail");
+  }
+}
+
+// Sicherstellen, dass lastMail existiert
+if (!lastMail) {
+  throw new Error("[customer-ticket] Keine Mails im Verlauf gefunden");
+}
+
+const emailAddress = lastMail.email_adress;
 const newSubject = `RE: ${lastMail.subject}`;
 
 console.log("[customer-ticket] Email thread loaded:", emailArray.length, "messages");
@@ -682,7 +691,7 @@ console.log("[customer-ticket] Page setup complete, rendering");
       const signature = button.dataset.signature;
 
       let body = textarea?.value || '';
-      body = body.trim() ? body + '\n\n' + signature : signature;
+      body = body.trim() ? body + '\n\n' + (signature || '') : (signature || '');
 
       console.log("[customer-ticket-client] Email data:", {
         to: emailAddress,
