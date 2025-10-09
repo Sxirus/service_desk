@@ -176,8 +176,8 @@ console.log("[customer-ticket] Page setup complete, rendering");
         </div>
 
         <!-- Email Thread -->
-        <div class="flex-1 px-6 overflow-y-auto overflow-x-hidden">
-          <div id="mailList" class="space-y-4 pb-4">
+        <ul id="mailList" class="flex-1 px-6 overflow-y-auto overflow-x-hidden">
+          <li class="space-y-4 pb-4">
             {emailArray.map((mail: any) => {
               const isOutgoing = mail.type === 'sent';
               
@@ -233,8 +233,8 @@ console.log("[customer-ticket] Page setup complete, rendering");
                 </div>
               );
             })}
-          </div>
-        </div>
+          </li>
+        </ul>
 
         <!-- Reply Area (Resizable & Collapsible) -->
         <div id="replyContainer" class="border-t bg-card flex flex-col" style="min-height: 52px; height: 180px;">
@@ -666,14 +666,12 @@ console.log("[customer-ticket] Page setup complete, rendering");
      * Auto-scroll mail list to bottom on page load
      * Shows the most recent messages first
      */
-    (function () {
-      console.log("[customer-ticket-client] Auto-scrolling mail list to bottom");
-      const list = document.getElementById('mailList');
-      if (list) {
-        list.scrollTop = list.scrollHeight;
-        console.log("[customer-ticket-client] Mail list scrolled to:", list.scrollHeight);
-      }
-    })();
+      document.addEventListener('DOMContentLoaded', () => {
+        const list = document.getElementById('mailList');
+        if (list) {
+          list.scrollTop = list.scrollHeight; // ganz nach unten springen
+        }
+      });
 
     // ============================================================================
     // SEND EMAIL FUNCTIONALITY
