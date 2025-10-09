@@ -11,7 +11,9 @@
 
 import Layout from "../../layouts/BaseLayout.astro";
 import { createClient } from "../../lib/supabase.ts";
-import { getAuthContext, getSidebarData } from "../../lib/auth-helpers.ts";
+import { getCompletePageContext } from "../../lib/auth-helpers.ts";
+import { ROLE_IDS } from "../../types/database.ts";
+import type { Client } from "../../types/database.ts";
 
 // Components
 import ShopifyManagementPanel from "@/components/ShopifyManagementPanel";
@@ -29,14 +31,15 @@ console.log("[shopify-integration] Page accessed");
 // AUTHENTICATION & AUTHORIZATION
 // ============================================================================
 
-// Get authenticated user and employee context
 console.log("[shopify-integration] Verifying authentication");
-const authContext = await getAuthContext(supabase, Astro.cookies);
+const pageContext = await getCompletePageContext(supabase, Astro.cookies);
 
-if (!authContext) {
+if (!pageContext) {
   console.error("[shopify-integration] Authentication failed, redirecting to login");
   return Astro.redirect("/");
 }
+
+const { authContext, sidebarData } = pageContext;
 
 console.log("[shopify-integration] User authenticated:", {
   userId: authContext.user.id,
@@ -45,7 +48,7 @@ console.log("[shopify-integration] User authenticated:", {
   isAdmin: authContext.isAdmin
 });
 
-// Verify admin role
+// Verify admin role using ROLE_IDS constant
 if (!authContext.isAdmin) {
   console.warn("[shopify-integration] Access denied - user is not admin:", {
     userId: authContext.user.id,
@@ -100,10 +103,6 @@ if (clientErr) {
   });
 }
 
-// Load sidebar data (user info and team details)
-console.log("[shopify-integration] Loading sidebar data");
-const sidebarData = await getSidebarData(supabase, authContext);
-
 console.log("[shopify-integration] Page setup complete, rendering");
 
 // ============================================================================
@@ -112,11 +111,11 @@ console.log("[shopify-integration] Page setup complete, rendering");
 
 // Prepare initial data for Shopify management panel
 const initialPanelData = {
-  id: clientData?.id ?? authContext.employee.client_id,
-  name: clientData?.name ?? "",
-  shopifyStoreUrl: clientData?.shopify_store_url ?? null,
-  shopifyConnected: clientData?.shopify_connected ?? false,
-  shopifyScope: clientData?.shopify_scope ?? null,
+  id: (clientData as Client)?.id ?? authContext.employee.client_id,
+  name: (clientData as Client)?.name ?? "",
+  shopifyStoreUrl: (clientData as Client)?.shopify_store_url ?? null,
+  shopifyConnected: (clientData as Client)?.shopify_connected ?? false,
+  shopifyScope: (clientData as Client)?.shopify_scope ?? null,
 };
 ---
 
@@ -126,7 +125,7 @@ const initialPanelData = {
     user={sidebarData.user}
     firstTeam={sidebarData.team ?? undefined}
     crumbParentLabel="Administration"
-    crumbParentHref="/manage"
+    crumbParentHref="/manage/settings"
     crumbCurrent="Shopify"
     isAdmin={authContext.isAdmin}
     currentPath="/manage/shopify"
@@ -141,7 +140,7 @@ const initialPanelData = {
       </div>
 
       <!-- Shopify Management Panel -->
-      <div class="max-w-2xl">
+      <div class="max-w">
         <ShopifyManagementPanel 
           client:only="react" 
           clientId={authContext.employee.client_id}

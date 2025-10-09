@@ -17,7 +17,9 @@
 
 import Layout from "../../layouts/BaseLayout.astro";
 import { createClient } from "../../lib/supabase.ts";
-import { getAuthContext, getSidebarData } from "../../lib/auth-helpers.ts";
+import { getCompletePageContext } from "../../lib/auth-helpers.ts";
+import { ROLE_IDS } from "../../types/database.ts";
+import type { Role, Employee, RoleEmployee, EmployeeEmailRow } from "../../types/database.ts";
 
 // Components
 import type { User } from "@/components/datatable/columns";
@@ -37,14 +39,15 @@ console.log("[user-management] Page accessed");
 // AUTHENTICATION & AUTHORIZATION
 // ============================================================================
 
-// Get authenticated user and employee context
 console.log("[user-management] Verifying authentication");
-const authContext = await getAuthContext(supabase, Astro.cookies);
+const pageContext = await getCompletePageContext(supabase, Astro.cookies);
 
-if (!authContext) {
+if (!pageContext) {
   console.error("[user-management] Authentication failed, redirecting to login");
   return Astro.redirect("/");
 }
+
+const { authContext, sidebarData } = pageContext;
 
 console.log("[user-management] User authenticated:", {
   userId: authContext.user.id,
@@ -53,7 +56,7 @@ console.log("[user-management] User authenticated:", {
   isAdmin: authContext.isAdmin
 });
 
-// Verify admin role
+// Verify admin role using ROLE_IDS constant
 if (!authContext.isAdmin) {
   console.warn("[user-management] Access denied - user is not admin:", {
     userId: authContext.user.id,
@@ -65,39 +68,29 @@ if (!authContext.isAdmin) {
 console.log("[user-management] Admin access verified");
 
 // ============================================================================
-// DATA LOADING - ROLES
+// DATA LOADING - OPTIMIZED WITH PARALLEL QUERIES
 // ============================================================================
 
-// Load all available roles
-console.log("[user-management] Loading roles list");
-const { data: roleRows, error: rolesListErr } = await supabase
-  .from("roles")
-  .select("id, name")
-  .order("id");
+console.log("[user-management] Loading data with parallel queries");
 
+// Execute all queries in parallel for better performance
+const [
+  { data: roleRows, error: rolesListErr },
+  { data: employees, error: empsErr },
+  { data: roleAssignments, error: assignmentsErr }
+] = await Promise.all([
+  supabase.from("roles").select("id, name").order("id"),
+  supabase.from("employees").select("id, name").eq("client_id", authContext.employee.client_id).order("name"),
+  supabase.from("roles-employees").select("employee_id, role_id")
+]);
+
+// Log any errors
 if (rolesListErr) {
   console.error("[user-management] Failed to load roles:", {
     error: rolesListErr.message,
     code: rolesListErr.code
   });
-} else {
-  console.log("[user-management] Roles loaded:", {
-    count: roleRows?.length ?? 0,
-    roles: roleRows?.map(r => r.name).join(", ")
-  });
 }
-
-// ============================================================================
-// DATA LOADING - EMPLOYEES
-// ============================================================================
-
-// Load all employees for the client
-console.log("[user-management] Loading employees for client_id:", authContext.employee.client_id);
-const { data: employees, error: empsErr } = await supabase
-  .from("employees")
-  .select("id, name")
-  .eq("client_id", authContext.employee.client_id)
-  .order("name");
 
 if (empsErr) {
   console.error("[user-management] Failed to load employees:", {
@@ -105,33 +98,21 @@ if (empsErr) {
     code: empsErr.code,
     clientId: authContext.employee.client_id
   });
-} else {
-  console.log("[user-management] Employees loaded:", {
-    count: employees?.length ?? 0,
-    clientId: authContext.employee.client_id
-  });
 }
-
-// ============================================================================
-// DATA LOADING - ROLE ASSIGNMENTS
-// ============================================================================
-
-// Load role-employee relationships
-console.log("[user-management] Loading role-employee assignments");
-const { data: roleAssignments, error: assignmentsErr } = await supabase
-  .from("roles-employees")
-  .select("employee_id, role_id");
 
 if (assignmentsErr) {
   console.error("[user-management] Failed to load role assignments:", {
     error: assignmentsErr.message,
     code: assignmentsErr.code
   });
-} else {
-  console.log("[user-management] Role assignments loaded:", {
-    count: roleAssignments?.length ?? 0
-  });
 }
+
+// Log success
+console.log("[user-management] Data loaded:", {
+  roles: roleRows?.length ?? 0,
+  employees: employees?.length ?? 0,
+  assignments: roleAssignments?.length ?? 0
+});
 
 // ============================================================================
 // DATA LOADING - EMPLOYEE EMAILS (SECURITY DEFINER RPC)
@@ -159,11 +140,11 @@ if (empIds.length > 0) {
       employeeCount: empIds.length
     });
   } else {
-    // Build email lookup map for efficient access
+    // Build email lookup map for efficient access with proper typing
     emailMap = new Map<number, string>(
-      (emailRows ?? []).map((row: any) => [
-        row.employee_id as number, 
-        row.email as string
+      (emailRows as EmployeeEmailRow[] ?? []).map((row) => [
+        row.employee_id, 
+        row.email
       ])
     );
     console.log("[user-management] Employee emails retrieved:", {
@@ -177,14 +158,14 @@ if (empIds.length > 0) {
 // ============================================================================
 
 /**
- * Helper function to get role names for an employee
+ * Helper function to get role IDs for an employee
  * @param empId - Employee ID
  * @returns Array of role IDs assigned to the employee
  */
 function getRolesForEmployee(empId: number): number[] {
   const assignmentMap = new Map<number, number[]>();
   
-  roleAssignments?.forEach((assignment) => {
+  (roleAssignments as RoleEmployee[] ?? []).forEach((assignment) => {
     if (!assignmentMap.has(assignment.employee_id)) {
       assignmentMap.set(assignment.employee_id, []);
     }
@@ -196,13 +177,13 @@ function getRolesForEmployee(empId: number): number[] {
 
 // Transform employee data for the DataTable component
 console.log("[user-management] Transforming employee data for table");
-const tableData: User[] = (employees ?? []).map((employee) => {
+const tableData: User[] = ((employees as Employee[]) ?? []).map((employee) => {
   // Get role IDs for this employee
   const employeeRoleIds = getRolesForEmployee(employee.id);
   
-  // Map role IDs to role names
+  // Map role IDs to role names with proper typing
   const roleNames = employeeRoleIds
-    .map((roleId) => roleRows?.find((role) => role.id === roleId)?.name)
+    .map((roleId) => (roleRows as Role[] ?? []).find((role) => role.id === roleId)?.name)
     .filter(Boolean) // Remove undefined values
     .join(", ");
   
@@ -218,14 +199,6 @@ console.log("[user-management] Table data prepared:", {
   rowCount: tableData.length
 });
 
-// ============================================================================
-// SIDEBAR DATA
-// ============================================================================
-
-// Load sidebar data (user info and team details)
-console.log("[user-management] Loading sidebar data");
-const sidebarData = await getSidebarData(supabase, authContext);
-
 console.log("[user-management] Page setup complete, rendering");
 ---
 
@@ -235,29 +208,38 @@ console.log("[user-management] Page setup complete, rendering");
     user={sidebarData.user}
     firstTeam={sidebarData.team ?? undefined}
     crumbParentLabel="Administration"
-    crumbParentHref="/manage"
+    crumbParentHref="/manage/settings"
     crumbCurrent="Users"
     isAdmin={authContext.isAdmin}
     currentPath="/manage/users"
   >
-    <!-- Page Header with Action Button -->
-    <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-bold">User Management</h1>
-      
-      <!-- Create User Dialog Button -->
-      <CreateUserDialog 
-        client:only="react" 
-        roles={roleRows ?? []} 
-      />
-    </div>
+    <div class="space-y-6">
+      <!-- Page Header -->
+      <div class="flex items-start justify-between">
+        <div>
+          <h1 class="text-3xl font-bold tracking-tight">User Management</h1>
+          <p class="text-muted-foreground">
+            Manage employee accounts and role assignments for your organization.
+          </p>
+        </div>
+        
+        <!-- Create User Dialog Button -->
+        <CreateUserDialog 
+          client:only="react" 
+          roles={roleRows ?? []} 
+        />
+      </div>
 
-    <!-- Users DataTable -->
-    <div class="container mx-auto pb-6 min-h-[300px]">
-      <ClientUsersTable 
-        client:only="react" 
-        data={tableData} 
-        roles={roleRows ?? []} 
-      />
+      <!-- Users Table Card -->
+      <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+        <div class="p-6">
+          <ClientUsersTable 
+            client:only="react" 
+            data={tableData} 
+            roles={roleRows ?? []} 
+          />
+        </div>
+      </div>
     </div>
   </AdminShell>
 </Layout>

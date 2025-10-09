@@ -1,6 +1,11 @@
 // src/lib/auth-helpers.ts
+
 import type { AstroCookies } from "astro";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { ROLE_IDS } from "../types/database";
+import type { 
+  GetMyEmployeeResponse,
+} from "../types/database";
 
 export interface AuthContext {
   user: {
@@ -14,6 +19,22 @@ export interface AuthContext {
   isAdmin: boolean;
 }
 
+export interface SidebarData {
+  user: {
+    name: string;
+    email: string | null;
+    avatarUrl: string | null;
+  };
+  team: {
+    name: string;
+    plan: string;
+  } | null;
+}
+
+/**
+ * Get authenticated user and employee context
+ * Verifies authentication and retrieves employee information
+ */
 export async function getAuthContext(
   supabase: SupabaseClient,
   cookies: AstroCookies
@@ -26,12 +47,15 @@ export async function getAuthContext(
   }
 
   // Get employee - try RPC first, then direct query
-  let employee: { id: number; client_id: number } | null = null;
+  let employee: GetMyEmployeeResponse | null = null;
   
   try {
-    const { data, error } = await supabase.rpc("get_my_employee").single();
+    const { data, error } = await supabase
+      .rpc("get_my_employee")
+      .single();
+    
     if (!error && data) {
-      employee = data as any;
+      employee = data as GetMyEmployeeResponse;
     }
   } catch (err) {
     console.log("[auth] RPC failed, trying direct query");
@@ -48,7 +72,7 @@ export async function getAuthContext(
       console.error("[auth] Employee lookup failed:", error.message);
       return null;
     }
-    employee = data;
+    employee = data as GetMyEmployeeResponse;
   }
 
   if (!employee) {
@@ -56,7 +80,7 @@ export async function getAuthContext(
     return null;
   }
 
-  // Check admin role
+  // Check admin role - using ROLE_IDS constant
   const { data: roles, error: rolesErr } = await supabase
     .from("roles-employees")
     .select("role_id")
@@ -67,7 +91,7 @@ export async function getAuthContext(
     return null;
   }
 
-  const isAdmin = roles?.some((r) => r.role_id === 1) ?? false;
+  const isAdmin = roles?.some((r) => r.role_id === ROLE_IDS.ADMIN) ?? false;
 
   return {
     user: {
@@ -79,41 +103,38 @@ export async function getAuthContext(
   };
 }
 
-export interface SidebarData {
-  user: {
-    name: string;
-    email: string | null;
-    avatarUrl: string | null;
-  };
-  team: {
-    name: string;
-    plan: string;
-  } | null;
-}
-
+/**
+ * Get sidebar data
+ * Retrieves user info and team details for the sidebar
+ */
 export async function getSidebarData(
   supabase: SupabaseClient,
   authContext: AuthContext
 ): Promise<SidebarData> {
-  // Get client data
-  const { data: clientData } = await supabase
-    .from("clients")
-    .select("id, name")
-    .eq("id", authContext.employee.client_id)
-    .single();
+  console.log("[sidebar] Loading sidebar data");
 
-  // Get employee name
-  const { data: employees } = await supabase
-    .from("employees")
-    .select("id, name")
-    .eq("client_id", authContext.employee.client_id)
-    .order("name");
+  // Parallel queries for better performance
+  const [
+    { data: clientData },
+    { data: employees }
+  ] = await Promise.all([
+    supabase
+      .from("clients")
+      .select("id, name")
+      .eq("id", authContext.employee.client_id)
+      .single(),
+    supabase
+      .from("employees")
+      .select("id, name")
+      .eq("client_id", authContext.employee.client_id)
+      .order("name")
+  ]);
 
   const employeeName = employees?.find((e) => e.id === authContext.employee.id)?.name 
     ?? authContext.user.email 
     ?? "User";
 
-  return {
+  const sidebarData: SidebarData = {
     user: {
       name: employeeName,
       email: authContext.user.email,
@@ -123,4 +144,25 @@ export async function getSidebarData(
       ? { name: clientData.name, plan: "Enterprise" }
       : null,
   };
+
+  return sidebarData;
+}
+
+/**
+ * Get complete page context (auth + sidebar) in one call
+ * Simplifies page setup code
+ */
+export async function getCompletePageContext(
+  supabase: SupabaseClient,
+  cookies: AstroCookies
+): Promise<{
+  authContext: AuthContext;
+  sidebarData: SidebarData;
+} | null> {
+  const authContext = await getAuthContext(supabase, cookies);
+  if (!authContext) return null;
+  
+  const sidebarData = await getSidebarData(supabase, authContext);
+  
+  return { authContext, sidebarData };
 }

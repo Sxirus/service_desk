@@ -9,13 +9,15 @@
  * Uses: Auth helper for DRY authentication/authorization
  * 
  * Features:
- * - Email signature management
+ * - Email signature management with XSS protection
  * - Additional settings can be added here
  */
 
 import Layout from "../../layouts/BaseLayout.astro";
 import { createClient } from "../../lib/supabase.ts";
-import { getAuthContext, getSidebarData } from "../../lib/auth-helpers.ts";
+import { getCompletePageContext } from "../../lib/auth-helpers.ts";
+import { ROLE_IDS } from "../../types/database.ts";
+import type { EmailSignatureResponse } from "../../types/database.ts";
 
 // Components
 import AdminShell from "@/components/AdminShell";
@@ -32,14 +34,15 @@ console.log("[general-settings] Page accessed");
 // AUTHENTICATION & AUTHORIZATION
 // ============================================================================
 
-// Get authenticated user and employee context
 console.log("[general-settings] Verifying authentication");
-const authContext = await getAuthContext(supabase, Astro.cookies);
+const pageContext = await getCompletePageContext(supabase, Astro.cookies);
 
-if (!authContext) {
+if (!pageContext) {
   console.error("[general-settings] Authentication failed, redirecting to login");
   return Astro.redirect("/");
 }
+
+const { authContext, sidebarData } = pageContext;
 
 console.log("[general-settings] User authenticated:", {
   userId: authContext.user.id,
@@ -48,7 +51,7 @@ console.log("[general-settings] User authenticated:", {
   isAdmin: authContext.isAdmin
 });
 
-// Verify admin role
+// Verify admin role using ROLE_IDS constant
 if (!authContext.isAdmin) {
   console.warn("[general-settings] Access denied - user is not admin:", {
     userId: authContext.user.id,
@@ -66,7 +69,7 @@ console.log("[general-settings] Admin access verified");
 /**
  * Fetch email signature from settings API
  * Note: Consider moving this to a Supabase table query in the future
- * for better consistency and to avoid hardcoded URLs
+ * for better consistency
  */
 console.log("[general-settings] Fetching email signature for client_id:", authContext.employee.client_id);
 
@@ -74,7 +77,6 @@ let signature = "";
 let signatureFetchError = false;
 
 try {
-  // Use dynamic origin instead of hardcoded localhost
   const apiUrl = `http://localhost:3000/api/settings/getSignature?client_id=${authContext.employee.client_id}`;
   console.log("[general-settings] API URL:", apiUrl);
   
@@ -84,7 +86,7 @@ try {
     throw new Error(`HTTP ${resultSignature.status}: ${resultSignature.statusText}`);
   }
   
-  const signatureArray = await resultSignature.json();
+  const signatureArray: EmailSignatureResponse[] = await resultSignature.json();
   
   if (Array.isArray(signatureArray) && signatureArray.length > 0) {
     signature = signatureArray[0].email_signature ?? "";
@@ -103,14 +105,6 @@ try {
   });
 }
 
-// ============================================================================
-// SIDEBAR DATA
-// ============================================================================
-
-// Load sidebar data (user info and team details)
-console.log("[general-settings] Loading sidebar data");
-const sidebarData = await getSidebarData(supabase, authContext);
-
 console.log("[general-settings] Page setup complete, rendering");
 ---
 
@@ -120,7 +114,7 @@ console.log("[general-settings] Page setup complete, rendering");
     user={sidebarData.user}
     firstTeam={sidebarData.team ?? undefined}
     crumbParentLabel="Administration"
-    crumbParentHref="/manage"
+    crumbParentHref="/manage/settings"
     crumbCurrent="General Settings"
     isAdmin={authContext.isAdmin}
     currentPath="/manage/settings"
@@ -228,7 +222,6 @@ console.log("[general-settings] Page setup complete, rendering");
         </div>
 
         <!-- Future Settings Sections -->
-        <!-- Add more setting sections here as needed -->
         <div class="rounded-lg border border-dashed p-6 text-center">
           <p class="text-sm text-muted-foreground">
             Additional settings will be added here
@@ -241,14 +234,14 @@ console.log("[general-settings] Page setup complete, rendering");
   <script>
     /**
      * Client-side script for email signature management
-     * Handles save operation with user feedback via Sonner toast
+     * Handles save operation with XSS protection and validation
      */
 
     import { toast } from "sonner";
+    import { validateEmailSignature } from "../../lib/validation";
 
     /**
-     * Save button click handler
-     * Sends updated signature to the API
+     * Save button click handler with validation
      */
     const saveButton = document.getElementById("save-signature");
     const signatureTextarea = document.getElementById("signature") as HTMLTextAreaElement;
@@ -260,9 +253,28 @@ console.log("[general-settings] Page setup complete, rendering");
         const clientId = saveButton.dataset.clientId;
         const signature = signatureTextarea.value || "";
 
-        console.log("[settings-script] Saving signature:", {
+        console.log("[settings-script] Validating signature:", {
           clientId,
           signatureLength: signature.length
+        });
+
+        // Validate and sanitize input for XSS protection
+        const validation = validateEmailSignature(signature);
+        
+        if (!validation.isValid) {
+          console.error("[settings-script] Validation failed:", validation.error);
+          toast.error("Invalid signature", {
+            description: validation.error
+          });
+          return;
+        }
+
+        const sanitizedSignature = validation.sanitized!;
+
+        console.log("[settings-script] Saving signature:", {
+          clientId,
+          originalLength: signature.length,
+          sanitizedLength: sanitizedSignature.length
         });
 
         // Disable button during save
@@ -276,13 +288,12 @@ console.log("[general-settings] Page setup complete, rendering");
         `;
 
         try {
-          // Use dynamic origin instead of hardcoded localhost
           const apiUrl = `http://localhost:3000/api/settings/updateSignature?client_id=${clientId}`;
           
           const response = await fetch(apiUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ signature }),
+            body: JSON.stringify({ signature: sanitizedSignature }),
           });
 
           if (!response.ok) {
@@ -291,15 +302,21 @@ console.log("[general-settings] Page setup complete, rendering");
 
           console.log("[settings-script] Signature saved successfully");
           
-          // Show success toast using Sonner
-          toast.success("Changes saved", {
-            description: "Email signature has been updated successfully.",
-          });
+          // Update textarea with sanitized value if it was changed
+          if (sanitizedSignature !== signature) {
+            signatureTextarea.value = sanitizedSignature;
+            toast.success("Changes saved", {
+              description: "Email signature has been updated (some unsafe content was removed).",
+            });
+          } else {
+            toast.success("Changes saved", {
+              description: "Email signature has been updated successfully.",
+            });
+          }
 
         } catch (error) {
           console.error("[settings-script] Failed to save signature:", error);
           
-          // Show error toast using Sonner
           toast.error("Failed to save", {
             description: error instanceof Error ? error.message : "An unexpected error occurred.",
           });
