@@ -21,6 +21,7 @@ const {
 } = Astro.props;
 
 import { Toaster } from "sonner";
+import { MobileWarning } from "../components/mobile-warning";
 import '../styles/global.css';
 ---
 
@@ -47,7 +48,8 @@ import '../styles/global.css';
   ]}>
     <!-- Page content -->
     <slot />
-    
+	<!-- Mobile Usage Warning -->
+    <MobileWarning client:load />
     <!-- Toast notifications -->
     <Toaster client:load />
   </body>
