@@ -11,26 +11,30 @@ export function MobileWarning() {
   const [isDismissed, setIsDismissed] = useState(false);
 
   useEffect(() => {
-    // Check if warning was previously dismissed
-    const dismissed = localStorage.getItem("mobile-warning-dismissed");
-    if (dismissed) {
-      setIsDismissed(true);
-      return;
+    if (typeof window !== "undefined") {
+      // Check if warning was previously dismissed
+      const dismissed = window.localStorage.getItem("mobile-warning-dismissed");
+      if (dismissed) {
+        setIsDismissed(true);
+        return;
+      }
+
+      // Check if viewport is mobile-sized
+      const checkMobile = () => {
+        setIsVisible(window.innerWidth < 768); // Tailwind's md breakpoint
+      };
+
+      checkMobile();
+      window.addEventListener("resize", checkMobile);
+      return () => window.removeEventListener("resize", checkMobile);
     }
-
-    // Check if viewport is mobile-sized
-    const checkMobile = () => {
-      setIsVisible(window.innerWidth < 768); // Tailwind's md breakpoint
-    };
-
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
   const handleDismiss = () => {
     setIsDismissed(true);
-    localStorage.setItem("mobile-warning-dismissed", "true");
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("mobile-warning-dismissed", "true");
+    }
   };
 
   if (!isVisible || isDismissed) return null;

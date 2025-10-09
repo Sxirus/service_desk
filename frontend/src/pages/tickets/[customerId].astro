@@ -682,7 +682,7 @@ console.log("[customer-ticket] Page setup complete, rendering");
       const signature = button.dataset.signature;
 
       let body = textarea?.value || '';
-      body = body + '\n\n' + signature;
+      body = body.trim() ? body + '\n\n' + signature : signature;
 
       console.log("[customer-ticket-client] Email data:", {
         to: emailAddress,
@@ -726,7 +726,8 @@ console.log("[customer-ticket] Page setup complete, rendering");
         });
 
         console.log("[customer-ticket-client] Redirecting to dashboard");
-        window.location.assign('/dashboard');
+        window.history.pushState({}, '', '/dashboard');
+        window.dispatchEvent(new PopStateEvent('popstate'));
       } catch (error) {
         console.error("[customer-ticket-client] Error sending email:", error);
         
