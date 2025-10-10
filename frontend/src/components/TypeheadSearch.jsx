@@ -17,11 +17,12 @@ export function TypeaheadSearch({
   maxSuggestions = 3,
   minChars = 1,
   eventName,
+  customerId,
   }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(-1);
-  const listboxId = useMemo(() => `listbox-${Math.random().toString(36).slice(2)}`, []);
+  const listboxId = useMemo(() => `listbox-${customerId}`);
   const inputRef = useRef(null);
   const listRef = useRef(null);
 
