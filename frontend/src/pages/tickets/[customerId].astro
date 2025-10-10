@@ -62,6 +62,18 @@ const clientId = authContext.employee.client_id;
 // DATA LOADING
 // ============================================================================
 
+//fetching all employees für zuweisung
+console.log("[customer-ticket] Fetching employees");
+const resultEmployees = await fetch(`http://localhost:3000/api/client/getEmployees?client_id=${clientId}`);
+const employeeArray = await resultEmployees.json();
+
+//transforming the employeeArray to fit in the type search
+const transEmployeeArray = employeeArray.map((employee : any) => ({
+  title: employee.name,
+  text: employee.id
+}))
+
+
 // Fetch customer data
 console.log("[customer-ticket] Fetching customer data");
 const resultCustomer = await fetch(`http://localhost:3000/api/customers/getCustomerById?customerId=${customerId}`);
@@ -101,6 +113,7 @@ console.log("[customer-ticket] Email thread loaded:", emailArray.length, "messag
 console.log("[customer-ticket] Fetching macros for client:", clientId);
 const resultMacros = await fetch(`http://localhost:3000/api/macros/getMacros?client_id=${clientId}`);
 const macroArray = await resultMacros.json();
+console.log(macroArray)
 
 // Getting the signature
 const resultSignature = await fetch(`http://localhost:3000/api/settings/getSignature?client_id=${clientId}`);
@@ -489,6 +502,21 @@ console.log("[customer-ticket] Page setup complete, rendering");
               />
             </div>
           </div>
+
+          <!-- Ticket zuweisen -->
+          <div id="Zuweisen" data-customerid={customerId} class="rounded-lg border bg-card text-card-foreground shadow-sm">
+            <div class="p-4 space-y-3">
+              <h3 class="font-semibold leading-none tracking-tight">
+                Zuweisen
+              </h3>
+              <TypeaheadSearch
+                client:load
+                items={transEmployeeArray}
+                placeholder="Search employee..."
+                eventName='Zuweisung'
+              />
+            </div>
+          </div>     
         </div>
       </div>
     </div>
@@ -657,6 +685,26 @@ console.log("[customer-ticket] Page setup complete, rendering");
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
       textarea.dispatchEvent(new Event('change', { bubbles: true }));
     });
+
+    // ============================================================================
+    // Zuweisung FUNCTIONALITY
+    // ============================================================================
+    window.addEventListener('Zuweisung', async (e) => {
+      console.log("[customer-ticket-client] Zuweisung event received");
+
+      const zuweisung = e as CustomEvent;
+      const employeeId = zuweisung?.detail.text;
+      const customerId = document.getElementById("Zuweisen")?.dataset.customerid;
+      const data = {employee_id: employeeId, customer_id: customerId}
+
+      await fetch("http://localhost:3000/api/client/assignEmployee", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+    })
+
 
     // ============================================================================
     // AUTO-SCROLL MAIL LIST

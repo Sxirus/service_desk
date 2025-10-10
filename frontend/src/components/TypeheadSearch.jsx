@@ -85,8 +85,15 @@ export function TypeaheadSearch({
   }, [suggestions, query, minChars]);
 
   const select = useCallback((idx) => {
-    const s = suggestions[idx];
-    if (!s) return;
+    let s = suggestions[idx];
+    if (!s) return;  
+
+    //TODO: überarbeiten 
+    try{
+      s.text = s.text.toString();
+    } catch {
+
+    }
 
     const text = s.text && s.text.length > 0 ? s.text : s.title;
     window.dispatchEvent(

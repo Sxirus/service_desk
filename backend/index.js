@@ -30,6 +30,8 @@ app.use('/api/macros', require('./routes/macros'));
 
 app.use('/api/settings', require('./routes/settings'));
 
+app.use('/api/client', require('./routes/client'))
+
 // Global error handling middleware
 // This catches any unhandled errors from routes and provides consistent error responses
 app.use((err, req, res, next) => {
