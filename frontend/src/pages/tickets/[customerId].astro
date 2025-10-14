@@ -11,6 +11,8 @@
  * 
  * Security: Authenticated users only
  * Uses: Auth helper for DRY authentication/authorization
+ * 
+ * Performance: Tracks all major operations when ENABLE_PERFORMANCE_TRACKING=true
  */
 
 import BaseLayout from "../../layouts/BaseLayout.astro";
@@ -18,9 +20,16 @@ import { formatDate } from "../../utils/formatDate.js";
 import { TypeaheadSearch } from "../../components/macroSearch.jsx";
 import { createClient } from "../../lib/supabase.ts";
 import { getCompletePageContext } from "../../lib/auth-helpers.ts";
+import { createPageLogger, perf } from "../../utils/logger.ts";
 import AdminShell from "@/components/AdminShell";
 
-console.log("[customer-ticket] Page accessed");
+const log = createPageLogger('customer-ticket');
+log.info('Page accessed');
+
+// ============================================================================
+// PERFORMANCE TRACKING - START
+// ============================================================================
+const pageLoadTimer = perf.start('page-load', 'total');
 
 // ============================================================================
 // ROUTE PARAMETERS
@@ -29,131 +38,246 @@ console.log("[customer-ticket] Page accessed");
 const { params } = Astro;
 const customerId = params.customerId;
 
-console.log("[customer-ticket] Customer ID:", customerId);
+log.info('Customer ID: ', customerId);
 
 // ============================================================================
 // AUTHENTICATION & AUTHORIZATION
 // ============================================================================
 
-const supabase = createClient({ 
+const authTimer = perf.start('page-load', 'authentication');
+
+// USE PRE-AUTHENTICATED USER FROM MIDDLEWARE
+const supabase = Astro.locals.supabase || createClient({ 
   request: Astro.request, 
   cookies: Astro.cookies 
 });
 
-console.log("[customer-ticket] Verifying authentication");
-const pageContext = await getCompletePageContext(supabase, Astro.cookies);
+log.info('Verifying authentication');
+// PASS PRE-AUTHENTICATED USER - NO DOUBLE AUTH!
+const pageContext = await getCompletePageContext(
+  supabase, 
+  Astro.cookies,
+  Astro.locals.user
+);
+
+perf.end(authTimer);
 
 if (!pageContext) {
-  console.error("[customer-ticket] Authentication failed, redirecting to login");
+  log.error('Authentication failed, redirecting to login');
+  perf.end(pageLoadTimer, { result: 'auth-failed' });
+  perf.printReport('customer-ticket');
   return Astro.redirect("/");
 }
 
 const { authContext, sidebarData } = pageContext;
-
-console.log("[customer-ticket] User authenticated:", {
-  userId: authContext.user.id,
-  employeeId: authContext.employee.id,
-  clientId: authContext.employee.client_id
-});
+log.info('User authenticated', { userId: authContext.user.id, employeeId: authContext.employee.id, clientId: authContext.employee.client_id });
 
 const clientId = authContext.employee.client_id;
 
 // ============================================================================
-// DATA LOADING
+// DATA LOADING - OPTIMIZED WITH PARALLEL QUERIES
 // ============================================================================
 
-// Fetch customer data
-console.log("[customer-ticket] Fetching customer data");
-const resultCustomer = await fetch(`http://localhost:3000/api/customers/getCustomerById?customerId=${customerId}`);
-const customerArray = await resultCustomer.json();
-const customer = customerArray[0];
+const dataFetchTimer = perf.start('page-load', 'data-fetching');
+log.info('Starting parallel data fetch');
 
-console.log("[customer-ticket] Customer loaded:", customer?.name);
+// Track individual query timings within the parallel execution
+const queryTimer = perf.start('database', 'parallel-queries');
 
-// Fetch all emails for this customer
-console.log("[customer-ticket] Fetching customer emails");
-const resultMails = await fetch(`http://localhost:3000/api/emails/getEmailsFromCustomer?customerId=${customerId}`);
-const emailArray = await resultMails.json();
+const [
+  { data: customer, error: customerError },
+  { data: incomingMails, error: incomingError },
+  { data: sentMails, error: sentError },
+  { data: macroArray, error: macroError },
+  { data: clientData, error: clientError }
+] = await Promise.all([
+  supabase
+    .from("customers")
+    .select(`
+      id,
+      name,
+      client_id,
+      employee_id
+    `)
+    .eq("id", customerId)
+    .eq("client_id", clientId)
+    .single(),
+  
+  supabase
+    .from("incoming-mails")
+    .select(`
+      id,
+      send_at,
+      subject,
+      text_content,
+      html_content,
+      email_address,
+      read,
+      processing_status
+    `)
+    .eq("customer_id", customerId)
+    .eq("client_id", clientId)
+    .order("send_at", { ascending: true }),
+  
+  supabase
+    .from("sent-mail")
+    .select(`
+      id,
+      send_at,
+      text_content,
+      employee_id
+    `)
+    .eq("customer_id", customerId)
+    .order("send_at", { ascending: true }),
+  
+  supabase
+    .from("macros")
+    .select(`
+      id,
+      title,
+      text
+    `)
+    .eq("client_id", clientId)
+    .order("title", { ascending: true }),
+  
+  supabase
+    .from("clients")
+    .select(`
+      id,
+      name,
+      email_signature,
+      shopify_store_url,
+      shopify_access_token,
+      shopify_connected,
+      shopify_scope
+    `)
+    .eq("id", clientId)
+    .single()
+]);
 
-let lastMail = emailArray[emailArray.length - 1];
+perf.end(queryTimer, {
+  queries: 5,
+  customerFound: !!customer,
+  incomingMailsCount: incomingMails?.length || 0,
+  sentMailsCount: sentMails?.length || 0,
+  macrosCount: macroArray?.length || 0
+});
 
-// Fallback: wenn die letzte Mail nicht vom Kunden ist, such die letzte 'incoming'-Mail
-if (lastMail?.type !== "incoming") {
-  const incomingMails = emailArray.filter(m => m.type === "incoming");
-  if (incomingMails.length > 0) {
-    lastMail = incomingMails[incomingMails.length - 1];
-  } else {
-    console.warn("[customer-ticket] Keine eingehenden Mails gefunden, nutze letzte gesendete Mail");
-  }
+perf.end(dataFetchTimer);
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+const errorCheckTimer = perf.start('page-load', 'error-handling');
+
+if (customerError) {
+  log.error('Error fetching customer:', customerError);
+  perf.end(errorCheckTimer, { result: 'customer-error' });
+  perf.end(pageLoadTimer, { result: 'customer-not-found' });
+  perf.printReport('customer-ticket');
+  return new Response("Customer not found", { status: 404 });
 }
 
-// Sicherstellen, dass lastMail existiert
-if (!lastMail) {
-  throw new Error("[customer-ticket] No emails found in the thread");
+if (!customer) {
+  log.error('Customer not found or access denied');
+  perf.end(errorCheckTimer, { result: 'customer-not-found' });
+  perf.end(pageLoadTimer, { result: 'customer-not-found' });
+  perf.printReport('customer-ticket');
+  return new Response("Customer not found", { status: 404 });
 }
 
-const emailAddress = lastMail.email_adress;
-const newSubject = `RE: ${lastMail.subject}`;
-
-console.log("[customer-ticket] Email thread loaded:", emailArray.length, "messages");
-
-// Fetch macros for this client
-console.log("[customer-ticket] Fetching macros for client:", clientId);
-const resultMacros = await fetch(`http://localhost:3000/api/macros/getMacros?client_id=${clientId}`);
-const macroArray = await resultMacros.json();
-
-// Getting the signature
-const resultSignature = await fetch(`http://localhost:3000/api/settings/getSignature?client_id=${clientId}`);
-const signatureArray = await resultSignature.json();
-const signature = signatureArray[0]?.email_signature || "";
-
-console.log("[customer-ticket] Macros loaded:", macroArray?.length || 0);
-
-// Fetch client data to check Shopify connection status
-console.log("[customer-ticket] Fetching client data for Shopify integration");
-const { data: clientData, error: clientError } = await supabase
-  .from("clients")
-  .select("id, name, shopify_store_url, shopify_access_token, shopify_connected, shopify_scope")
-  .eq("id", clientId)
-  .single();
+log.info('Customer loaded:', customer.name);
 
 if (clientError) {
-  console.error("[customer-ticket] Error fetching client data:", clientError);
-} else {
-  console.log("[customer-ticket] Client data loaded:", {
-    name: clientData?.name,
-    shopifyConnected: clientData?.shopify_connected
-  });
+  log.error('Error fetching client data:', clientError);
+  perf.end(errorCheckTimer, { result: 'client-error' });
+  perf.end(pageLoadTimer, { result: 'server-error' });
+  perf.printReport('customer-ticket');
+  return new Response("Internal server error", { status: 500 });
 }
 
-// Fetch Shopify orders if store is connected
-let shopifyOrders = [];
-let shopifyError = null;
-
-if (clientData && clientData.shopify_connected) {
-  console.log("[customer-ticket] Shopify is connected, fetching orders");
-  try {
-    const shopifyResponse = await fetch(
-      `http://localhost:4321/api/shopify/getCustomerOrders?customerId=${customerId}`
-    );
-    const shopifyData = await shopifyResponse.json();
-    
-    if (shopifyData.error) {
-      console.error("[customer-ticket] Shopify API error:", shopifyData.error);
-      shopifyError = shopifyData.error;
-    } else {
-      shopifyOrders = shopifyData.orders || [];
-      console.log("[customer-ticket] Shopify orders loaded:", shopifyOrders.length);
-    }
-  } catch (error) {
-    console.error("[customer-ticket] Exception fetching Shopify orders:", error);
-    shopifyError = "Failed to load orders";
-  }
-} else {
-  console.log("[customer-ticket] Shopify not connected, skipping order fetch");
+if (incomingError) {
+  log.error('Error fetching incoming mails:', incomingError);
 }
 
-console.log("[customer-ticket] Page setup complete, rendering");
+if (sentError) {
+  log.error('Error fetching sent mails:', sentError);
+}
+
+if (macroError) {
+  log.error('Error fetching macros:', macroError);
+}
+
+perf.end(errorCheckTimer);
+
+// ============================================================================
+// DATA PROCESSING
+// ============================================================================
+
+const processingTimer = perf.start('page-load', 'data-processing');
+
+const emailArray = [
+  ...(incomingMails || []).map((mail: any) => ({
+    ...mail,
+    type: 'incoming',
+    email_adress: mail.email_address
+  })),
+  ...(sentMails || []).map((mail: any) => ({
+    ...mail,
+    type: 'sent',
+    employee_id: mail.employee_id
+  }))
+].sort((a, b) => new Date(a.send_at).getTime() - new Date(b.send_at).getTime());
+
+log.info("Emails loaded:", emailArray.length);
+
+let lastMail = incomingMails && incomingMails.length > 0 
+  ? incomingMails[incomingMails.length - 1] 
+  : null;
+
+if (!lastMail) {
+  log.error("No incoming emails found in thread");
+  perf.end(processingTimer, { result: 'no-emails' });
+  perf.end(pageLoadTimer, { result: 'no-emails' });
+  perf.printReport('customer-ticket');
+  return new Response("No emails found", { status: 404 });
+}
+
+const emailAddress = lastMail.email_address;
+const newSubject = `RE: ${lastMail.subject}`;
+
+const signature = clientData?.email_signature || "";
+
+log.info("Client data loaded:", {
+  name: clientData?.name,
+  shopifyConnected: clientData?.shopify_connected,
+  hasSignature: !!signature
+});
+
+log.info("Macros loaded:", macroArray?.length || 0);
+
+const shopifyConfig = {
+  connected: clientData?.shopify_connected || false,
+  customerId: customerId
+};
+
+perf.end(processingTimer, {
+  emailCount: emailArray.length,
+  hasShopify: shopifyConfig.connected
+});
+
+// ============================================================================
+// PERFORMANCE TRACKING - END
+// ============================================================================
+
+perf.end(pageLoadTimer, { result: 'success' });
+
+// Print comprehensive performance report
+perf.printReport('customer-ticket');
+
+log.info("[customer-ticket] Page setup complete, rendering");
+
 ---
 
 <BaseLayout title={customer?.name || "Customer Ticket"}>
@@ -176,9 +300,9 @@ console.log("[customer-ticket] Page setup complete, rendering");
         </div>
 
         <!-- Email Thread -->
-        <div class="flex-1 px-6 overflow-y-auto overflow-x-hidden">
+        <div id="emailThread" class="flex-1 px-6 overflow-y-auto overflow-x-hidden">
           <div id="mailList" class="space-y-4 pb-4">
-            {emailArray.map((mail: any) => {
+            {emailArray.map((mail) => {
               const isOutgoing = mail.type === 'sent';
               
               return (
@@ -221,13 +345,13 @@ console.log("[customer-ticket] Page setup complete, rendering");
                         </div>
                       </div>
                       <time class="text-xs text-muted-foreground">
-                        {formatDate(mail.date)}
+                        {formatDate(mail.send_at)}
                       </time>
                     </div>
 
                     <!-- Message Body -->
                     <div class="text-sm text-foreground whitespace-pre-wrap leading-relaxed" style="word-break: break-word; overflow-wrap: anywhere;">
-                      {mail.text}
+                      {mail.text_content}
                     </div>
                   </div>
                 </div>
@@ -345,116 +469,38 @@ console.log("[customer-ticket] Page setup complete, rendering");
                   Order History
                 </h3>
                 
-                {shopifyError ? (
-                  <div class="rounded-lg border border-destructive/50 bg-destructive/10 p-3">
-                    <p class="text-xs text-destructive">Failed to load orders</p>
+                <div id="shopify-loading" class="space-y-2">
+                  <div class="rounded-lg border bg-muted p-3 animate-pulse">
+                    <div class="h-4 bg-muted-foreground/20 rounded w-3/4 mb-2"></div>
+                    <div class="h-3 bg-muted-foreground/20 rounded w-1/2"></div>
                   </div>
-                ) : shopifyOrders.length > 0 ? (
-                  <div class="space-y-2 max-h-96 overflow-y-auto">
-                    {shopifyOrders.slice(0, 10).map((order: any) => (
-                      <div class="rounded-lg border bg-background p-3 hover:bg-accent transition-colors">
-                        <!-- Order Header -->
-                        <div class="flex justify-between items-start mb-2">
-                          <div>
-                            <p class="text-sm font-semibold">
-                              Order #{order.order_number}
-                            </p>
-                            <p class="text-xs text-muted-foreground">
-                              {new Date(order.created_at).toLocaleDateString('en-US', {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric'
-                              })}
-                            </p>
-                          </div>
-                          <!-- Financial Status Badge -->
-                          <span class={`text-xs px-2 py-1 rounded-full font-medium ${
-                            order.financial_status === 'paid' 
-                              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
-                              : order.financial_status === 'pending'
-                              ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                              : order.financial_status === 'refunded'
-                              ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                              : 'bg-muted text-muted-foreground'
-                          }`}>
-                            {order.financial_status}
-                          </span>
-                        </div>
-
-                        <!-- Order Details -->
-                        <div class="space-y-2">
-                          <!-- Total Price -->
-                          <div class="flex justify-between items-center">
-                            <span class="text-xs text-muted-foreground">Total:</span>
-                            <span class="text-sm font-semibold">
-                              {order.total_price} {order.currency}
-                            </span>
-                          </div>
-
-                          {/* Fulfillment Status */}
-                          {order.fulfillment_status && (
-                            <div class="flex justify-between items-center">
-                              <span class="text-xs text-muted-foreground">Fulfillment:</span>
-                              <span class={`text-xs px-2 py-0.5 rounded ${
-                                order.fulfillment_status === 'fulfilled'
-                                  ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                  : order.fulfillment_status === 'partial'
-                                  ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                                  : 'bg-muted text-muted-foreground'
-                              }`}>
-                                {order.fulfillment_status}
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Item Count */}
-                          {order.line_items && order.line_items.length > 0 && (
-                            <div class="mt-2 pt-2 border-t">
-                              <p class="text-xs text-muted-foreground mb-1">
-                                {order.line_items.length} item{order.line_items.length !== 1 ? 's' : ''}
-                              </p>
-                              <ul class="space-y-1">
-                                {order.line_items.slice(0, 2).map((item: any) => (
-                                  <li class="text-xs">
-                                    • {item.quantity}x {item.name}
-                                  </li>
-                                ))}
-                                {order.line_items.length > 2 && (
-                                  <li class="text-xs text-muted-foreground italic">
-                                    + {order.line_items.length - 2} more
-                                  </li>
-                                )}
-                              </ul>
-                            </div>
-                          )}
-
-                          {/* View in Shopify Link */}
-                          {order.id && (
-                            <div class="mt-2 pt-2 border-t">
-                              <a
-                                href={`https://${clientData.shopify_store_url}/admin/orders/${order.id}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                class="text-xs text-primary hover:underline font-medium flex items-center gap-1"
-                              >
-                                View in Shopify
-                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                </svg>
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                  <div class="rounded-lg border bg-muted p-3 animate-pulse">
+                    <div class="h-4 bg-muted-foreground/20 rounded w-3/4 mb-2"></div>
+                    <div class="h-3 bg-muted-foreground/20 rounded w-1/2"></div>
                   </div>
-                ) : (
-                  <div class="rounded-lg border bg-muted p-3 text-center">
-                    <p class="text-xs text-muted-foreground">
-                      No orders found for this customer
-                    </p>
-                  </div>
-                )}
+                  <p class="text-xs text-muted-foreground text-center mt-2">
+                    Loading orders...
+                  </p>
+                </div>
+                
+                <div id="shopify-error" class="hidden rounded-lg border border-destructive/50 bg-destructive/10 p-3">
+                  <p class="text-xs text-destructive">Failed to load orders</p>
+                  <button 
+                    onclick="window.loadShopifyOrders()"
+                    class="text-xs text-destructive hover:underline mt-2"
+                  >
+                    Retry
+                  </button>
+                </div>
+                
+                <div id="shopify-empty" class="hidden rounded-lg border bg-muted p-3 text-center">
+                  <p class="text-xs text-muted-foreground">
+                    No orders found for this customer
+                  </p>
+                </div>
+                
+                <div id="shopify-orders" class="hidden space-y-2 max-h-96 overflow-y-auto">
+                </div>
               </div>
             </div>
           ) : (
@@ -494,12 +540,11 @@ console.log("[customer-ticket] Page setup complete, rendering");
   </AdminShell>
 
   <script>
-    console.log("[customer-ticket-client] Client-side script initialized");
-
     // ============================================================================
     // GET DOM ELEMENTS
     // ============================================================================
-    
+
+    console.log("[customer-ticket-client] Script initialized");
     const textarea = document.getElementById('answer') as HTMLTextAreaElement;
     const button = document.getElementById('sendButton') as HTMLButtonElement;
     const replyContainer = document.getElementById('replyContainer') as HTMLElement;
@@ -523,7 +568,7 @@ console.log("[customer-ticket] Page setup complete, rendering");
     let isResizing = false;
     let startY = 0;
     let startHeight = 0;
-    const MIN_HEIGHT = 100;
+    const MIN_HEIGHT = 150;
     const MAX_HEIGHT = 600;
 
     // Load saved height from localStorage
@@ -666,11 +711,11 @@ console.log("[customer-ticket] Page setup complete, rendering");
      * Shows the most recent messages first
      */
     (function () {
-      console.log("[customer-ticket-client] Auto-scrolling mail list to bottom");
-      const list = document.getElementById('mailList');
+      console.log("[customer-ticket-client] Auto-scrolling email thread to bottom");
+      const list = document.getElementById('emailThread');
       if (list) {
         list.scrollTop = list.scrollHeight;
-        console.log("[customer-ticket-client] Mail list scrolled to:", list.scrollHeight);
+        console.log("[customer-ticket-client] Email thread scrolled to:", list.scrollHeight);
       }
     })();
 
@@ -716,7 +761,7 @@ console.log("[customer-ticket] Page setup complete, rendering");
         // Only send if there's content
         if (body.trim() !== '') {
           console.log("[customer-ticket-client] Sending email");
-          
+
           await fetch(`http://localhost:3000/api/emails/sendMail?customerId=${customerId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -730,7 +775,7 @@ console.log("[customer-ticket] Page setup complete, rendering");
 
         // Mark conversation as read
         console.log("[customer-ticket-client] Marking conversation as read");
-        await fetch(`http://localhost:3000/api/emails/makeRead?customerId=${customerId}`, { 
+        await fetch(`http://localhost:3000/api/emails/makeRead?customerId=${customerId}`, {
           method: 'POST' 
         });
 
@@ -753,5 +798,159 @@ console.log("[customer-ticket] Page setup complete, rendering");
     });
 
     console.log("[customer-ticket-client] All event listeners attached");
+  </script>
+  
+  <script define:vars={{ shopifyConfig, clientData }}>
+    window.loadShopifyOrders = async function() {
+      console.log("[shopify-loader] Starting async Shopify order fetch");
+      
+      const loadingEl = document.getElementById('shopify-loading');
+      const errorEl = document.getElementById('shopify-error');
+      const emptyEl = document.getElementById('shopify-empty');
+      const ordersEl = document.getElementById('shopify-orders');
+      
+      if (loadingEl) loadingEl.classList.remove('hidden');
+      if (errorEl) errorEl.classList.add('hidden');
+      if (emptyEl) emptyEl.classList.add('hidden');
+      if (ordersEl) ordersEl.classList.add('hidden');
+      
+      try {
+        const response = await fetch(
+          `http://localhost:4321/api/shopify/getCustomerOrders?customerId=${shopifyConfig.customerId}`
+        );
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (loadingEl) loadingEl.classList.add('hidden');
+        
+        if (data.error) {
+          console.error("[shopify-loader] API returned error:", data.error);
+          if (errorEl) errorEl.classList.remove('hidden');
+          return;
+        }
+        
+        const orders = data.orders || [];
+        console.log("[shopify-loader] Loaded", orders.length, "orders");
+        
+        if (orders.length === 0) {
+          if (emptyEl) emptyEl.classList.remove('hidden');
+          return;
+        }
+        
+        renderOrders(orders);
+        
+      } catch (error) {
+        console.error("[shopify-loader] Error loading orders:", error);
+        if (loadingEl) loadingEl.classList.add('hidden');
+        if (errorEl) errorEl.classList.remove('hidden');
+      }
+    };
+
+    function renderOrders(orders) {
+      const ordersEl = document.getElementById('shopify-orders');
+      if (!ordersEl) return;
+      
+      const displayOrders = orders.slice(0, 10);
+      
+      const ordersHTML = displayOrders.map(order => `
+        <div class="rounded-lg border bg-background p-3 hover:bg-accent transition-colors">
+          <div class="flex justify-between items-start mb-2">
+            <div>
+              <p class="text-sm font-semibold">Order #${order.order_number}</p>
+              <p class="text-xs text-muted-foreground">
+                ${new Date(order.created_at).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric'
+                })}
+              </p>
+            </div>
+            <span class="text-xs px-2 py-1 rounded-full font-medium ${getFinancialStatusClass(order.financial_status)}">
+              ${order.financial_status}
+            </span>
+          </div>
+          <div class="space-y-2">
+            <div class="flex justify-between items-center">
+              <span class="text-xs text-muted-foreground">Total:</span>
+              <span class="text-sm font-semibold">${order.total_price} ${order.currency}</span>
+            </div>
+            ${order.fulfillment_status ? `
+              <div class="flex justify-between items-center">
+                <span class="text-xs text-muted-foreground">Fulfillment:</span>
+                <span class="text-xs px-2 py-0.5 rounded ${getFulfillmentStatusClass(order.fulfillment_status)}">
+                  ${order.fulfillment_status}
+                </span>
+              </div>
+            ` : ''}
+            ${order.line_items && order.line_items.length > 0 ? `
+              <div class="mt-2 pt-2 border-t">
+                <p class="text-xs text-muted-foreground mb-1">
+                  ${order.line_items.length} item${order.line_items.length !== 1 ? 's' : ''}
+                </p>
+                <ul class="space-y-1">
+                  ${order.line_items.slice(0, 2).map(item => `
+                    <li class="text-xs">• ${item.quantity}x ${item.name}</li>
+                  `).join('')}
+                  ${order.line_items.length > 2 ? `
+                    <li class="text-xs text-muted-foreground italic">+ ${order.line_items.length - 2} more</li>
+                  ` : ''}
+                </ul>
+              </div>
+            ` : ''}
+            ${order.id ? `
+              <div class="mt-2 pt-2 border-t">
+                <a href="https://${clientData.shopify_store_url}/admin/orders/${order.id}"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   class="text-xs text-primary hover:underline font-medium flex items-center gap-1">
+                  View in Shopify
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `).join('');
+      
+      ordersEl.innerHTML = ordersHTML;
+      ordersEl.classList.remove('hidden');
+    }
+
+    function getFinancialStatusClass(status) {
+      switch (status) {
+        case 'paid':
+          return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+        case 'pending':
+          return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+        case 'refunded':
+          return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+        default:
+          return 'bg-muted text-muted-foreground';
+      }
+    }
+
+    function getFulfillmentStatusClass(status) {
+      switch (status) {
+        case 'fulfilled':
+          return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+        case 'partial':
+          return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+        default:
+          return 'bg-muted text-muted-foreground';
+      }
+    }
+
+    if (shopifyConfig.connected) {
+      setTimeout(() => {
+        console.log("[shopify-loader] Starting delayed Shopify order fetch");
+        window.loadShopifyOrders();
+      }, 100);
+    }
   </script>
 </BaseLayout>
