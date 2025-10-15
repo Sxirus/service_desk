@@ -11,13 +11,13 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from "react"
  *  - maxSuggestions?: number (default 3)
  *  - minChars?: number (default 1)
  */
-export function TypeaheadSearch({
+export function MacroSearch({
   items,
   placeholder = "Suchen…",
   maxSuggestions = 3,
   minChars = 1,
   eventName,
-  customerId,
+  customerId
   }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);

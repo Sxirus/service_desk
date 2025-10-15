@@ -15,7 +15,8 @@
 
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { formatDate } from "../../utils/formatDate.js";
-import { TypeaheadSearch } from "../../components/TypeheadSearch.jsx";
+import { MacroSearch } from "../../components/macroSearch.jsx";
+import { Assign } from "../../components/zuweisung.jsx"
 import { createClient } from "../../lib/supabase.ts";
 import { getCompletePageContext } from "../../lib/auth-helpers.ts";
 import AdminShell from "@/components/AdminShell";
@@ -62,6 +63,22 @@ const clientId = authContext.employee.client_id;
 // DATA LOADING
 // ============================================================================
 
+const [
+  {data: employeeResult, error: employeeErr}
+] = await Promise.all([
+  supabase.from("customers").select("employee_id").eq("id", customerId)
+])
+
+//Log any errors
+if (employeeErr) {
+  console.error("[customer-ticket] Failed to load assigned employee", {
+    error: employeeErr.message,
+    code: employeeErr.code
+  })
+} else {
+  console.log("[customer-ticket] Data Loaded")
+}
+
 //fetching all employees für zuweisung
 console.log("[customer-ticket] Fetching employees");
 const resultEmployees = await fetch(`http://localhost:3000/api/client/getEmployees?client_id=${clientId}`);
@@ -73,6 +90,9 @@ const transEmployeeArray = employeeArray.map((employee : any) => ({
   text: employee.id
 }))
 
+console.log(employeeResult);
+//working with the assigned employee
+// const assignedEmp = await employeeResult.employee
 
 // Fetch customer data
 console.log("[customer-ticket] Fetching customer data");
@@ -494,13 +514,13 @@ console.log("[customer-ticket] Page setup complete, rendering");
               <h3 class="font-semibold leading-none tracking-tight">
                 Quick Responses
               </h3>
-              <TypeaheadSearch
+              <MacroSearch
                 client:load
                 items={macroArray}
                 placeholder="Search macros..."
-                eventName='MacroChoosen'
-                customerId={customerId}
-              />
+                eventName='MacroChoosen' 
+                customerId={customerId}             
+                />
             </div>
           </div>
 
@@ -510,7 +530,7 @@ console.log("[customer-ticket] Page setup complete, rendering");
               <h3 class="font-semibold leading-none tracking-tight">
                 Zuweisen
               </h3>
-              <TypeaheadSearch
+              <Assign
                 client:load
                 items={transEmployeeArray}
                 placeholder="Search employee..."
