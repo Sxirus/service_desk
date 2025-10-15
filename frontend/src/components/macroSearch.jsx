@@ -192,7 +192,7 @@ export function MacroSearch({
           </ul>
         )}
       </div>
-      <p className="mt-2 text-xs text-gray-500">Tippen, mit ↑/↓ navigieren, Enter oder Klick zum Auswählen.</p>
+      <p className="mt-2 text-xs text-gray-500">Click, navigate with ↑/↓, Enter or Click to select.</p>
     </div>
   );
 }

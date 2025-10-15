@@ -44,7 +44,7 @@ router.get('/getAssignedCustomers', async (req, res) => {
 
     res.json(data);
   } catch (error) {
-    console.log('Server error:', err.message);
+    console.log('Server error:', error.message);
     res.status(500).json({ error: 'Serverfehler' });
   }
 })
