@@ -17,7 +17,8 @@
 
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { formatDate } from "../../utils/formatDate.js";
-import { TypeaheadSearch } from "../../components/macroSearch.jsx";
+import { MacroSearch } from "../../components/macroSearch.jsx";
+import { Assign } from "../../components/zuweisung.jsx";
 import { createClient } from "../../lib/supabase.ts";
 import { getCompletePageContext } from "../../lib/auth-helpers.ts";
 import { createPageLogger, perf } from "../../utils/logger.ts";
@@ -169,6 +170,60 @@ perf.end(dataFetchTimer);
 // ERROR HANDLING
 // ============================================================================
 
+const [
+  {data: employeeResult, error: employeeErr}
+] = await Promise.all([
+  supabase.from("customers").select("employee_id").eq("id", customerId)
+])
+
+//Log any errors
+if (employeeErr) {
+  console.error("[customer-ticket] Failed to load assigned employee", {
+    error: employeeErr.message,
+    code: employeeErr.code
+  })
+} else {
+  console.log("[customer-ticket] Data Loaded")
+}
+
+//fetching all employees für zuweisung
+console.log("[customer-ticket] Fetching employees");
+const resultEmployees = await fetch(`http://localhost:3000/api/client/getEmployees?client_id=${clientId}`);
+const employeeArray = await resultEmployees.json();
+
+//transforming the employeeArray to fit in the type search
+const transEmployeeArray = employeeArray.map((employee : any) => ({
+  title: employee.name,
+  text: employee.id
+}))
+
+console.log(employeeResult);
+//working with the assigned employee
+// const assignedEmp = await employeeResult.employee
+
+// Fetch customer data
+console.log("[customer-ticket] Fetching customer data");
+const resultCustomer = await fetch(`http://localhost:3000/api/customers/getCustomerById?customerId=${customerId}`);
+const customerArray = await resultCustomer.json();
+const customer = customerArray[0];
+
+console.log("[customer-ticket] Customer loaded:", customer?.name);
+
+// Fetch all emails for this customer
+console.log("[customer-ticket] Fetching customer emails");
+const resultMails = await fetch(`http://localhost:3000/api/emails/getEmailsFromCustomer?customerId=${customerId}`);
+const emailArray = await resultMails.json();
+
+let lastMail = emailArray[emailArray.length - 1];
+
+// Fallback: wenn die letzte Mail nicht vom Kunden ist, such die letzte 'incoming'-Mail
+if (lastMail?.type !== "incoming") {
+  const incomingMails = emailArray.filter((m : any) => m.type === "incoming");
+  if (incomingMails.length > 0) {
+    lastMail = incomingMails[incomingMails.length - 1];
+  } else {
+    console.warn("[customer-ticket] Keine eingehenden Mails gefunden, nutze letzte gesendete Mail");
+  }
 const errorCheckTimer = perf.start('page-load', 'error-handling');
 
 if (customerError) {
@@ -357,8 +412,8 @@ log.info("[customer-ticket] Page setup complete, rendering");
                 </div>
               );
             })}
-          </div>
-        </div>
+          </li>
+        </ul>
 
         <!-- Reply Area (Resizable & Collapsible) -->
         <div id="replyContainer" class="border-t bg-card flex flex-col" style="min-height: 52px; height: 180px;">
@@ -527,13 +582,31 @@ log.info("[customer-ticket] Page setup complete, rendering");
               <h3 class="font-semibold leading-none tracking-tight">
                 Quick Responses
               </h3>
-              <TypeaheadSearch
+              <MacroSearch
                 client:load
                 items={macroArray}
                 placeholder="Search macros..."
-              />
+                eventName='MacroChoosen' 
+                customerId={customerId}             
+                />
             </div>
           </div>
+
+          <!-- Ticket zuweisen -->
+          <div id="Zuweisen" data-customerid={customerId} class="rounded-lg border bg-card text-card-foreground shadow-sm">
+            <div class="p-4 space-y-3">
+              <h3 class="font-semibold leading-none tracking-tight">
+                Zuweisen
+              </h3>
+              <Assign
+                client:load
+                items={transEmployeeArray}
+                placeholder="Search employee..."
+                eventName='Zuweisung'
+                customerId={customerId}
+              />
+            </div>
+          </div>     
         </div>
       </div>
     </div>
@@ -701,6 +774,26 @@ log.info("[customer-ticket] Page setup complete, rendering");
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
       textarea.dispatchEvent(new Event('change', { bubbles: true }));
     });
+
+    // ============================================================================
+    // Zuweisung FUNCTIONALITY
+    // ============================================================================
+    window.addEventListener('Zuweisung', async (e) => {
+      console.log("[customer-ticket-client] Zuweisung event received");
+
+      const zuweisung = e as CustomEvent;
+      const employeeId = zuweisung?.detail.text;
+      const customerId = document.getElementById("Zuweisen")?.dataset.customerid;
+      const data = {employee_id: employeeId, customer_id: customerId}
+
+      await fetch("http://localhost:3000/api/client/assignEmployee", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+    })
+
 
     // ============================================================================
     // AUTO-SCROLL MAIL LIST

@@ -15,7 +15,7 @@ router.get('/getMails', async (req, res) => {
       .eq("client_id", client_id)
       .eq('read', false)
       .order('send_at', { ascending: true })
-      .limit(100); ;
+      .limit(100);
 
     if (error) {
       console.log('Supabase error:', error.message);
@@ -123,7 +123,7 @@ router.post('/sendMail', async (req, res) => {
 });
 
 //making mails read by customerid
-router.post('/makeRead', async (req, res) => {
+router.get('/makeRead', async (req, res) => {
   const customerId = req.query.customerId;
 
   try {
@@ -142,6 +142,31 @@ router.post('/makeRead', async (req, res) => {
     console.error('Server error:', err.message);
     res.status(500).json({ success: false, error: 'Servererror' });
   } 
+})
+
+//get emails by list of customer ids
+router.get('/getMailsbyCustomerIds', async (req, res) => {
+  //getting array as parameter
+  const ids = ([]).concat(req.query.ids ?? []).map(Number);
+  console.log(ids)
+  try {
+    const {data, error} = await supabase
+      .from('incoming-mails') 
+      .select('*')
+      .in('customer_id', ids)
+      .eq('read', false)
+      .order('send_at', { ascending: true })
+      .limit(100)
+
+    if (error) {
+      console.log('Supabase error:', error.message);
+      return res.status(500).json({ error: 'Datenbankfehler' });
+    }
+    res.json(data);    
+  } catch (err) {
+    console.error('Server error:', err.message);
+    res.status(500).json({ success: false, error: 'Servererror' });
+  }
 })
 
 //exporting

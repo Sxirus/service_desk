@@ -26,5 +26,28 @@ router.get('/getCustomerById', async (req, res) => {
   }
 });
 
+//getting the ids of all the customers assigned to an employee
+router.get('/getAssignedCustomers', async (req, res) => {
+  //getting params
+  const employee_id = req.query.employee_id;
+
+  try {
+    const {data, error} = await supabase
+      .from('customers')
+      .select('id')
+      .eq('employee_id', employee_id)
+    
+    if (error) {
+      console.log('Supabase error:', error.message);
+      return res.status(500).json({ error: 'Datenbankfehler' });
+    }
+
+    res.json(data);
+  } catch (error) {
+    console.log('Server error:', err.message);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+})
+
 //exporting
 module.exports = router;

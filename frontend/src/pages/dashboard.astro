@@ -37,10 +37,21 @@ if (!me) {
 
 if (!me) return Astro.redirect("/");
 
-// Fetch the last 10 emails from the database for users client
+// Fetch emails from the database for the individual employee
 const client_id = me.client_id;
-const result = await fetch(`http://localhost:3000/api/emails/getMails?client_id=${client_id}`);
-const last10mails = await result.json();
+const result_customers = await fetch(`http://localhost:3000/api/customers/getAssignedCustomers?employee_id=${me.id}`);
+const customersJSON =  await result_customers.json();
+const len = customersJSON.length;
+var customers: number[] = [];
+for (let i = 0; i < len; i++) {
+  var customer_id = customersJSON[i].id;
+  customers.push(customer_id);
+}
+console.log(customers)
+const qs = customers.map(id => `ids=${encodeURIComponent(id)}`).join("&");
+console.log(qs)
+const mailresult = await fetch(`http://localhost:3000/api/emails/getMailsbyCustomerIds?${qs}`);
+const mails = await mailresult.json();
 
 // Admin Rolle prüfen. Rolle 1 = admin
 const { data: myRoles, error: rolesErr } = await supabase
@@ -131,7 +142,7 @@ try {
             </div>
             <div class="ml-4">
               <dt class="text-sm font-medium text-gray-500 truncate">Gesamte E-Mails</dt>
-              <dd class="text-2xl font-semibold text-gray-900">{last10mails.length}</dd>
+              <dd class="text-2xl font-semibold text-gray-900">{mails.length}</dd>
             </div>
           </div>
         </div>
@@ -173,9 +184,9 @@ try {
         </div>
         
         <div class="p-6">
-          {last10mails.length > 0 ? (
+          {mails.length > 0 ? (
             <ul class="space-y-3">
-              {last10mails.map((mail: any) => (
+              {mails.map((mail: any) => (
                 <li class="group">
                   <a 
                     href={`/tickets/${mail.customer_id}`}

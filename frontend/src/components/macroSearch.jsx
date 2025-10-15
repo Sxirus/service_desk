@@ -11,16 +11,18 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from "react"
  *  - maxSuggestions?: number (default 3)
  *  - minChars?: number (default 1)
  */
-export function TypeaheadSearch({
+export function MacroSearch({
   items,
   placeholder = "Suchen…",
   maxSuggestions = 3,
   minChars = 1,
+  eventName,
+  customerId
   }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(-1);
-  const listboxId = useMemo(() => `listbox-${Math.random().toString(36).slice(2)}`, []);
+  const listboxId = useMemo(() => `listbox-${customerId}`);
   const inputRef = useRef(null);
   const listRef = useRef(null);
 
@@ -84,13 +86,19 @@ export function TypeaheadSearch({
   }, [suggestions, query, minChars]);
 
   const select = useCallback((idx) => {
-    const s = suggestions[idx];
-    if (!s) return;
+    let s = suggestions[idx];
+    if (!s) return;  
+
+    //TODO: überarbeiten 
+    try{
+      s.text = s.text.toString();
+    } catch {
+
+    }
 
     const text = s.text && s.text.length > 0 ? s.text : s.title;
-    console.log(text)
     window.dispatchEvent(
-      new CustomEvent("MacroChoosen", {
+      new CustomEvent(eventName, {
         detail: { text }
       })
     );
