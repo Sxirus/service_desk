@@ -6,6 +6,9 @@ import { ROLE_IDS } from "../types/database";
 import type { 
   GetMyEmployeeResponse,
 } from "../types/database";
+import { createPageLogger } from "../utils/logger.ts";
+
+const log = createPageLogger('auth-helpers');
 
 export interface AuthContext {
   user: {
@@ -37,13 +40,20 @@ export interface SidebarData {
  */
 export async function getAuthContext(
   supabase: SupabaseClient,
-  cookies: AstroCookies
+  cookies: AstroCookies,
+  preAuthenticatedUser?: any
 ): Promise<AuthContext | null> {
   // Verify user
-  const { data: { user }, error: userErr } = await supabase.auth.getUser();
-  if (userErr || !user) {
-    console.error("[auth] User verification failed:", userErr?.message);
-    return null;
+  let user = preAuthenticatedUser;
+  log.info("Using preAuthenticatedUser for Auth");
+
+  if (!user) {
+    log.info("No pre-authenticated user provided, fetching from Supabase");
+    const { data: { user }, error: userErr } = await supabase.auth.getUser();
+    if (userErr || !user) {
+      console.error("[auth] User verification failed:", userErr?.message);
+      return null;
+    }
   }
 
   // Get employee - try RPC first, then direct query
@@ -58,7 +68,7 @@ export async function getAuthContext(
       employee = data as GetMyEmployeeResponse;
     }
   } catch (err) {
-    console.log("[auth] RPC failed, trying direct query");
+    log.error("RPC failed, trying direct query");
   }
 
   if (!employee) {
@@ -111,7 +121,7 @@ export async function getSidebarData(
   supabase: SupabaseClient,
   authContext: AuthContext
 ): Promise<SidebarData> {
-  console.log("[sidebar] Loading sidebar data");
+  log.info("Loading sidebar data");
 
   // Parallel queries for better performance
   const [
@@ -154,12 +164,13 @@ export async function getSidebarData(
  */
 export async function getCompletePageContext(
   supabase: SupabaseClient,
-  cookies: AstroCookies
+  cookies: AstroCookies,
+  preAuthenticatedUser?: any
 ): Promise<{
   authContext: AuthContext;
   sidebarData: SidebarData;
 } | null> {
-  const authContext = await getAuthContext(supabase, cookies);
+  const authContext = await getAuthContext(supabase, cookies, preAuthenticatedUser);
   if (!authContext) return null;
   
   const sidebarData = await getSidebarData(supabase, authContext);
