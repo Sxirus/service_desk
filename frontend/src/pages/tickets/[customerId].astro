@@ -612,64 +612,6 @@ log.info("[customer-ticket] Page setup complete, rendering");
     });
 
     // ============================================================================
-    // RESIZE FUNCTIONALITY
-    // ============================================================================
-
-    let isResizing = false;
-    let startY = 0;
-    let startHeight = 0;
-    const MIN_HEIGHT = 150;
-    const MAX_HEIGHT = 600;
-
-    // Load saved height from localStorage
-    const savedHeight = localStorage.getItem('replyAreaHeight');
-    if (savedHeight && replyContainer) {
-      const height = parseInt(savedHeight);
-      if (height >= MIN_HEIGHT && height <= MAX_HEIGHT) {
-        replyContainer.style.height = `${height}px`;
-        console.log("[customer-ticket-client] Loaded saved height:", height);
-      }
-    }
-
-    // Start resize
-    resizeHandle?.addEventListener('mousedown', (e: MouseEvent) => {
-      e.preventDefault();
-      isResizing = true;
-      startY = e.clientY;
-      startHeight = replyContainer?.offsetHeight || 180;
-      document.body.style.cursor = 'ns-resize';
-      document.body.style.userSelect = 'none';
-      
-      console.log("[customer-ticket-client] Resize started at height:", startHeight);
-    });
-
-    // Handle resize
-    document.addEventListener('mousemove', (e: MouseEvent) => {
-      if (!isResizing || !replyContainer) return;
-
-      const deltaY = startY - e.clientY;
-      const newHeight = Math.min(Math.max(startHeight + deltaY, MIN_HEIGHT), MAX_HEIGHT);
-      
-      replyContainer.style.height = `${newHeight}px`;
-    });
-
-    // End resize
-    document.addEventListener('mouseup', () => {
-      if (isResizing) {
-        isResizing = false;
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-        
-        // Save height to localStorage
-        if (replyContainer) {
-          const currentHeight = replyContainer.offsetHeight;
-          localStorage.setItem('replyAreaHeight', currentHeight.toString());
-          console.log("[customer-ticket-client] Resize ended, height saved:", currentHeight);
-        }
-      }
-    });
-
-    // ============================================================================
     // COLLAPSE/EXPAND FUNCTIONALITY
     // ============================================================================
 
@@ -716,6 +658,66 @@ log.info("[customer-ticket] Page setup complete, rendering");
 
       // Save collapsed state
       localStorage.setItem('replyAreaCollapsed', isCollapsed.toString());
+    });
+
+    // ============================================================================
+    // RESIZE FUNCTIONALITY
+    // ============================================================================
+
+    let isResizing = false;
+    let startY = 0;
+    let startHeight = 0;
+    const MIN_HEIGHT = 150;
+    const MAX_HEIGHT = 600;
+
+    // Load saved height from localStorage
+    const savedHeight = localStorage.getItem('replyAreaHeight');
+    if (savedHeight && replyContainer) {
+      const height = parseInt(savedHeight);
+      if (height >= MIN_HEIGHT && height <= MAX_HEIGHT) {
+        replyContainer.style.height = `${height}px`;
+        console.log("[customer-ticket-client] Loaded saved height:", height);
+      }
+    }
+
+    // Start resize
+    resizeHandle?.addEventListener('mousedown', (e: MouseEvent) => {
+      e.preventDefault();
+      if(isCollapsed) return; // Prevent resizing when collapsed
+      isResizing = true;
+      startY = e.clientY;
+      startHeight = replyContainer?.offsetHeight || 180;
+      document.body.style.cursor = 'ns-resize';
+      document.body.style.userSelect = 'none';
+      
+      console.log("[customer-ticket-client] Resize started at height:", startHeight);
+    });
+
+    // Handle resize
+    document.addEventListener('mousemove', (e: MouseEvent) => {
+      if (!isResizing || isCollapsed || !replyContainer) return;
+
+      const deltaY = startY - e.clientY;
+      const newHeight = Math.min(Math.max(startHeight + deltaY, MIN_HEIGHT), MAX_HEIGHT);
+      
+      replyContainer.style.height = `${newHeight}px`;
+    });
+
+    // End resize
+    document.addEventListener('mouseup', () => {
+      if(isCollapsed) return; // Prevent resizing when collapsed
+      if (isResizing) {
+        isResizing = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        
+        // Save height to localStorage
+        if (replyContainer) {
+          const currentHeight = replyContainer.offsetHeight;
+          localStorage.setItem('replyAreaHeight', currentHeight.toString());
+          console.log("[customer-ticket-client] Resize ended, height saved:", currentHeight);
+        }
+      }
     });
 
     // ============================================================================
