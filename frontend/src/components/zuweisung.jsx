@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 
 /**
- * TypeaheadSearch
+ * Assign
  * - Sendet den ausgewählten Item-Text (item.text, Fallback: item.title) via CustomEvent
  * - Optional: targetId → Ziel-Input in Astro (document.getElementById(targetId))
  *
