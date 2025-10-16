@@ -18,7 +18,14 @@ export function Assign({
   minChars = 1,
   eventName,
   customerId,
+  assigned
   }) {
+  
+  //checking if an employee is assigned
+  if (assigned != null) {
+    placeholder = assigned;
+  }
+    
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(-1);
