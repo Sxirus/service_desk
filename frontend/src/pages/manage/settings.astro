@@ -18,6 +18,7 @@ import { createClient } from "../../lib/supabase.ts";
 import { getCompletePageContext } from "../../lib/auth-helpers.ts";
 import { ROLE_IDS } from "../../types/database.ts";
 import type { EmailSignatureResponse } from "../../types/database.ts";
+import { apiClient } from "../../utils/api.ts";
 
 // Components
 import AdminShell from "@/components/AdminShell";
@@ -77,17 +78,18 @@ let signature = "";
 let signatureFetchError = false;
 
 try {
-  const apiUrl = `http://localhost:3000/api/settings/getSignature?client_id=${authContext.employee.client_id}`;
-  console.log("[general-settings] API URL:", apiUrl);
-  
-  const resultSignature = await fetch(apiUrl);
-  
-  if (!resultSignature.ok) {
-    throw new Error(`HTTP ${resultSignature.status}: ${resultSignature.statusText}`);
-  }
-  
-  const signatureArray: EmailSignatureResponse[] = await resultSignature.json();
-  
+  const apiUrl = `http://localhost:3000/api/settings/getSignature`;
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return Astro.redirect("/");
+
+  const signatureArray = await fetch(apiUrl, {
+    headers: {
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json'
+    }
+  }).then(res => res.json());
+
   if (Array.isArray(signatureArray) && signatureArray.length > 0) {
     signature = signatureArray[0].email_signature ?? "";
     console.log("[general-settings] Email signature loaded successfully:", {
@@ -197,7 +199,6 @@ console.log("[general-settings] Page setup complete, rendering");
             <div class="flex items-center justify-end pt-2">
               <button
                 id="save-signature"
-                data-client-id={authContext.employee.client_id}
                 type="button"
                 class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
               >
@@ -239,6 +240,7 @@ console.log("[general-settings] Page setup complete, rendering");
 
     import { toast } from "sonner";
     import { validateEmailSignature } from "../../lib/validation";
+    import { apiClient } from "../../utils/api";
 
     /**
      * Save button click handler with validation
@@ -250,11 +252,9 @@ console.log("[general-settings] Page setup complete, rendering");
       console.log("[settings-script] Save button handler initialized");
 
       saveButton.addEventListener("click", async () => {
-        const clientId = saveButton.dataset.clientId;
         const signature = signatureTextarea.value || "";
 
         console.log("[settings-script] Validating signature:", {
-          clientId,
           signatureLength: signature.length
         });
 
@@ -272,7 +272,6 @@ console.log("[general-settings] Page setup complete, rendering");
         const sanitizedSignature = validation.sanitized!;
 
         console.log("[settings-script] Saving signature:", {
-          clientId,
           originalLength: signature.length,
           sanitizedLength: sanitizedSignature.length
         });
@@ -288,12 +287,10 @@ console.log("[general-settings] Page setup complete, rendering");
         `;
 
         try {
-          const apiUrl = `http://localhost:3000/api/settings/updateSignature?client_id=${clientId}`;
-          
-          const response = await fetch(apiUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ signature: sanitizedSignature }),
+          const apiUrl = `http://localhost:3000/api/settings/updateSignature`;
+
+          const response = await apiClient.post('/settings/updateSignature', {
+            signature: sanitizedSignature
           });
 
           if (!response.ok) {

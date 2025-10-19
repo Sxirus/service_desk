@@ -16,7 +16,7 @@ export function createClient({ request, cookies }: { request: Request; cookies: 
 
   return createServerClient(
     import.meta.env.SUPABASE_URL!,
-    import.meta.env.SUPABASE_ANON_KEY!,
+    import.meta.env.PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         /**

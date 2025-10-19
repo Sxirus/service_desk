@@ -37,6 +37,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, CheckCircle2, XCircle, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
+import { apiClient } from '@/utils/api';
 
 /**
  * Props interface for the Shopify Management Panel
@@ -197,6 +198,7 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
       description: 'You will be asked to authorize the connection.'
     });
 
+    // ✅ FIXED: Use relative path, let browser use current origin
     // Build OAuth install URL with shop name and client ID
     const targetUrl = `/api/shopify/install?shop=${encodeURIComponent(shopName.trim())}&clientId=${clientId}`;
     console.log('[SHOPIFY_PANEL] Redirect URL:', targetUrl);
@@ -228,9 +230,9 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
     try {
       console.log('[SHOPIFY_PANEL] Sending test request for client:', clientId);
       
-      // Call our test connection API endpoint
-      const response = await fetch(`/api/shopify/testConnection?clientId=${clientId}`);
-      const data = await response.json();
+      // ✅ FIXED: apiClient.get() returns JSON already, no need to call .json()
+      // ✅ FIXED: Auth token automatically added by apiClient
+      const data = await apiClient.get('/shopify/testConnection');
 
       console.log('[SHOPIFY_PANEL] Test response received:', data);
 
@@ -295,18 +297,14 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
     try {
       console.log('[SHOPIFY_PANEL] Sending disconnect request for client:', clientId);
 
-      // Call disconnect API endpoint
-      const response = await fetch('/api/shopify/disconnect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId }),
-      });
-
-      const data = await response.json();
+      // ✅ FIXED: Remove clientId from body - comes from auth token
+      // ✅ FIXED: apiClient.post() returns JSON already, no need to call .json()
+      const data = await apiClient.post('/shopify/disconnect');
 
       console.log('[SHOPIFY_PANEL] Disconnect response:', data);
 
-      if (response.ok && data.success) {
+      // ✅ FIXED: Check data.success instead of response.ok (apiClient throws on !ok)
+      if (data.success) {
         console.log('[SHOPIFY_PANEL] Successfully disconnected');
         
         // Update loading toast to success

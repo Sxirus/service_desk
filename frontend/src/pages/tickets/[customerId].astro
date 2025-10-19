@@ -20,9 +20,14 @@ import { formatDate } from "../../utils/formatDate.js";
 import { MacroSearch } from "../../components/macroSearch.jsx";
 import { Assign } from "../../components/zuweisung.jsx";
 import { createClient } from "../../lib/supabase.ts";
+import { ShopifyOrders } from "../../components/ShopifyOrders";
+import { CustomerInfo } from "../../components/CustomerInfo";
 import { getCompletePageContext } from "../../lib/auth-helpers.ts";
 import { createPageLogger, perf } from "../../utils/logger.ts";
 import AdminShell from "@/components/AdminShell";
+import type { ShopifyConfig, ShopifyClientData } from "../../types/shopify.types";
+import { apiClient } from "../../utils/api.ts";
+
 
 const log = createPageLogger('customer-ticket');
 log.info('Page accessed');
@@ -52,6 +57,12 @@ const supabase = Astro.locals.supabase || createClient({
   request: Astro.request, 
   cookies: Astro.cookies 
 });
+
+const { data: { session } } = await supabase.auth.getSession();
+if (!session) {
+  log.error('No session found, redirecting to login');
+  return Astro.redirect("/");
+}
 
 log.info('Verifying authentication');
 // PASS PRE-AUTHENTICATED USER - NO DOUBLE AUTH!
@@ -188,8 +199,12 @@ if (employeeErr) {
 
 //fetching all employees für zuweisung
 console.log("[customer-ticket] Fetching employees");
-const resultEmployees = await fetch(`http://localhost:3000/api/client/getEmployees?client_id=${clientId}`);
-const employeeArray = await resultEmployees.json();
+const employeeArray = await fetch('http://localhost:3000/api/client/getEmployees', {
+  headers: {
+    'Authorization': `Bearer ${session.access_token}`,
+    'Content-Type': 'application/json'
+  }
+}).then(res => res.json());
 
 //transforming the employeeArray to fit in the type search
 const transEmployeeArray = employeeArray.map((employee : any) => ({
@@ -289,9 +304,9 @@ log.info("Client data loaded:", {
 
 log.info("Macros loaded:", macroArray?.length || 0);
 
-const shopifyConfig = {
+const shopifyConfig: ShopifyConfig = {
   connected: clientData?.shopify_connected || false,
-  customerId: customerId
+  customerId: customerId as string
 };
 
 perf.end(processingTimer, {
@@ -474,84 +489,21 @@ log.info("[customer-ticket] Page setup complete, rendering");
       <div class="w-80 flex-shrink-0 border-l bg-muted/30 flex flex-col overflow-hidden">
         <div class="flex-1 overflow-y-auto p-6 space-y-6">
           
-          <!-- Customer Information Card -->
-          <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
-            <div class="p-4 space-y-3">
-              <h3 class="font-semibold leading-none tracking-tight">
-                Customer Information
-              </h3>
-              <div class="space-y-2">
-                <div>
-                  <p class="text-xs text-muted-foreground">Name</p>
-                  <p class="text-sm font-medium">{customer?.name}</p>
-                </div>
-                <div>
-                  <p class="text-xs text-muted-foreground">Email</p>
-                  <p class="text-sm font-medium text-blue-600" style="word-break: break-word; overflow-wrap: anywhere;">{emailAddress}</p>
-                </div>
-              </div>
-            </div>
-          </div>
+          <!-- Customer Information Component -->
+          <CustomerInfo 
+            client:load
+            customer={customer}
+            emailAddress={emailAddress}
+            shopifyConfig={shopifyConfig}
+            clientData={clientData || {}}
+          />
 
-          <!-- Order History Card -->
-          {clientData && clientData.shopify_connected ? (
-            <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
-              <div class="p-4 space-y-3">
-                <h3 class="font-semibold leading-none tracking-tight">
-                  Order History
-                </h3>
-                
-                <div id="shopify-loading" class="space-y-2">
-                  <div class="rounded-lg border bg-muted p-3 animate-pulse">
-                    <div class="h-4 bg-muted-foreground/20 rounded w-3/4 mb-2"></div>
-                    <div class="h-3 bg-muted-foreground/20 rounded w-1/2"></div>
-                  </div>
-                  <div class="rounded-lg border bg-muted p-3 animate-pulse">
-                    <div class="h-4 bg-muted-foreground/20 rounded w-3/4 mb-2"></div>
-                    <div class="h-3 bg-muted-foreground/20 rounded w-1/2"></div>
-                  </div>
-                  <p class="text-xs text-muted-foreground text-center mt-2">
-                    Loading orders...
-                  </p>
-                </div>
-                
-                <div id="shopify-error" class="hidden rounded-lg border border-destructive/50 bg-destructive/10 p-3">
-                  <p class="text-xs text-destructive">Failed to load orders</p>
-                  <button 
-                    onclick="window.loadShopifyOrders()"
-                    class="text-xs text-destructive hover:underline mt-2"
-                  >
-                    Retry
-                  </button>
-                </div>
-                
-                <div id="shopify-empty" class="hidden rounded-lg border bg-muted p-3 text-center">
-                  <p class="text-xs text-muted-foreground">
-                    No orders found for this customer
-                  </p>
-                </div>
-                
-                <div id="shopify-orders" class="hidden space-y-2 max-h-96 overflow-y-auto">
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
-              <div class="p-4 space-y-3">
-                <h3 class="font-semibold leading-none tracking-tight">
-                  Order History
-                </h3>
-                <div class="rounded-lg border bg-muted p-3 text-center">
-                  <p class="text-xs text-muted-foreground">
-                    Shopify not connected
-                  </p>
-                  <p class="text-xs text-muted-foreground mt-1">
-                    Connect your store in settings to view orders
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+          <!-- Shopify Orders Component -->
+          <ShopifyOrders 
+            client:load
+            shopifyConfig={shopifyConfig}
+            clientData={clientData || {}}
+          />
 
           <!-- Quick Responses Card -->
           <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
@@ -593,6 +545,8 @@ log.info("[customer-ticket] Page setup complete, rendering");
     // ============================================================================
     // GET DOM ELEMENTS
     // ============================================================================
+
+    import  { apiClient } from '../../utils/api.ts';
 
     console.log("[customer-ticket-client] Script initialized");
     const textarea = document.getElementById('answer') as HTMLTextAreaElement;
@@ -762,15 +716,31 @@ log.info("[customer-ticket] Page setup complete, rendering");
 
       const zuweisung = e as CustomEvent;
       const employeeId = zuweisung?.detail?.text;
-      const customerId = document.getElementById("Zuweisen")?.dataset.customerid;
-      const data = {employee_id: employeeId, customer_id: customerId}
+      const zuweisungElement = document.getElementById("Zuweisen");
 
-      await fetch("http://localhost:3000/api/client/assignEmployee", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+      // Check for valid employeeId
+      if (employeeId === undefined || employeeId === null) {
+        console.log("[customer-ticket-client] Missing employeeId, skipping");
+        return;
+      }
+      
+      // Check for zuweisung element
+      if (!zuweisungElement) {
+        console.log("[customer-ticket-client] Zuweisung element not found, skipping");
+        return;
+      }
+      const customerId = zuweisungElement.dataset.customerid;
+
+      // Check for valid customerId
+      if (!customerId) {
+        console.log("[customer-ticket-client] Missing customerId, skipping");
+        return;
+      }
+
+      await apiClient.post('/api/client/assignEmployee', {
+        employee_id: parseInt(employeeId),
+        customer_id: parseInt(customerId)
       });
-
     });
 
 
@@ -834,11 +804,11 @@ log.info("[customer-ticket] Page setup complete, rendering");
         if (body.trim() !== '') {
           console.log("[customer-ticket-client] Sending email");
 
-          await fetch(`http://localhost:3000/api/emails/sendMail?customerId=${customerId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ to: emailAddress, subject: newSubject, text: body }),
-          });
+        await apiClient.post(`/api/emails/sendMail?customerId=${customerId}`, {
+          to: emailAddress,
+          subject: newSubject,
+          text: body
+        });
 
           console.log("[customer-ticket-client] Email sent successfully");
         } else {
@@ -847,9 +817,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
 
         // Mark conversation as read
         console.log("[customer-ticket-client] Marking conversation as read");
-        await fetch(`http://localhost:3000/api/emails/makeRead?customerId=${customerId}`, {
-          method: 'POST' 
-        });
+        await apiClient.post(`/api/emails/makeRead?customerId=${customerId}`);
 
         console.log("[customer-ticket-client] Redirecting to dashboard");
         window.location.href = '/dashboard';
@@ -870,159 +838,5 @@ log.info("[customer-ticket] Page setup complete, rendering");
     });
 
     console.log("[customer-ticket-client] All event listeners attached");
-  </script>
-  
-  <script define:vars={{ shopifyConfig, clientData }}>
-    window.loadShopifyOrders = async function() {
-      console.log("[shopify-loader] Starting async Shopify order fetch");
-      
-      const loadingEl = document.getElementById('shopify-loading');
-      const errorEl = document.getElementById('shopify-error');
-      const emptyEl = document.getElementById('shopify-empty');
-      const ordersEl = document.getElementById('shopify-orders');
-      
-      if (loadingEl) loadingEl.classList.remove('hidden');
-      if (errorEl) errorEl.classList.add('hidden');
-      if (emptyEl) emptyEl.classList.add('hidden');
-      if (ordersEl) ordersEl.classList.add('hidden');
-      
-      try {
-        const response = await fetch(
-          `http://localhost:4321/api/shopify/getCustomerOrders?customerId=${shopifyConfig.customerId}`
-        );
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        if (loadingEl) loadingEl.classList.add('hidden');
-        
-        if (data.error) {
-          console.error("[shopify-loader] API returned error:", data.error);
-          if (errorEl) errorEl.classList.remove('hidden');
-          return;
-        }
-        
-        const orders = data.orders || [];
-        console.log("[shopify-loader] Loaded", orders.length, "orders");
-        
-        if (orders.length === 0) {
-          if (emptyEl) emptyEl.classList.remove('hidden');
-          return;
-        }
-        
-        renderOrders(orders);
-        
-      } catch (error) {
-        console.error("[shopify-loader] Error loading orders:", error);
-        if (loadingEl) loadingEl.classList.add('hidden');
-        if (errorEl) errorEl.classList.remove('hidden');
-      }
-    };
-
-    function renderOrders(orders) {
-      const ordersEl = document.getElementById('shopify-orders');
-      if (!ordersEl) return;
-      
-      const displayOrders = orders.slice(0, 10);
-      
-      const ordersHTML = displayOrders.map(order => `
-        <div class="rounded-lg border bg-background p-3 hover:bg-accent transition-colors">
-          <div class="flex justify-between items-start mb-2">
-            <div>
-              <p class="text-sm font-semibold">Order #${order.order_number}</p>
-              <p class="text-xs text-muted-foreground">
-                ${new Date(order.created_at).toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric'
-                })}
-              </p>
-            </div>
-            <span class="text-xs px-2 py-1 rounded-full font-medium ${getFinancialStatusClass(order.financial_status)}">
-              ${order.financial_status}
-            </span>
-          </div>
-          <div class="space-y-2">
-            <div class="flex justify-between items-center">
-              <span class="text-xs text-muted-foreground">Total:</span>
-              <span class="text-sm font-semibold">${order.total_price} ${order.currency}</span>
-            </div>
-            ${order.fulfillment_status ? `
-              <div class="flex justify-between items-center">
-                <span class="text-xs text-muted-foreground">Fulfillment:</span>
-                <span class="text-xs px-2 py-0.5 rounded ${getFulfillmentStatusClass(order.fulfillment_status)}">
-                  ${order.fulfillment_status}
-                </span>
-              </div>
-            ` : ''}
-            ${order.line_items && order.line_items.length > 0 ? `
-              <div class="mt-2 pt-2 border-t">
-                <p class="text-xs text-muted-foreground mb-1">
-                  ${order.line_items.length} item${order.line_items.length !== 1 ? 's' : ''}
-                </p>
-                <ul class="space-y-1">
-                  ${order.line_items.slice(0, 2).map(item => `
-                    <li class="text-xs">• ${item.quantity}x ${item.name}</li>
-                  `).join('')}
-                  ${order.line_items.length > 2 ? `
-                    <li class="text-xs text-muted-foreground italic">+ ${order.line_items.length - 2} more</li>
-                  ` : ''}
-                </ul>
-              </div>
-            ` : ''}
-            ${order.id ? `
-              <div class="mt-2 pt-2 border-t">
-                <a href="https://${clientData.shopify_store_url}/admin/orders/${order.id}"
-                   target="_blank"
-                   rel="noopener noreferrer"
-                   class="text-xs text-primary hover:underline font-medium flex items-center gap-1">
-                  View in Shopify
-                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                  </svg>
-                </a>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-      `).join('');
-      
-      ordersEl.innerHTML = ordersHTML;
-      ordersEl.classList.remove('hidden');
-    }
-
-    function getFinancialStatusClass(status) {
-      switch (status) {
-        case 'paid':
-          return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-        case 'pending':
-          return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
-        case 'refunded':
-          return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-        default:
-          return 'bg-muted text-muted-foreground';
-      }
-    }
-
-    function getFulfillmentStatusClass(status) {
-      switch (status) {
-        case 'fulfilled':
-          return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-        case 'partial':
-          return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
-        default:
-          return 'bg-muted text-muted-foreground';
-      }
-    }
-
-    if (shopifyConfig.connected) {
-      setTimeout(() => {
-        console.log("[shopify-loader] Starting delayed Shopify order fetch");
-        window.loadShopifyOrders();
-      }, 100);
-    }
   </script>
 </BaseLayout>

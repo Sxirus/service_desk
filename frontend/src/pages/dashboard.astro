@@ -15,6 +15,10 @@ const supabase = createClient({
 const { data: { user }, error: userErr } = await supabase.auth.getUser();
 if (userErr || !user) return Astro.redirect("/");
 
+// Get session for API calls
+const { data: { session } } = await supabase.auth.getSession();
+if (!session) return Astro.redirect("/");
+
 // "me" ermitteln. Erst RPC, sonst Fallback
 let me: { id: number; client_id: number } | null = null;
 
@@ -39,18 +43,34 @@ if (!me) return Astro.redirect("/");
 
 // Fetch emails from the database for the individual employee
 const client_id = me.client_id;
-const result_customers = await fetch(`http://localhost:3000/api/customers/getAssignedCustomers?employee_id=${me.id}`);
-const customersJSON =  await result_customers.json();
+
+// SERVER-SIDE API CALL with auth token
+// Note: Remove client_id from query - it comes from the auth token now
+const result_customers = await fetch(`http://localhost:3000/api/customers/getAssignedCustomers?employee_id=${me.id}`, {
+  headers: {
+    'Authorization': `Bearer ${session.access_token}`,
+    'Content-Type': 'application/json'
+  }
+});
+const customersJSON = await result_customers.json();
 const len = customersJSON.length;
 var customers: number[] = [];
 for (let i = 0; i < len; i++) {
   var customer_id = customersJSON[i].id;
   customers.push(customer_id);
 }
-console.log(customers)
+
+console.log(customers);
 const qs = customers.map(id => `ids=${encodeURIComponent(id)}`).join("&");
-console.log(qs)
-const mailresult = await fetch(`http://localhost:3000/api/emails/getMailsbyCustomerIds?${qs}`);
+console.log(qs);
+
+// SERVER-SIDE API CALL with auth token
+const mailresult = await fetch(`http://localhost:3000/api/emails/getMailsbyCustomerIds?${qs}`, {
+  headers: {
+    'Authorization': `Bearer ${session.access_token}`,
+    'Content-Type': 'application/json'
+  }
+});
 const mails = await mailresult.json();
 
 // Admin Rolle prüfen. Rolle 1 = admin
