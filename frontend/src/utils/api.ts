@@ -144,7 +144,7 @@ export async function serverApiCall(
   accessToken: string,
   options: RequestInit = {}
 ) {
-  const baseURL = 'http://localhost:3000/api';
+  const baseURL = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
   const url = endpoint.startsWith('http') 
     ? endpoint 
     : `${baseURL}${endpoint}`;
