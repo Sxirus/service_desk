@@ -102,7 +102,8 @@ const [
   { data: sentMails, error: sentError },
   { data: macroArray, error: macroError },
   { data: clientData, error: clientError },
-  { data: assignedEmployeeArray, error: assignedEmployeeErr}
+  { data: assignedEmployeeArray, error: assignedEmployeeErr},
+  { data: employeeArray, error: employeeErr}
 ] = await Promise.all([
   supabase
     .from("customers")
@@ -170,7 +171,13 @@ const [
   supabase
     .from("customers")
     .select("employee_id")
-    .eq("id", customerId)
+    .eq("id", customerId),
+  
+  supabase
+    .from("employees")
+    .select("id, name")
+    .eq("client_id", clientId)
+    .order("name")
 ]);
 
 perf.end(queryTimer, {
@@ -186,12 +193,6 @@ perf.end(dataFetchTimer);
 // ============================================================================
 // ERROR HANDLING
 // ============================================================================
-
-const [
-  {data: employeeResult, error: employeeErr}
-] = await Promise.all([
-  supabase.from("customers").select("employee_id").eq("id", customerId)
-])
 
 //Log any errors
 if (employeeErr) {
@@ -299,15 +300,17 @@ const shopifyConfig: ShopifyConfig = {
   customerId: customerId as string
 };
 
+console.log(employeeArray);
+
 //getting the employee that is assigned
 var assignedEmployeeName = null;
 if (assignedEmployeeArray[0].employee_id != null) {
   let assignedEmployeeId = assignedEmployeeArray[0].employee_id
-  assignedEmployeeName = employeeResult.find((item : any) => item.id === assignedEmployeeId).name
+  assignedEmployeeName = employeeArray.find((item : any) => item.id === assignedEmployeeId).name
 }
 
 //transforming the employeeArray to fit in the type search
-const transEmployeeArray = employeeResult.map((employee : any) => ({
+const transEmployeeArray = employeeArray.map((employee : any) => ({
   title: employee.name,
   text: employee.id
 }))
