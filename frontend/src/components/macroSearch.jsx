@@ -1,3 +1,4 @@
+import { interpreter } from "@/utils/macroInterpreter";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 
 /**
@@ -17,12 +18,13 @@ export function MacroSearch({
   maxSuggestions = 3,
   minChars = 1,
   eventName,
-  customerId
+  customerID,
+  ctx
   }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(-1);
-  const listboxId = useMemo(() => `listbox-${customerId}`);
+  const listboxId = useMemo(() => `listbox-${customerID}`);
   const inputRef = useRef(null);
   const listRef = useRef(null);
 
@@ -96,7 +98,8 @@ export function MacroSearch({
 
     }
 
-    const text = s.text && s.text.length > 0 ? s.text : s.title;
+    var text = s.text && s.text.length > 0 ? s.text : s.title;
+    text = interpreter(text, ctx);
     window.dispatchEvent(
       new CustomEvent(eventName, {
         detail: { text }

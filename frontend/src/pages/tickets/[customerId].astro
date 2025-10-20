@@ -313,6 +313,12 @@ const transEmployeeArray = employeeArray.map((employee : any) => ({
   text: employee.id
 }))
 
+//context for macro interpreter
+var ctx = {
+  customerID: customerId,
+  employeeName: assignedEmployeeName
+}
+
 perf.end(processingTimer, {
   emailCount: emailArray.length,
   hasShopify: shopifyConfig.connected
@@ -520,7 +526,8 @@ log.info("[customer-ticket] Page setup complete, rendering");
                 items={macroArray}
                 placeholder="Search macros..."
                 eventName='MacroChoosen' 
-                customerId={customerId}             
+                customerID={customerId} 
+                ctx={ctx}            
                 />
             </div>
           </div>
