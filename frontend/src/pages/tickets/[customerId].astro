@@ -101,7 +101,8 @@ const [
   { data: incomingMails, error: incomingError },
   { data: sentMails, error: sentError },
   { data: macroArray, error: macroError },
-  { data: clientData, error: clientError }
+  { data: clientData, error: clientError },
+  { data: assignedEmployeeArray, error: assignedEmployeeErr}
 ] = await Promise.all([
   supabase
     .from("customers")
@@ -164,7 +165,12 @@ const [
       shopify_scope
     `)
     .eq("id", clientId)
-    .single()
+    .single(),
+
+  supabase
+    .from("customers")
+    .select("employee_id")
+    .eq("id", customerId)
 ]);
 
 perf.end(queryTimer, {
@@ -255,6 +261,9 @@ if (sentError) {
 if (macroError) {
   log.error('Error fetching macros:', macroError);
 }
+if (assignedEmployeeErr) {
+  log.error('Error fetching the assigned employee', assignedEmployeeErr)
+}
 
 perf.end(errorCheckTimer);
 
@@ -308,6 +317,24 @@ const shopifyConfig: ShopifyConfig = {
   connected: clientData?.shopify_connected || false,
   customerId: customerId as string
 };
+
+//fetching all employees für zuweisung
+console.log("[customer-ticket] Fetching employees");
+const resultEmployees = await fetch(`http://localhost:3000/api/client/getEmployees?client_id=${clientId}`);
+const employeeArray = await resultEmployees.json();
+
+//getting the employee that is assigned
+var assignedEmployeeName = null;
+if (assignedEmployeeArray[0].employee_id != null) {
+  let assignedEmployeeId = assignedEmployeeArray[0].employee_id
+  assignedEmployeeName = employeeArray.find((item : any) => item.id === assignedEmployeeId).name
+}
+
+//transforming the employeeArray to fit in the type search
+const transEmployeeArray = employeeArray.map((employee : any) => ({
+  title: employee.name,
+  text: employee.id
+}))
 
 perf.end(processingTimer, {
   emailCount: emailArray.length,
@@ -533,6 +560,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
                 placeholder="Search employee..."
                 eventName='Zuweisung'
                 customerId={customerId}
+                assigned={assignedEmployeeName}
               />
             </div>
           </div>     
@@ -778,7 +806,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
       const signature = button.dataset.signature;
 
       let body = textarea?.value || '';
-      body = body.trim() ? body + '\n\n' + (signature || '') : (signature || '');
+      body = body.trim();
 
       console.log("[customer-ticket-client] Email data:", {
         to: emailAddress,
@@ -814,7 +842,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
         } else {
           console.log("[customer-ticket-client] Empty message, skipping send");
         }
-
+        
         // Mark conversation as read
         console.log("[customer-ticket-client] Marking conversation as read");
         await apiClient.post(`/api/emails/makeRead?customerId=${customerId}`);
