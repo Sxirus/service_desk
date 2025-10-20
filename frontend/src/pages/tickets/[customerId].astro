@@ -203,25 +203,6 @@ if (employeeErr) {
   console.log("[customer-ticket] Data Loaded")
 }
 
-//fetching all employees für zuweisung
-console.log("[customer-ticket] Fetching employees");
-const employeeArray = await fetch('http://localhost:3000/api/client/getEmployees', {
-  headers: {
-    'Authorization': `Bearer ${session.access_token}`,
-    'Content-Type': 'application/json'
-  }
-}).then(res => res.json());
-
-//transforming the employeeArray to fit in the type search
-const transEmployeeArray = employeeArray.map((employee : any) => ({
-  title: employee.name,
-  text: employee.id
-}))
-
-console.log(employeeResult);
-//working with the assigned employee
-// const assignedEmp = await employeeResult.employee
-
 const errorCheckTimer = perf.start('page-load', 'error-handling');
 
 if (customerError) {
@@ -318,20 +299,15 @@ const shopifyConfig: ShopifyConfig = {
   customerId: customerId as string
 };
 
-//fetching all employees für zuweisung
-console.log("[customer-ticket] Fetching employees");
-const resultEmployees = await fetch(`http://localhost:3000/api/client/getEmployees?client_id=${clientId}`);
-const employeeArray = await resultEmployees.json();
-
 //getting the employee that is assigned
 var assignedEmployeeName = null;
 if (assignedEmployeeArray[0].employee_id != null) {
   let assignedEmployeeId = assignedEmployeeArray[0].employee_id
-  assignedEmployeeName = employeeArray.find((item : any) => item.id === assignedEmployeeId).name
+  assignedEmployeeName = employeeResult.find((item : any) => item.id === assignedEmployeeId).name
 }
 
 //transforming the employeeArray to fit in the type search
-const transEmployeeArray = employeeArray.map((employee : any) => ({
+const transEmployeeArray = employeeResult.map((employee : any) => ({
   title: employee.name,
   text: employee.id
 }))
