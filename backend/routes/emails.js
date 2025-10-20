@@ -123,7 +123,7 @@ router.post('/sendMail', async (req, res) => {
 });
 
 //making mails read by customerid
-router.get('/makeRead', async (req, res) => {
+router.post('/makeRead', async (req, res) => {
   const customerId = req.query.customerId;
 
   try {
