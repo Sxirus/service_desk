@@ -20,11 +20,17 @@ export function Assign({
   customerId,
   assigned
   }) {
+
+  const placeholderStyleAssigned = "placeholder-gray-800"
   
   //checking if an employee is assigned
-  if (assigned != null) {
-    placeholder = assigned;
-  }
+  const initialPlaceholder = assigned != null ? assigned : placeholder;
+  const [placeholderState, setPlaceholderState] = useState(initialPlaceholder);
+
+  const isAssigned = assigned != null;
+  const placeholderClass = isAssigned ? `${placeholderStyleAssigned}` : "placeholder-gray-400";
+  const [placeholderClassState, setPlaceholderClassState] = useState(placeholderClass);
+
     
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -110,6 +116,9 @@ export function Assign({
       })
     );
 
+    setPlaceholderState(s.title);
+    setPlaceholderClassState(placeholderStyleAssigned);
+
     setOpen(false);
     setQuery("");
     setHovered(-1);
@@ -161,8 +170,8 @@ export function Assign({
         <input
           ref={inputRef}
           type="search"
-          className="w-full bg-white rounded-2xl border border-gray-300 px-4 py-2 outline-none focus:ring-4 focus:ring-gray-200 shadow-sm"
-          placeholder={placeholder}
+          className={`w-full bg-white rounded-2xl border border-gray-300 px-4 py-2 outline-none focus:ring-4 focus:ring-gray-200 shadow-sm ${placeholderClassState}`}
+          placeholder={placeholderState}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
