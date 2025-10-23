@@ -749,7 +749,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
         return;
       }
 
-      await apiClient.post('/api/client/assignEmployee', {
+      await apiClient.post('/client/assignEmployee', {
         employee_id: parseInt(employeeId),
         customer_id: parseInt(customerId)
       });

@@ -1,8 +1,10 @@
+//data section
 const resolvers = {
   customerID: (ctx) => ctx.customerID,
   employeeName: (ctx) => ctx.employeeName
 }
 
+//interpreter
 export function interpreter(text, ctx = {}) {
   if (typeof text !== "string") return "";
   return text.replace(/\{([^{}]+)\}/g, (match, raw) => {
