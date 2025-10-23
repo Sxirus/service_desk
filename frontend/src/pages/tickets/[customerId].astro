@@ -101,6 +101,7 @@ const [
   { data: incomingMails, error: incomingError },
   { data: sentMails, error: sentError },
   { data: macroArray, error: macroError },
+  { data: macroGroups, error: macroGroupsError },
   { data: clientData, error: clientError },
   { data: assignedEmployeeArray, error: assignedEmployeeErr},
   { data: employeeArray, error: employeeErr}
@@ -146,14 +147,15 @@ const [
   
   supabase
     .from("macros")
-    .select(`
-      id,
-      title,
-      text
-    `)
+    .select("*")
     .eq("client_id", clientId)
     .order("title", { ascending: true }),
   
+  supabase
+    .from("macro_groups")
+    .select("*")
+    .eq("client_id", clientId),
+
   supabase
     .from("clients")
     .select(`
@@ -243,6 +245,11 @@ if (sentError) {
 if (macroError) {
   log.error('Error fetching macros:', macroError);
 }
+
+if (macroGroupsError) {
+  log.error("Error fetching macro groups", macroGroupsError);
+}
+
 if (assignedEmployeeErr) {
   log.error('Error fetching the assigned employee', assignedEmployeeErr)
 }
@@ -294,6 +301,9 @@ log.info("Client data loaded:", {
 });
 
 log.info("Macros loaded:", macroArray?.length || 0);
+
+console.log(macroArray);
+console.log(macroGroups);
 
 const shopifyConfig: ShopifyConfig = {
   connected: clientData?.shopify_connected || false,
@@ -524,6 +534,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
               <MacroSearch
                 client:load
                 items={macroArray}
+                groups={macroGroups}
                 placeholder="Search macros..."
                 eventName='MacroChoosen' 
                 customerID={customerId} 

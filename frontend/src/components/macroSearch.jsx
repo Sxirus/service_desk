@@ -1,56 +1,39 @@
 import { interpreter } from "@/utils/macroInterpreter";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 
-/**
- * TypeaheadSearch
- * - Sendet den ausgewählten Item-Text (item.text, Fallback: item.title) via CustomEvent
- * - Optional: targetId → Ziel-Input in Astro (document.getElementById(targetId))
- *
- * Props:
- *  - items: Array<{ id: string|number; client_id?: string|number; title: string; text?: string }>
- *  - placeholder?: string
- *  - maxSuggestions?: number (default 3)
- *  - minChars?: number (default 1)
- */
 export function MacroSearch({
-  items,
+  items,     // Macros: { id, client_id, title, text, group_id|null }
+  groups,    // Groups: { id, client_id, name, group_id|null (parent) }
   placeholder = "Suchen…",
   maxSuggestions = 3,
   minChars = 1,
-  eventName,
+  eventName = "appendToAstroInput",
   customerID,
   ctx
-  }) {
+}) {
   const [query, setQuery] = useState("");
+  const [focused, setFocused] = useState(false);
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(-1);
-  const listboxId = useMemo(() => `listbox-${customerID}`);
+  const [currentGroupId, setCurrentGroupId] = useState(null); // null = Root
+  const listboxId = useMemo(() => `listbox-${customerID}`, [customerID]);
   const inputRef = useRef(null);
   const listRef = useRef(null);
 
-  // Debounce
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(query), 120);
-    return () => clearTimeout(t);
-  }, [query]);
-
-  // Helpers
+  // ---- utils ----
   const norm = (s) => (s || "").toString().trim().toLowerCase();
 
   const levenshtein = (a, b) => {
     a = norm(a); b = norm(b);
     const m = a.length, n = b.length;
-    if (m === 0) return n;
-    if (n === 0) return m;
+    if (!m) return n;
+    if (!n) return m;
     const dp = Array.from({ length: m + 1 }, () => new Array(n + 1));
     for (let i = 0; i <= m; i++) dp[i][0] = i;
     for (let j = 0; j <= n; j++) dp[0][j] = j;
     for (let i = 1; i <= m; i++) {
-      const ca = a.charCodeAt(i - 1);
       for (let j = 1; j <= n; j++) {
-        const cb = b.charCodeAt(j - 1);
-        const cost = ca === cb ? 0 : 1;
+        const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1;
         dp[i][j] = Math.min(
           dp[i - 1][j] + 1,
           dp[i][j - 1] + 1,
@@ -61,10 +44,15 @@ export function MacroSearch({
     return dp[m][n];
   };
 
-  const scoreTitle = (q, title) => {
+  const onBlur = () => {
+  setFocused(false);
+  setOpen(false); // beim Verlassen schließen
+  };  
+
+  const scoreText = (q, title) => {
     const qq = norm(q);
     const tt = norm(title);
-    if (!qq) return 1;
+    if (!qq) return 0;
     if (tt.startsWith(qq)) return 0;
     if (tt.includes(qq)) return 0.25;
     const d = levenshtein(qq, tt.slice(0, Math.max(qq.length, 24)));
@@ -72,44 +60,128 @@ export function MacroSearch({
     return 0.5 + Math.min(ratio, 1);
   };
 
-  const suggestions = useMemo(() => {
-    const q = norm(debouncedQuery);
-    if (q.length < minChars) return [];
-    return items
-      .map((it) => ({ item: it, score: scoreTitle(q, it.title) }))
+  // Map für schnelle Parent-Lookups
+  const groupById = useMemo(() => {
+    const m = new Map();
+    (groups || []).forEach(g => m.set(g.id, g));
+    return m;
+  }, [groups]);
+
+  // ---- Datenaufbereitung für Browser/Search ----
+  // Ein Eintrag ist { type: 'group'|'macro'|'back', id, title, subtitle?, payload }
+  const makeEntriesForGroup = useCallback((groupId) => {
+    const childGroups = (groups || []).filter(g => (g.group_id ?? null) === groupId)
+      .map(g => ({ type: 'group', id: `g-${g.id}`, title: g.name, payload: g }));
+
+    const childMacros = (items || []).filter(m => (m.group_id ?? null) === groupId)
+      .map(m => ({
+        type: 'macro',
+        id: `m-${m.id}`,
+        title: m.title,
+        subtitle: m.text,
+        payload: m
+      }));
+
+    // Gruppen zuerst
+    return [...childGroups, ...childMacros];
+  }, [groups, items]);
+
+  // Volltext-Suche über alle Gruppen & Makros
+  const makeSearchEntries = useCallback((q) => {
+    const qn = norm(q);
+    const macroMatches = (items || []).map(m => ({
+      type: 'macro',
+      id: `m-${m.id}`,
+      title: m.title,
+      subtitle: m.text,
+      payload: m,
+      // scoring darf Titel + Text berücksichtigen
+      score: scoreText(qn, (m.title || "") + " " + (m.text || ""))
+    }));
+
+    return macroMatches
       .sort((a, b) => a.score - b.score)
-      .slice(0, maxSuggestions)
-      .map((r) => r.item);
-  }, [debouncedQuery, items, maxSuggestions, minChars]);
+      .slice(0, maxSuggestions);
+  }, [items, maxSuggestions]);
+
+  // Wenn wir in einer Untergruppe sind → optional "zurück"
+  const makeBackEntry = useCallback(() => {
+    if (currentGroupId == null) return [];
+    const parentId = groupById.get(currentGroupId)?.group_id ?? null;
+    const parentName = parentId == null ? "Alle (Root)" : (groupById.get(parentId)?.name || "Zurück");
+    return [{
+      type: 'back',
+      id: `back-${currentGroupId}`,
+      title: `⬅︎ ${parentName}`,
+      payload: { parentId }
+    }];
+  }, [currentGroupId, groupById]);
+
+  // Debounce für Suche
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 120);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  // Vorschläge berechnen:
+  const suggestions = useMemo(() => {
+  const q = norm(debouncedQuery);
+  if (!open) return [];
+  if (q.length >= minChars) {
+    // 🔑 Suche: nur Makros
+    return makeSearchEntries(q);
+  }
+  // 🔑 Browse: Gruppen + Makros der aktuellen Ebene (Gruppen zuerst)
+  return [...makeBackEntry(), ...makeEntriesForGroup(currentGroupId)];
+}, [debouncedQuery, minChars, open, currentGroupId, makeEntriesForGroup, makeSearchEntries, makeBackEntry]);
 
   useEffect(() => {
-    setOpen(suggestions.length > 0 && norm(query).length >= minChars);
-    setHovered(suggestions.length ? 0 : -1);
-  }, [suggestions, query, minChars]);
+  if (!focused) {
+    setOpen(false);
+    setHovered(-1);
+    setQuery("");
+    return;
+  }
+  const q = norm(query);
+  const shouldOpen = q.length >= minChars ? suggestions.length > 0 : true; // bei Fokus & leerem Feld: browse öffnen
+  setOpen(shouldOpen);
+  setHovered(suggestions.length ? 0 : -1);
+}, [focused, suggestions, query, minChars]);
+
+  const fireMacro = useCallback((macro) => {
+    let text = macro.text && String(macro.text).length > 0 ? String(macro.text) : macro.title;
+    text = interpreter(text, ctx);
+    window.dispatchEvent(new CustomEvent(eventName, { detail: { text } }));
+  }, [ctx, eventName]);
 
   const select = useCallback((idx) => {
-    let s = suggestions[idx];
-    if (!s) return;  
+    const entry = suggestions[idx];
+    if (!entry) return;
 
-    //TODO: überarbeiten 
-    try{
-      s.text = s.text.toString();
-    } catch {
-
+    if (entry.type === 'back') {
+      setCurrentGroupId(entry.payload.parentId ?? null);
+      setHovered(-1);
+      setOpen(true);
+      return;
     }
 
-    var text = s.text && s.text.length > 0 ? s.text : s.title;
-    text = interpreter(text, ctx);
-    window.dispatchEvent(
-      new CustomEvent(eventName, {
-        detail: { text }
-      })
-    );
+    if (entry.type === 'group') {
+      setCurrentGroupId(entry.payload.id); // in die Gruppe hinein
+      setHovered(-1);
+      setOpen(true);
+      return;
+    }
 
-    setOpen(false);
-    setQuery("");
-    setHovered(-1);
-}, [suggestions]);
+    if (entry.type === 'macro') {
+      fireMacro(entry.payload);
+      setOpen(false);
+      setQuery("");
+      setHovered(-1);
+      inputRef.current?.blur?.();
+      return;
+    }
+  }, [suggestions, fireMacro]);
 
   const onKeyDown = (e) => {
     if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
@@ -119,11 +191,11 @@ export function MacroSearch({
     switch (e.key) {
       case "ArrowDown":
         e.preventDefault();
-        setHovered((h) => Math.min((h === -1 ? 0 : h) + 1, suggestions.length - 1));
+        setHovered(h => Math.min((h === -1 ? 0 : h) + 1, suggestions.length - 1));
         break;
       case "ArrowUp":
         e.preventDefault();
-        setHovered((h) => Math.max(h - 1, 0));
+        setHovered(h => Math.max(h - 1, 0));
         break;
       case "Enter":
         if (open && hovered >= 0) {
@@ -139,7 +211,7 @@ export function MacroSearch({
     }
   };
 
-  // Click outside → schließen
+  // Außenklick schließt
   useEffect(() => {
     const onClick = (e) => {
       if (!listRef.current || !inputRef.current) return;
@@ -150,6 +222,15 @@ export function MacroSearch({
     document.addEventListener("click", onClick);
     return () => document.removeEventListener("click", onClick);
   }, []);
+
+  // Fokus mit leerem Feld → Browsing öffnen
+  const onFocus = () => {
+    if (norm(query).length === 0) {
+      setOpen(true);
+      setFocused(true);
+      setHovered( (makeBackEntry().length ? 0 : 0) );
+    }
+  };
 
   return (
     <div className="w-full max-w-xl mx-auto">
@@ -162,6 +243,8 @@ export function MacroSearch({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
+          onFocus={onFocus}
+          onBlur={onBlur}
           role="combobox"
           aria-expanded={open}
           aria-controls={listboxId}
@@ -174,7 +257,7 @@ export function MacroSearch({
             ref={listRef}
             id={listboxId}
             role="listbox"
-            className="absolute z-20 mt-1 w-full rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden"
+            className="absolute z-20 mt-1 w-full rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden max-h-80 overflow-y-auto"
           >
             {suggestions.map((s, i) => (
               <li
@@ -182,20 +265,33 @@ export function MacroSearch({
                 id={`${listboxId}-opt-${i}`}
                 role="option"
                 aria-selected={i === hovered}
-                className={"cursor-pointer px-4 py-2 text-sm " + (i === hovered ? "bg-gray-100" : "hover:bg-gray-50")}
+                className={
+                  "cursor-pointer px-4 py-2 text-sm flex flex-col gap-0.5 " +
+                  (i === hovered ? "bg-gray-100" : "hover:bg-gray-50")
+                }
                 onMouseEnter={() => setHovered(i)}
-                onMouseDown={(e) => e.preventDefault()} // verhindert Blur
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => select(i)}
                 title={s.title}
               >
-                <div className="font-medium truncate">{s.title}</div>
-                {s.text ? <div className="text-gray-500 truncate">{s.text}</div> : null}
+                <div className="font-medium truncate">
+                  {s.type === 'group' ? "📁 " : s.type === 'back' ? "⬅︎ " : "📄 "}
+                  {s.title}
+                </div>
+                {s.subtitle ? (
+                  <div className="text-gray-500 truncate">{s.subtitle}</div>
+                ) : null}
               </li>
             ))}
+            {suggestions.length === 0 && (
+              <li className="px-4 py-2 text-sm text-gray-500">Keine Treffer</li>
+            )}
           </ul>
         )}
       </div>
-      <p className="mt-2 text-xs text-gray-500">Click, navigate with ↑/↓, Enter or Click to select.</p>
+      <p className="mt-2 text-xs text-gray-500">
+        Tippen zum Suchen. Ohne Eingabe: Gruppen & Makros browsen. ↑/↓ navigieren, Enter wählen.
+      </p>
     </div>
   );
 }
