@@ -7,6 +7,7 @@ import type {
   GetMyEmployeeResponse,
 } from "../types/database";
 import { createPageLogger } from "../utils/logger.ts";
+import type { User } from "@/components/datatable/columns.tsx";
 
 const log = createPageLogger('auth-helpers');
 
@@ -44,12 +45,13 @@ export async function getAuthContext(
   preAuthenticatedUser?: any
 ): Promise<AuthContext | null> {
   // Verify user
-  let user = preAuthenticatedUser;
+  var user = preAuthenticatedUser;
   log.info("Using preAuthenticatedUser for Auth");
 
   if (!user) {
     log.info("No pre-authenticated user provided, fetching from Supabase");
-    const { data: { user }, error: userErr } = await supabase.auth.getUser();
+    let { data: user_supabase , error: userErr } = await supabase.auth.getUser();
+    user = user_supabase.user;
     if (userErr || !user) {
       console.error("[auth] User verification failed:", userErr?.message);
       return null;
