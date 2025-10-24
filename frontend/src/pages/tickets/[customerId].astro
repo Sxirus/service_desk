@@ -302,9 +302,6 @@ log.info("Client data loaded:", {
 
 log.info("Macros loaded:", macroArray?.length || 0);
 
-console.log(macroArray);
-console.log(macroGroups);
-
 const shopifyConfig: ShopifyConfig = {
   connected: clientData?.shopify_connected || false,
   customerId: customerId as string
@@ -326,7 +323,13 @@ const transEmployeeArray = employeeArray.map((employee : any) => ({
 //context for macro interpreter
 var ctx = {
   customerID: customerId,
-  employeeName: assignedEmployeeName
+  employeeName: assignedEmployeeName,
+  customerFullName: customer.name,
+  customerFirstName: customer.name.split(" ")[0],
+  customerLastName: customer.name.split(" ")[1],
+  //TODO get the right order number
+  shopifyLastOrderNumber: null,
+  customerEmail: emailAddress
 }
 
 perf.end(processingTimer, {

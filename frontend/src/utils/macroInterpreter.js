@@ -1,7 +1,12 @@
 //data section
 const resolvers = {
   customerID: (ctx) => ctx.customerID,
-  employeeName: (ctx) => ctx.employeeName
+  employeeName: (ctx) => ctx.employeeName,
+  customerFullName: (ctx) => ctx.customerFullName,
+  customerFirstName: (ctx) => ctx.customerFirstName,
+  customerLastName: (ctx) => ctx.customerLastName,
+  shopifyLastOrderNumber: (ctx) => ctx.shopifyLastOrderNumber,
+  customerEmail: (ctx) => ctx.customerEmail
 }
 
 //interpreter
