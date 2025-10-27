@@ -4,7 +4,7 @@
 
 // Import required modules
 const supabase = require('../config/supabase');  // Supabase client for database operations
-
+const { saveAttachment } = require('./attachments/attachmenthandler');
 /**
  * Save a parsed email to the database with customer association
  * This function handles the complete workflow of processing an incoming email:
@@ -66,6 +66,13 @@ async function saveEmail(parsedEmail, clientId, InboxEmail) {
     console.error(`[${InboxEmail}] Failed to insert email:`, emailError);
     return;
   }
+  if (attachments.length > 0) {
+    console.log(`[${InboxEmail}] Saving attachments`);
+    saveAttachment(attachments);
+  } else {
+    console.log(`[${InboxEmail}] Mail had no attachments, proceding`);
+  }
+
   console.log(`[${InboxEmail}] New Email processed and saved successfully with ID:`, email.id);
 }
 
