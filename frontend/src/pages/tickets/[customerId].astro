@@ -101,6 +101,7 @@ const [
   { data: incomingMails, error: incomingError },
   { data: sentMails, error: sentError },
   { data: macroArray, error: macroError },
+  { data: macroGroups, error: macroGroupsError },
   { data: clientData, error: clientError },
   { data: assignedEmployeeArray, error: assignedEmployeeErr},
   { data: employeeArray, error: employeeErr}
@@ -146,14 +147,15 @@ const [
   
   supabase
     .from("macros")
-    .select(`
-      id,
-      title,
-      text
-    `)
+    .select("*")
     .eq("client_id", clientId)
     .order("title", { ascending: true }),
   
+  supabase
+    .from("macro_groups")
+    .select("*")
+    .eq("client_id", clientId),
+
   supabase
     .from("clients")
     .select(`
@@ -243,6 +245,11 @@ if (sentError) {
 if (macroError) {
   log.error('Error fetching macros:', macroError);
 }
+
+if (macroGroupsError) {
+  log.error("Error fetching macro groups", macroGroupsError);
+}
+
 if (assignedEmployeeErr) {
   log.error('Error fetching the assigned employee', assignedEmployeeErr)
 }
@@ -312,6 +319,18 @@ const transEmployeeArray = employeeArray.map((employee : any) => ({
   title: employee.name,
   text: employee.id
 }))
+
+//context for macro interpreter
+var ctx = {
+  customerID: customerId,
+  employeeName: assignedEmployeeName,
+  customerFullName: customer.name,
+  customerFirstName: customer.name.split(" ")[0],
+  customerLastName: customer.name.split(" ")[1],
+  //TODO get the right order number
+  shopifyLastOrderNumber: null,
+  customerEmail: emailAddress
+}
 
 perf.end(processingTimer, {
   emailCount: emailArray.length,
@@ -518,9 +537,11 @@ log.info("[customer-ticket] Page setup complete, rendering");
               <MacroSearch
                 client:load
                 items={macroArray}
+                groups={macroGroups}
                 placeholder="Search macros..."
                 eventName='MacroChoosen' 
-                customerId={customerId}             
+                customerID={customerId} 
+                ctx={ctx}            
                 />
             </div>
           </div>
@@ -742,7 +763,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
         return;
       }
 
-      await apiClient.post('/api/client/assignEmployee', {
+      await apiClient.post('/client/assignEmployee', {
         employee_id: parseInt(employeeId),
         customer_id: parseInt(customerId)
       });
