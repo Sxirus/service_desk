@@ -66,9 +66,10 @@ async function saveEmail(parsedEmail, clientId, InboxEmail) {
     console.error(`[${InboxEmail}] Failed to insert email:`, emailError);
     return;
   }
+
   if (attachments.length > 0) {
     console.log(`[${InboxEmail}] Saving attachments`);
-    saveAttachment(attachments);
+    saveAttachment(attachments, clientId, email.id);
   } else {
     console.log(`[${InboxEmail}] Mail had no attachments, proceding`);
   }
