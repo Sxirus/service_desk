@@ -2,11 +2,12 @@ const sharp = require("sharp");
 const supabase = require('../../config/supabase');
 const crypto = require('crypto');
 
-//jpeg scales
+//jpeg/jpg scales
 const TARGET_HEIGHT = 600;
 const JPEG_QUALITY = 80;
 const DENSITY_PPI = 180;
 
+//function to scale down the attachments and store them in the database
 async function saveAttachment(attachments, clientId, emailId) {
   console.log("[Attachment Handler] Entered Attachment handler");
   downsized = [];
@@ -34,7 +35,7 @@ async function saveAttachment(attachments, clientId, emailId) {
         ...att,
         content: data,
         size: data.length,
-        contentType: data.contentType
+        contentType: att.contentType
       });
 
     } catch (error) {
@@ -47,6 +48,7 @@ async function saveAttachment(attachments, clientId, emailId) {
   storeAttachmentInDB(clientId, emailId, downsized);
 }
 
+// function to scale down a jpeg or jpg
 async function scalejpeg(att) {
   console.log("[Attachment Handler] entered scalejpeg");
   try {
@@ -61,7 +63,7 @@ async function scalejpeg(att) {
       .withMetadata({ density: DENSITY_PPI })
       .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
       .toBuffer();
-    
+    console.log("Downscaled data:",data);
     return data;
   } catch (error) {
     console.log("Downscaling Error in Jpeg", error)
@@ -69,48 +71,62 @@ async function scalejpeg(att) {
   }
 }
 
+
+//Function for uploading the attachments to storage
 async function storeAttachmentInDB(clientId, emailId, attachments) {
   for (const att of attachments) {
-    const base = (att.filename || 'file.bin').replace(/[^a-zA-Z0-9._-]/g, '_');
+    try {
+      console.log("Content Type: ",att.contentType);
+      const base = (att.filename || 'file.bin').replace(/[^a-zA-Z0-9._-]/g, '_');
 
-    //hash for an indiviual path
-    const hash = crypto.createHash('sha256').update(att.content).digest('hex').slice(0, 8);
-    const objectPath = `${clientId}/${emailId}/${hash}_${base}`;
+      //hash for an indiviual path
+      let hash = null;
+      try {
+        hash = crypto.createHash('sha256').update(att.content).digest('hex').slice(0, 8);
+      } catch (error) {
+        console.log("error hashing", error)
+        hash = crypto.randomBytes();
+      }
+      const objectPath = `${clientId}/${emailId}/${hash}_${base}`;
 
-    //upload to supabase storage 
-    const { error: uploadError } = await supabase.storage
-      .from('mail-attachments')
-      .upload(objectPath, att.content, {
-        contentType: att.contentType || 'application/octet-stream',
-        upsert: false
-      });
+      //upload to supabase storage 
+      const { error: uploadError } = await supabase.storage
+        .from('mail-attachments')
+        .upload(objectPath, att.content, {
+          contentType: att.contentType || 'application/octet-stream',
+          upsert: false
+        });
 
-    if (uploadError) {
-      console.error('Upload-Fehler:', uploadError);
-      throw uploadError;
-    }else {
-      console.log("Uploaded Attachment to DB", att.filename);
-    }
+      if (uploadError) {
+        console.error('Upload-Fehler:', uploadError);
+        throw uploadError;
+      }else {
+        console.log("Uploaded Attachment to DB", att.filename);
+      }
 
-    //checksum
-    const checksum = crypto.createHash('sha256').update(att.content).digest('hex');
+      //checksum
+      const checksum = crypto.createHash('sha256').update(att.content).digest('hex');
 
-    //store reference in email-attachments
-    const { error: insertError } = await supabase
-      .from('email-attachments')
-      .insert({
-        email_id: emailId,
-        client_id: clientId,
-        object_path: objectPath,
-        filename: att.filename || base,
-        mime_type: att.contentType || 'application/octet-stream',
-        byte_size: att.content.byteLength,
-        checksum_sha256: checksum
-      });
+      //store reference in email-attachments
+      const { error: insertError } = await supabase
+        .from('email-attachments')
+        .insert({
+          email_id: emailId,
+          client_id: clientId,
+          object_path: objectPath,
+          filename: att.filename || base,
+          mime_type: att.contentType || 'application/octet-stream',
+          byte_size: att.content.byteLength,
+          checksum_sha256: checksum
+        });
 
-    if (insertError) {
-      console.error('Insert-Fehler:', insertError);
-      throw insertError;
+      if (insertError) {
+        console.error('Insert-Fehler:', insertError);
+        throw insertError;
+      }
+    } catch (error) {
+      console.log("Error saving in the database", error);
+      throw new Error(error);
     }
   }
 }
