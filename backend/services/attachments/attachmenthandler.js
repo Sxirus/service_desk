@@ -1,6 +1,7 @@
 const sharp = require("sharp");
 const supabase = require('../../config/supabase');
 const crypto = require('crypto');
+const AdmZip = require('adm-zip');
 
 //jpeg/jpg scales
 const TARGET_HEIGHT_JPEG = 600;
@@ -29,6 +30,14 @@ function isPng(att) {
   return ct === 'image/png' || name.endsWith('.png');
 }
 
+function isDocx(att) {
+  const ct = (att.contentType || '').toLowerCase();
+  console.log('DOCX content type', ct);
+  const name = (att.filename || '').toLowerCase();
+  return ct === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+  name.endsWith('.docx')
+}
+
 function asJpegFilename(filename) {
   if (!filename) return 'file.jpg';
   return filename.replace(/\.(heic|heif|jpeg|jpg)$/i, '') + '.jpeg';
@@ -55,6 +64,11 @@ async function saveAttachment(attachments, clientId, emailId) {
         data = await scalePng(att.content);
         outContentType = 'image/png';
         outFilename = att.filename.replace(/\.png$/i, '.png');
+      } else if (isDocx(att)){
+        console.log('[DOCX] compressing', att.filename);
+        const { buffer, changed } = await compressDocx(att.content);
+        data = buffer;
+        console.log(`[DOCX] ${changed} images recompressed`);
       } else {
         //no downscaling for that file type inplemented -> just use the whole attachment
         data = att.content;
@@ -136,6 +150,67 @@ async function scalePng(inputBuffer) {
     console.error('scalePng error', err);
     throw err;
   }
+}
+
+//downscaling docx
+async function compressDocx(inputBuffer, opts = {}) {
+  const {
+    maxHeight = TARGET_HEIGHT_JPEG || TARGET_HEIGHT_PNG,
+    jpegQuality = JPEG_QUALITY,
+    pngCompressionLevel = compressionLevel_PNG,
+    pngPalette = true
+  } = opts;
+
+  const zip = new AdmZip(inputBuffer);
+  const newZip = new AdmZip();
+  const entries = zip.getEntries();
+
+  let changed = 0;
+
+  async function processImage(entryName, buf) {
+    const lower = entryName.toLowerCase();
+    const isJpeg = lower.endsWith('.jpg') || lower.endsWith('.jpeg');
+    const isPng = lower.endsWith('.png');
+    if (!isJpeg && !isPng) return buf;
+
+    try {
+      let pipe = sharp(buf, { failOnError: false }).rotate();
+      const meta = await pipe.metadata();
+      if (meta.height && meta.height > maxHeight) {
+        pipe = pipe.resize({ height: maxHeight });
+      }
+
+      let out;
+      if (isJpeg) {
+        out = await pipe.jpeg({ quality: jpegQuality, mozjpeg: true }).toBuffer();
+      } else {
+        out = await pipe.png({
+          compressionLevel: pngCompressionLevel,
+          adaptiveFiltering: true,
+          palette: pngPalette
+        }).toBuffer();
+      }
+
+      if (out.length < buf.length) {
+        changed++;
+        return out;
+      }
+      return buf;
+    } catch {
+      return buf;
+    }
+  }
+
+  for (const e of entries) {
+    if (e.entryName.startsWith('word/media/')) {
+      const processed = await processImage(e.entryName, e.getData());
+      newZip.addFile(e.entryName, processed);
+    } else {
+      newZip.addFile(e.entryName, e.getData());
+    }
+  }
+
+  return { buffer: newZip.toBuffer(), changed };
 }
 
 //Function for uploading the attachments to storage
