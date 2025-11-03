@@ -3,9 +3,12 @@ const supabase = require('../../config/supabase');
 const crypto = require('crypto');
 
 //jpeg/jpg scales
-const TARGET_HEIGHT = 600;
+const TARGET_HEIGHT_JPEG = 600;
 const JPEG_QUALITY = 80;
 const DENSITY_PPI = 180;
+
+const TARGET_HEIGHT_PNG = 600;
+const compressionLevel_PNG = 9; //0-9
 
 //helpers
 function isJpeg(att) {
@@ -18,6 +21,12 @@ function isHeic(att) {
   const ct = (att.contentType || '').toLowerCase();
   const name = (att.filename || '').toLowerCase();
   return ct === 'image/heic' || ct === 'image/heif' || name.endsWith('.heic') || name.endsWith('.heif');
+}
+
+function isPng(att) {
+  const ct = (att.contentType || '').toLowerCase();
+  const name = (att.filename || '').toLowerCase();
+  return ct === 'image/png' || name.endsWith('.png');
 }
 
 function asJpegFilename(filename) {
@@ -37,14 +46,15 @@ async function saveAttachment(attachments, clientId, emailId) {
       let data;
       let outContentType = att.contentType;
       let outFilename = att.filename;
-      
-      const jpeg = isJpeg(att);
-      const heic = isHeic(att);
 
-      if (jpeg || heic) {
+      if (isJpeg(att) || isHeic(att)) {
         data = await scalejpeg(att);
         outContentType = 'image/jpeg';
         outFilename = asJpegFilename(att.filename);
+      } else if (isPng(att)){
+        data = await scalePng(att.content);
+        outContentType = 'image/png';
+        outFilename = att.filename.replace(/\.png$/i, '.png');
       } else {
         //no downscaling for that file type inplemented -> just use the whole attachment
         data = att.content;
@@ -80,8 +90,8 @@ async function scalejpeg(att) {
     let pipeline = sharp(att.content, { failOnError: false }).rotate();
     const meta = await pipeline.metadata();
 
-    if (meta.height > TARGET_HEIGHT) {
-      pipeline = pipeline.resize({ height: TARGET_HEIGHT });
+    if (meta.height > TARGET_HEIGHT_JPEG) {
+      pipeline = pipeline.resize({ height: TARGET_HEIGHT_JPEG });
     }
 
     data = await pipeline
@@ -97,6 +107,36 @@ async function scalejpeg(att) {
   }
 }
 
+//function to scale down the png
+async function scalePng(inputBuffer) {
+  if (!inputBuffer || !Buffer.isBuffer(inputBuffer)) {
+    throw new Error('scalePng: input must be a Buffer');
+  }
+  console.log('[Attachment Handler] scalePng');
+
+  try {
+    let pipeline = sharp(inputBuffer, { failOnError: false }).rotate();
+    const meta = await pipeline.metadata();
+
+    if (meta.height && meta.height > TARGET_HEIGHT_PNG) {
+      pipeline = pipeline.resize({ height: TARGET_HEIGHT_PNG });
+    }
+
+    // Kompression: hohe Kompressionsstufe = kleinere Datei
+    const data = await pipeline
+      .png({
+        compressionLevel: compressionLevel_PNG,  // 0–9, 9 = maximal
+        adaptiveFiltering: true,
+        palette: true         // Farbreduktion, spart Platz
+      })
+      .toBuffer();
+
+    return data;
+  } catch (err) {
+    console.error('scalePng error', err);
+    throw err;
+  }
+}
 
 //Function for uploading the attachments to storage
 async function storeAttachmentInDB(clientId, emailId, attachments) {
