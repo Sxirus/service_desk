@@ -8,6 +8,7 @@ const TARGET_HEIGHT_JPEG = 600;
 const JPEG_QUALITY = 80;
 const DENSITY_PPI = 180;
 
+//png scales
 const TARGET_HEIGHT_PNG = 600;
 const compressionLevel_PNG = 9; //0-9
 
