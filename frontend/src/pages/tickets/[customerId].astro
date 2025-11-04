@@ -956,79 +956,70 @@ log.info("[customer-ticket] Page setup complete, rendering");
     export {};
 
     window.handleShowAttachment = async (btn) => {
-    const mailId = btn.dataset.mail;
-    const path   = btn.dataset.path?.trim();
-    const mime   = btn.dataset.mime;
-    const { data: sess } = await supabaseBrowser.auth.getSession();
-    console.log('[client session?]', !!sess?.session);
-    const preview = document.getElementById('emailThread');
-    if (!preview) return;
-
-    const old = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Lade…';
-    
-    if (!path) {
-      console.error('[attachment] missing path');
-      return;
-    }
-
-    try {
-      // Kurzlebige signierte URL erzeugen (z. B. 5 Minuten)
-      const { data, error } = await supabaseBrowser
-        .storage
-        .from('mail-attachments')
-        .createSignedUrl(path, 60 * 5);
-
-      if (error || !data?.signedUrl) {
-        throw new Error(error?.message || 'Signieren fehlgeschlagen');
+      const mailId = btn.dataset.mail;
+      const path   = btn.dataset.path?.trim();
+      const mime   = btn.dataset.mime;
+      const { data: sess } = await supabaseBrowser.auth.getSession();
+      console.log('[client session?]', !!sess?.session);
+      const preview = document.getElementById('emailThread');
+      if (!preview) return;
+      
+      if (!path) {
+        console.error('[attachment] missing path');
+        return;
       }
 
-      const url = data.signedUrl;
+      try {
+        // Kurzlebige signierte URL erzeugen (z. B. 5 Minuten)
+        const { data, error } = await supabaseBrowser
+          .storage
+          .from('mail-attachments')
+          .createSignedUrl(path, 60 * 5);
 
-      // Bilder inline zeigen, alles andere in neuem Tab öffnen
-      if (mime && mime.startsWith('image/')) {
-        const list = document.getElementById('emailThread');
-        let scrollHeight = 0;
-        if (list) {
-          scrollHeight = list.scrollTop;
+        if (error || !data?.signedUrl) {
+          throw new Error(error?.message || 'Signieren fehlgeschlagen');
         }
-        preview.dataset.originalHtml = preview.innerHTML;
-        preview.innerHTML = `
-          <div class="text-xs text-muted-foreground mb-1">${path?.split('/').pop()}</div>
-          <img src="${url}" alt="${path?.split('/').pop()}" style="object-fit:cover;border-radius:8px;border:1px solid #ddd;" class="h-4/5" />
-          <button
-          type="button"
-          class="text-xs px-2 py-0.5 rounded bg-gray-200 hover:bg-gray-300 transition"
-          id="close-preview-${mailId}"
-        >
-          ✕
-        </button>
-        `;
-        // Close-Button Event
-        const closeBtn = document.getElementById(`close-preview-${mailId}`);
-        if (closeBtn) {
-          closeBtn.addEventListener('click', () => {
-            // Alten Zustand wiederherstellen
-            preview.innerHTML = preview.dataset.originalHtml || '';
-            if (list) {
-              list.scrollTop = scrollHeight;
-            }
-          });
+
+        const url = data.signedUrl;
+
+        // Bilder inline zeigen, alles andere in neuem Tab öffnen
+        if (mime && mime.startsWith('image/')) {
+          const list = document.getElementById('emailThread');
+          let scrollHeight = 0;
+          if (list) {
+            scrollHeight = list.scrollTop;
+          }
+          preview.dataset.originalHtml = preview.innerHTML;
+          preview.innerHTML = `
+            <div class="text-xs text-muted-foreground mb-1">${path?.split('/').pop()}</div>
+            <img src="${url}" alt="${path?.split('/').pop()}" style="object-fit:cover;border-radius:8px;border:1px solid #ddd;" class="h-4/5" />
+            <button
+            type="button"
+            class="text-xs px-2 py-0.5 rounded bg-gray-200 hover:bg-gray-300 transition"
+            id="close-preview-${mailId}"
+          >
+            ✕
+          </button>
+          `;
+          // Close-Button Event
+          const closeBtn = document.getElementById(`close-preview-${mailId}`);
+          if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+              // Alten Zustand wiederherstellen
+              preview.innerHTML = preview.dataset.originalHtml || '';
+              if (list) {
+                list.scrollTop = scrollHeight;
+              }
+            });
+          }
+        } else {
+          window.open(url, '_blank', 'noopener,noreferrer');
         }
-      } else {
-        window.open(url, '_blank', 'noopener,noreferrer');
+      } catch (e : any) {
+        console.error('[attachment]', e);
+        alert('Fehler: ' + e.message);
       }
-
-      btn.textContent = 'Erneut anzeigen';
-    } catch (e : any) {
-      console.error('[attachment]', e);
-      alert('Fehler: ' + e.message);
-      btn.textContent = old || 'Anzeigen';
-    } finally {
-      btn.disabled = false;
-    }
-  };
+    };
 
     console.log("[customer-ticket-client] All event listeners attached");
   </script>
