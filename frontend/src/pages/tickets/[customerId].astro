@@ -992,23 +992,45 @@ log.info("[customer-ticket] Page setup complete, rendering");
           }
           preview.dataset.originalHtml = preview.innerHTML;
           preview.innerHTML = `
-            <div class="text-xs text-muted-foreground mb-1">${path?.split('/').pop()}</div>
-            <img src="${url}" alt="${path?.split('/').pop()}" style="object-fit:cover;border-radius:8px;border:1px solid #ddd;" class="h-4/5" />
-            <button
-              type="button"
-              class="text-xs px-2 py-0.5 rounded bg-blue-500 text-white hover:bg-blue-600 transition"
-              id="download-${mailId}"
-              title="Download"
-            >
-              ⬇
-            </button>
-            <button
-            type="button"
-            class="text-xs px-2 py-0.5 rounded bg-gray-200 hover:bg-gray-300 transition"
-            id="close-preview-${mailId}"
-          >
-            ✕
-          </button>
+            <div class="inline-block bg-white border rounded-lg shadow-md overflow-hidden h-9/10 w-full">
+              <div class="flex justify-between items-center px-2 py-1 bg-gray-50 border-b">
+                <span class="text-xs font-medium text-gray-600 truncate">${filename}</span>
+                <div class="flex gap-1">
+
+                  <!-- Download -->
+                  <button
+                    id="download-${mailId}"
+                    title="Download"
+                    class="group relative h-9 w-9 flex items-center justify-center rounded-md bg-blue-600/80 hover:bg-blue-600 text-white shadow-md transition-transform hover:scale-105 active:scale-95"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M20 20H4"/>
+                    </svg>
+                    <span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] text-gray-700 bg-white/80 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition">
+                      Download
+                    </span>
+                  </button>
+
+                  <!-- Close -->
+                  <button
+                    id="close-preview-${mailId}"
+                    title="Close"
+                    class="group relative h-9 w-9 flex items-center justify-center rounded-md bg-gray-100/90 hover:bg-gray-200 text-gray-700 shadow-sm transition-transform hover:scale-105 active:scale-95"
+                  >
+                    ✕
+                    <span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] text-gray-700 bg-white/80 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition">
+                      Close
+                    </span>
+                  </button>
+                </div>
+              </div>
+              <img
+                src="${url}"
+                alt="${filename}"
+                class="block h-full w-full object-contain bg-gray-50"
+                style="max-width:100%;"
+              />
+            </div>
           `;
           // Close-Button Event
           const closeBtn = document.getElementById(`close-preview-${mailId}`);
