@@ -3,8 +3,10 @@
 // Handles customer creation, email address management, and email storage for the service desk system
 
 // Import required modules
+const { parse } = require('postcss');
 const supabase = require('../config/supabase');  // Supabase client for database operations
 const { saveAttachment } = require('./attachments/attachmenthandler');
+const nodemailer = require('nodemailer');
 /**
  * Save a parsed email to the database with customer association
  * This function handles the complete workflow of processing an incoming email:
@@ -17,7 +19,7 @@ const { saveAttachment } = require('./attachments/attachmenthandler');
  * @param {string} clientId - Unique identifier for the client this email belongs to
  * @param {string} InboxEmail - The inbox email address this process belongs to (for logging and debugging)
  */
-async function saveEmail(parsedEmail, clientId, InboxEmail) {
+async function saveEmail(parsedEmail, clientId, InboxEmail, confirmation) {
     // Extract relevant email data for processing
     const { subject, from, date, text, html, attachments = [] } = parsedEmail;
     
@@ -67,12 +69,20 @@ async function saveEmail(parsedEmail, clientId, InboxEmail) {
     return;
   }
 
+  //saving attachments
   if (attachments.length > 0) {
     console.log(`[${InboxEmail}] Saving attachments`);
     saveAttachment(attachments, clientId, email.id);
   } else {
     console.log(`[${InboxEmail}] Mail had no attachments, proceding`);
   }
+
+  //sending confirmation email
+  if (confirmation[0].confirm_mail == null || confirmation[0].confirm_mail == '' || confirmation[0].confirmation_mail_subject == null || confirmation[0].confirmation_mail_subject == '') {
+    console.log('Client set no confirmation mail');
+  } else {
+    sendConfirmation(senderEmailAddress, confirmation[0]);
+    }
 
   console.log(`[${InboxEmail}] New Email processed and saved successfully with ID:`, email.id);
 }
@@ -168,5 +178,54 @@ async function getCustomerIdByEmail(email) {
     return data && data.customer_id ? data.customer_id : null; // Return customer ID or null if not found
 }
 
+//getting the text send as confirmation
+async function getConfirmation(clientId) {
+    const {data, error} = await supabase
+      .from('clients')
+      .select('confirm_mail, confirmation_mail_subject')
+      .eq('id', clientId)
+      .limit(1)
+
+    if (error) {
+        console.log(`[${clientId}, Email Handler] Error getting clients confirm text`, error);
+        return null
+    }
+
+    return data;
+}
+
+//sending a confirmation mail
+async function sendConfirmation(customerEmail, confirmation) {
+  try {
+    const to  = customerEmail
+    const subject = confirmation.confirmation_mail_subject
+    const text = confirmation.confirm_mail
+    
+    // Create transporter
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT),
+      secure: false,
+      auth: {
+        user: process.env.IMAP_USER,
+        pass: process.env.IMAP_PASS,
+      },
+    });
+
+    // Send email
+    const info = await transporter.sendMail({
+      from: `"Service Desk" <${process.env.MAIL_USER}>`,
+      to,
+      subject,
+      text,
+    });
+
+    console.log('[EMAILS] Email sent:', info.messageId);
+
+  } catch (err) {
+    console.error('[EMAILS] Send error:', err);
+  }
+}
+
 // Export the main function for use by IMAP workers
-module.exports = { saveEmail };
+module.exports = { saveEmail, getConfirmation };
