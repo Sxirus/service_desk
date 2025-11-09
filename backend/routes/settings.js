@@ -12,47 +12,6 @@ const { authenticate } = require('../middleware/auth');
 const { sanitizeText } = require('../middleware/validation');
 
 /**
- * Get email signature for authenticated user's client
- * GET /api/settings/getSignature
- * 
- * Authentication: Required
- * Authorization: Automatically filtered by user's client_id
- */
-router.get('/getSignature',
-  authenticate,
-  async (req, res) => {
-    try {
-      // Use client_id from authenticated user (secure - can't be spoofed)
-      const client_id = req.user.client_id;
-
-      console.log('[SETTINGS] Fetching signature for client:', client_id);
-
-      const { data, error } = await supabase
-        .from('clients')
-        .select('email_signature')
-        .eq("id", client_id)
-        .single();
-
-      if (error) {
-        console.error('[SETTINGS] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
-      }
-
-      if (!data) {
-        console.warn('[SETTINGS] Client not found:', client_id);
-        return res.status(404).json({ error: 'Client not found' });
-      }
-
-      console.log('[SETTINGS] Signature fetched successfully');
-      res.json([data]); // Return as array to match original API format
-    } catch (err) {
-      console.error('[SETTINGS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
-    }
-  }
-);
-
-/**
  * Update email signature for authenticated user's client
  * POST /api/settings/updateSignature
  * Body: { signature }

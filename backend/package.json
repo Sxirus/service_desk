@@ -13,6 +13,7 @@
   "type": "commonjs",
   "dependencies": {
     "@supabase/supabase-js": "^2.52.0",
+    "adm-zip": "^0.5.16",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.2.0",
@@ -22,6 +23,7 @@
     "imap": "^0.8.17",
     "mailparser": "^3.7.4",
     "nodemailer": "^7.0.5",
+    "sharp": "^0.34.4",
     "validator": "^13.15.15",
     "winston": "^3.17.0"
   },

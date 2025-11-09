@@ -5,7 +5,7 @@
 // Import required modules for IMAP email processing
 const Imap = require('imap');                    // IMAP client library for email server connections
 const { simpleParser } = require('mailparser');  // Email parser for extracting structured data from raw emails
-const { saveEmail } = require('./emailHandler'); // Email handler service for database operations
+const { saveEmail, getConfirmation } = require('./emailHandler'); // Email handler service for database operations
 
 // Enable IMAP debug logging to console for troubleshooting connection issues
 Imap.prototype._debug = console.log;
@@ -21,18 +21,22 @@ Imap.prototype._debug = console.log;
  * @param {number} config.imapPort - IMAP server port (usually 993 for SSL/TLS)
  * @param {string} config.clientId - Unique identifier for the client this email account belongs to
  */
-function startImapWorker({ email, password, imapHost, imapPort, clientId }) {
+async function startImapWorker({ email, password, imapHost, imapPort, clientId }) {
     // Create IMAP connection instance with client-specific credentials
     const imap = new Imap({
         user: email,                             // Email username/address
         password,                                // Email password or app-specific password
         host: imapHost,                         // IMAP server hostname
         port: imapPort,                         // IMAP server port
-        tls: true,                               // Enable TLS encryption for secure connection
+        tls: true,                              // Enable TLS encryption for secure connection
+        authTimeout: 30000,                     //timeout after 30 sec if not auth
         tlsOptions: {
             rejectUnauthorized: false,           // unsersicher in production ändern
         }
     });
+
+    //getting the confirmation email text
+    const confirmation = await getConfirmation(clientId);
 
     /**
      * Open the INBOX folder for monitoring
@@ -73,9 +77,9 @@ function startImapWorker({ email, password, imapHost, imapPort, clientId }) {
                         try {
                             // Parse the raw email stream into structured data
                             const parsed = await simpleParser(stream);
-                            
+
                             // Save the parsed email to the database with client association
-                            await saveEmail(parsed, clientId, email);
+                            await saveEmail(parsed, clientId, email, confirmation);
                         } catch (e) {
                             console.error(`[${email}] Error parsing message:`, e);
                         }

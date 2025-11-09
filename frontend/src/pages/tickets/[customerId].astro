@@ -64,6 +64,11 @@ if (!session) {
   return Astro.redirect("/");
 }
 
+//getting tokens for browser session
+const browserTokens = session 
+  ? { access: session.access_token, refresh: session.refresh_token }
+  : null;
+
 log.info('Verifying authentication');
 // PASS PRE-AUTHENTICATED USER - NO DOUBLE AUTH!
 const pageContext = await getCompletePageContext(
@@ -262,6 +267,36 @@ perf.end(errorCheckTimer);
 
 const processingTimer = perf.start('page-load', 'data-processing');
 
+const incomingIds = (incomingMails || []).map((m:any) => m.id);
+interface Attachment {
+  id: string;
+  email_id: string;
+  filename: string;
+  mime_type: string;
+  object_path: string;
+  byte_size: number;
+  created_at: string;
+}
+
+let attsByEmailId: Record<string, Attachment[]> = {};
+if (incomingIds.length) {
+  const { data: attRows, error: attErr } = await supabase
+    .from('email-attachments')
+    .select('id,email_id,filename,mime_type,object_path,byte_size,created_at')
+    .in('email_id', incomingIds);
+
+  if (attErr) {
+    console.error('[attachments] load error:', attErr);
+  } else {
+    for (const r of (attRows || [])) {
+      if (!attsByEmailId[r.email_id]) {
+        attsByEmailId[r.email_id] = [];
+      }
+      attsByEmailId[r.email_id].push(r);
+    }
+  }
+}
+
 const emailArray = [
   ...(incomingMails || []).map((mail: any) => ({
     ...mail,
@@ -276,6 +311,14 @@ const emailArray = [
 ].sort((a, b) => new Date(a.send_at).getTime() - new Date(b.send_at).getTime());
 
 log.info("Emails loaded:", emailArray.length);
+
+const emailArrayWithAttachments = emailArray.map(mail => {
+  if (mail.type === 'incoming') {
+    const attachments = attsByEmailId[mail.id] || [];
+    return { ...mail, attachments, has_attachments: attachments.length > 0 };
+  }
+  return mail;
+});
 
 let lastMail = incomingMails && incomingMails.length > 0 
   ? incomingMails[incomingMails.length - 1] 
@@ -347,7 +390,6 @@ perf.end(pageLoadTimer, { result: 'success' });
 perf.printReport('customer-ticket');
 
 log.info("[customer-ticket] Page setup complete, rendering");
-
 ---
 
 <BaseLayout title={customer?.name || "Customer Ticket"}>
@@ -372,7 +414,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
         <!-- Email Thread -->
         <div id="emailThread" class="flex-1 px-6 overflow-y-auto overflow-x-hidden">
           <div id="mailList" class="space-y-4 pb-4">
-            {emailArray.map((mail) => {
+            {emailArrayWithAttachments.map((mail) => {
               const isOutgoing = mail.type === 'sent';
               
               return (
@@ -423,6 +465,31 @@ log.info("[customer-ticket] Page setup complete, rendering");
                     <div class="text-sm text-foreground whitespace-pre-wrap leading-relaxed" style="word-break: break-word; overflow-wrap: anywhere;">
                       {mail.text_content}
                     </div>
+                    <div id="sb-token-holder"
+                    data-access={browserTokens?.access || ''}
+                    data-refresh={browserTokens?.refresh || ''}
+                    hidden></div>
+                    {mail.has_attachments && (
+                      <div class="mt-3">
+                        <div class="flex flex-wrap gap-2" id={"atts-" + mail.id}>
+                          {mail.attachments.map((att: any) => (
+                            <button
+                              class="inline-flex items-center gap-2 rounded-md bg-accent px-2.5 py-1 text-xs hover:bg-accent/80"
+                              title={"Öffnen: " + att.filename}
+                              data-mail={mail.id}
+                              data-att={att.id}
+                              data-path={att.object_path}
+                              data-mime={att.mime_type}
+                              onclick="handleShowAttachment(this)"
+                            >
+                              📎 {att.filename}
+                            </button>
+                          ))}
+                        </div>
+                        {/* Preview-Container für angezeigte Bilder/Previews */}
+                        <div id={"preview-" + mail.id} class="mt-2 flex flex-wrap gap-2"></div>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -567,12 +634,15 @@ log.info("[customer-ticket] Page setup complete, rendering");
     </div>
   </AdminShell>
 
+  <!-- Token für den Browser bereitstellen -->
+
   <script>
     // ============================================================================
     // GET DOM ELEMENTS
     // ============================================================================
 
     import  { apiClient } from '../../utils/api.ts';
+    import { createClient } from '@supabase/supabase-js';
 
     console.log("[customer-ticket-client] Script initialized");
     const textarea = document.getElementById('answer') as HTMLTextAreaElement;
@@ -590,6 +660,20 @@ log.info("[customer-ticket] Page setup complete, rendering");
       resizeHandle: !!resizeHandle,
       collapseButton: !!collapseButton
     });
+
+    // Supabase-Browserclient (ENV mit PUBLIC_-Prefix)
+    const supabaseBrowser = createClient(
+      import.meta.env.PUBLIC_SUPABASE_URL,
+      import.meta.env.PUBLIC_SUPABASE_ANON_KEY,
+      { auth: { persistSession: true, autoRefreshToken: true } }
+    );
+
+    const el = document.getElementById('sb-token-holder') as HTMLElement | null;
+    const access = el?.dataset.access || '';
+    const refresh = el?.dataset.refresh || '';
+    if (access && refresh) {
+      await supabaseBrowser.auth.setSession({ access_token: access, refresh_token: refresh });
+    }
 
     // ============================================================================
     // COLLAPSE/EXPAND FUNCTIONALITY
@@ -862,6 +946,142 @@ log.info("[customer-ticket] Page setup complete, rendering");
         }
       }
     });
+
+
+    declare global {
+      interface Window {
+        handleShowAttachment: (btn: HTMLButtonElement) => Promise<void> | void;
+      }
+    }
+    export {};
+
+    window.handleShowAttachment = async (btn) => {
+      const mailId = btn.dataset.mail;
+      const path   = btn.dataset.path?.trim();
+      const mime   = btn.dataset.mime;
+      const { data: sess } = await supabaseBrowser.auth.getSession();
+      console.log('[client session?]', !!sess?.session);
+      const preview = document.getElementById('emailThread');
+      if (!preview) return;
+      
+      if (!path) {
+        console.error('[attachment] missing path');
+        return;
+      }
+
+      try {
+        // Kurzlebige signierte URL erzeugen (z. B. 5 Minuten)
+        const { data, error } = await supabaseBrowser
+          .storage
+          .from('mail-attachments')
+          .createSignedUrl(path, 60 * 5);
+
+        if (error || !data?.signedUrl) {
+          throw new Error(error?.message || 'Signieren fehlgeschlagen');
+        }
+
+        const url = data.signedUrl;
+
+        // Bilder inline zeigen, alles andere in neuem Tab öffnen
+        if (mime && mime.startsWith('image/')) {
+          const filename = path.split('/').pop();
+          const list = document.getElementById('emailThread');
+          let scrollHeight = 0;
+          if (list) {
+            scrollHeight = list.scrollTop;
+          }
+          preview.dataset.originalHtml = preview.innerHTML;
+          preview.innerHTML = `
+            <div class="inline-block bg-white border rounded-lg shadow-md overflow-hidden h-9/10 w-full">
+              <div class="flex justify-between items-center px-2 py-1 bg-gray-50 border-b">
+                <span class="text-xs font-medium text-gray-600 truncate">${filename}</span>
+                <div class="flex gap-1">
+
+                  <!-- Download -->
+                  <button
+                    id="download-${mailId}"
+                    title="Download"
+                    class="group relative h-9 w-9 flex items-center justify-center rounded-md bg-blue-600/80 hover:bg-blue-600 text-white shadow-md transition-transform hover:scale-105 active:scale-95"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M20 20H4"/>
+                    </svg>
+                    <span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] text-gray-700 bg-white/80 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition">
+                      Download
+                    </span>
+                  </button>
+
+                  <!-- Close -->
+                  <button
+                    id="close-preview-${mailId}"
+                    title="Close"
+                    class="group relative h-9 w-9 flex items-center justify-center rounded-md bg-gray-100/90 hover:bg-gray-200 text-gray-700 shadow-sm transition-transform hover:scale-105 active:scale-95"
+                  >
+                    ✕
+                    <span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] text-gray-700 bg-white/80 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition">
+                      Close
+                    </span>
+                  </button>
+                </div>
+              </div>
+              <img
+                src="${url}"
+                alt="${filename}"
+                class="block h-full w-full object-contain bg-gray-50"
+                style="max-width:100%;"
+              />
+            </div>
+          `;
+          // Close-Button Event
+          const closeBtn = document.getElementById(`close-preview-${mailId}`);
+          if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+              // Alten Zustand wiederherstellen
+              preview.innerHTML = preview.dataset.originalHtml || '';
+              if (list) {
+                list.scrollTop = scrollHeight;
+              }
+            });
+          }
+
+          // Download-Button Event
+          const dlBtn = document.getElementById(`download-${mailId}`);
+          if (dlBtn) {
+            dlBtn.addEventListener('click', async () => {
+              try {
+                if (filename) {
+                  // Datei per fetch holen (mit der signierten URL)
+                  const res = await fetch(url);
+                  if (!res.ok) throw new Error('Download fehlgeschlagen');
+                  const blob = await res.blob();
+
+                  // Temporären Download-Link erstellen
+                  const blobUrl = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = blobUrl;
+                  a.download = filename; // erzwingt Download
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                  URL.revokeObjectURL(blobUrl);
+                }
+                else {
+                  alert('Es gab einen Fehler');
+                }
+              } catch (err) {
+                console.error('[Download error]', err);
+                alert('Download fehlgeschlagen');
+              }
+            });
+          }
+        } else {
+          window.open(url, '_blank', 'noopener,noreferrer');
+        }
+      } catch (e : any) {
+        console.error('[attachment]', e);
+        alert('Fehler: ' + e.message);
+      }
+    };
 
     console.log("[customer-ticket-client] All event listeners attached");
   </script>

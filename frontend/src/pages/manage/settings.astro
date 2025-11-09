@@ -52,6 +52,8 @@ console.log("[general-settings] User authenticated:", {
   isAdmin: authContext.isAdmin
 });
 
+const clientId = authContext.employee.client_id;
+
 // Verify admin role using ROLE_IDS constant
 if (!authContext.isAdmin) {
   console.warn("[general-settings] Access denied - user is not admin:", {
@@ -67,45 +69,32 @@ console.log("[general-settings] Admin access verified");
 // DATA LOADING - EMAIL SIGNATURE
 // ============================================================================
 
-/**
- * Fetch email signature from settings API
- * Note: Consider moving this to a Supabase table query in the future
- * for better consistency
- */
 console.log("[general-settings] Fetching email signature for client_id:", authContext.employee.client_id);
 
-let signature = "";
-let signatureFetchError = false;
+//fetching data
+const [ 
+  {data: signatureJSON, error: signatureFetchError},
+  {data: confirmationJSON, error: confirmationError}
+] = await Promise.all([
+  supabase
+    .from('clients')
+    .select('email_signature')
+    .eq("id", clientId)
+    .single(),
+  
+  supabase
+  .from('clients')
+  .select('confirm_mail, confirmation_mail_subject')
+  .eq('id', clientId)
+])
 
-try {
-  const apiUrl = `http://localhost:3000/api/settings/getSignature`;
-
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return Astro.redirect("/");
-
-  const signatureArray = await fetch(apiUrl, {
-    headers: {
-      'Authorization': `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json'
-    }
-  }).then(res => res.json());
-
-  if (Array.isArray(signatureArray) && signatureArray.length > 0) {
-    signature = signatureArray[0].email_signature ?? "";
-    console.log("[general-settings] Email signature loaded successfully:", {
-      length: signature.length,
-      clientId: authContext.employee.client_id
-    });
-  } else {
-    console.warn("[general-settings] No signature found in response:", signatureArray);
-  }
-} catch (error) {
-  signatureFetchError = true;
-  console.error("[general-settings] Failed to fetch email signature:", {
-    error: error instanceof Error ? error.message : String(error),
-    clientId: authContext.employee.client_id
-  });
+//error handling
+if (signatureFetchError) {
+  console.log('[Settings] Error fetching the signature', signatureFetchError);
 }
+
+//Data processing
+const signature = signatureJSON?.email_signature;
 
 console.log("[general-settings] Page setup complete, rendering");
 ---
@@ -222,6 +211,94 @@ console.log("[general-settings] Page setup complete, rendering");
           </div>
         </div>
 
+        <!-- Confirmation Email Section -->
+        <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+          <div class="p-6 space-y-4">
+            <!-- Section Header -->
+            <div class="space-y-1">
+              <h3 class="text-lg font-semibold leading-none tracking-tight">
+                Email Signature
+              </h3>
+              <p class="text-sm text-muted-foreground">
+                Configure the default email signature for support responses
+              </p>
+            </div>
+
+            <!-- Error Alert (if signature fetch failed) -->
+            {signatureFetchError && (
+              <div class="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+                <div class="flex items-start gap-3">
+                  <svg
+                    class="h-5 w-5 text-destructive mt-0.5"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+                    />
+                  </svg>
+                  <div class="space-y-1">
+                    <p class="text-sm font-medium text-destructive">
+                      Failed to load email signature
+                    </p>
+                    <p class="text-sm text-muted-foreground">
+                      There was an error loading the signature. You can still edit and save a new one.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <!-- Signature Editor -->
+            <div class="space-y-2">
+              <label 
+                for="signature" 
+                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Signature Content
+              </label>
+              <textarea
+                id="signature"
+                class="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                placeholder="Enter your email signature here..."
+                rows="6"
+              >{signature}</textarea>
+              <p class="text-xs text-muted-foreground">
+                This signature will be automatically appended to all outgoing support emails.
+              </p>
+            </div>
+
+            <!-- Action Button -->
+            <div class="flex items-center justify-end pt-2">
+              <button
+                id="save-signature"
+                type="button"
+                class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+              >
+                <svg
+                  class="mr-2 h-4 w-4"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
         <!-- Future Settings Sections -->
         <div class="rounded-lg border border-dashed p-6 text-center">
           <p class="text-sm text-muted-foreground">
@@ -287,8 +364,6 @@ console.log("[general-settings] Page setup complete, rendering");
         `;
 
         try {
-          const apiUrl = `http://localhost:3000/api/settings/updateSignature`;
-
           const response = await apiClient.post('/settings/updateSignature', {
             signature: sanitizedSignature
           });
