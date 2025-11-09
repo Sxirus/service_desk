@@ -69,22 +69,23 @@ console.log("[general-settings] Admin access verified");
 // DATA LOADING - EMAIL SIGNATURE
 // ============================================================================
 
-/**
- * Fetch email signature from settings API
- * Note: Consider moving this to a Supabase table query in the future
- * for better consistency
- */
 console.log("[general-settings] Fetching email signature for client_id:", authContext.employee.client_id);
 
 //fetching data
 const [ 
-  {data: signatureJSON, error: signatureFetchError}
+  {data: signatureJSON, error: signatureFetchError},
+  {data: confirmationJSON, error: confirmationError}
 ] = await Promise.all([
   supabase
     .from('clients')
     .select('email_signature')
     .eq("id", clientId)
     .single(),
+  
+  supabase
+  .from('clients')
+  .select('confirm_mail, confirmation_mail_subject')
+  .eq('id', clientId)
 ])
 
 //error handling
@@ -93,7 +94,7 @@ if (signatureFetchError) {
 }
 
 //Data processing
-var signature = signatureJSON?.email_signature;
+const signature = signatureJSON?.email_signature;
 
 console.log("[general-settings] Page setup complete, rendering");
 ---
@@ -363,8 +364,6 @@ console.log("[general-settings] Page setup complete, rendering");
         `;
 
         try {
-          const apiUrl = `http://localhost:3000/api/settings/updateSignature`;
-
           const response = await apiClient.post('/settings/updateSignature', {
             signature: sanitizedSignature
           });
