@@ -368,7 +368,10 @@ console.log("[general-settings] Page setup complete, rendering");
             signature: sanitizedSignature
           });
 
-          if (!response.ok) {
+          // Output response for debugging
+          console.log("[settings-script] Save response:", response);
+
+          if (!response.success) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
           }
 

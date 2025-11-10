@@ -26,7 +26,6 @@ import { getCompletePageContext } from "../../lib/auth-helpers.ts";
 import { createPageLogger, perf } from "../../utils/logger.ts";
 import AdminShell from "@/components/AdminShell";
 import type { ShopifyConfig, ShopifyClientData } from "../../types/shopify.types";
-import { apiClient } from "../../utils/api.ts";
 
 
 const log = createPageLogger('customer-ticket');
@@ -914,7 +913,12 @@ log.info("[customer-ticket] Page setup complete, rendering");
         if (body.trim() !== '') {
           console.log("[customer-ticket-client] Sending email");
 
-        await apiClient.post(`/api/emails/sendMail?customerId=${customerId}`, {
+        // add signature
+        if (signature && signature.trim() !== '') {
+          body += `\n\n-- \n${signature}`;
+        }
+
+        await apiClient.post(`/emails/sendMail?customerId=${customerId}`, {
           to: emailAddress,
           subject: newSubject,
           text: body
@@ -927,7 +931,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
         
         // Mark conversation as read
         console.log("[customer-ticket-client] Marking conversation as read");
-        await apiClient.post(`/api/emails/makeRead?customerId=${customerId}`);
+        await apiClient.post(`/emails/makeRead?customerId=${customerId}`);
 
         console.log("[customer-ticket-client] Redirecting to dashboard");
         window.location.href = '/dashboard';

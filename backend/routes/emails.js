@@ -165,7 +165,7 @@ router.post('/sendMail',
       const transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST,
         port: Number(process.env.SMTP_PORT),
-        secure: false,
+        secure: true,
         auth: {
           user: process.env.IMAP_USER,
           pass: process.env.IMAP_PASS,
@@ -174,7 +174,7 @@ router.post('/sendMail',
 
       // Send email
       const info = await transporter.sendMail({
-        from: `"Service Desk" <${process.env.MAIL_USER}>`,
+        from: `${process.env.MAIL_USER}`,
         to,
         subject,
         text,

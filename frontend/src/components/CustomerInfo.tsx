@@ -255,7 +255,7 @@ export const CustomerInfo: React.FC<CustomerInfoProps> = ({
           {!shopifyCustomer && !loading && !error && shopifyConfig.connected && (
             <div className="pt-2 border-t">
               <p className="text-xs text-muted-foreground italic">
-                Loading Shopify Data...
+                No Shopify Data available for this customer.
               </p>
             </div>
           )}
