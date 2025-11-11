@@ -50,6 +50,38 @@ router.post('/updateSignature',
   }
 );
 
+router.post('/updateConfirmMail', 
+  authenticate, 
+  async (req, res) => {
+    try {
+      const subject = req.body.subject;
+      const body = req.body.body;
+      const client_id = req.user.client_id;
+      console.log(subject, body, client_id);
+
+      console.log('[SETTINGS] Updating confirmation mail for client:', client_id);
+
+      const { data, error} = await supabase
+        .from('clients')
+        .update({
+          confirm_mail: body,
+          confirmation_mail_subject: subject
+        })
+        .eq('id', client_id);
+
+      if (error) {
+        console.error('[SETTINGS] Confirmation mail update failed:', error.message);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+
+      console.log('[SETTINGS] Confirm mail updated successfully');
+      res.json({ success: true, data })
+    } catch (err) {
+      console.error('[SETTINGS] Server error:', err.message);
+      res.status(500).json({ success: false, error: 'Servererror' });
+    }
+});
+
 /**
  * Get all settings for authenticated user's client
  * GET /api/settings/getAllSettings
