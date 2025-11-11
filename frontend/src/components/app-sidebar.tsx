@@ -76,10 +76,10 @@ export function AppSidebar({
         title: "Service Desk",
         url: "/",
         icon: Home,
-        isActive: currentPath === "/" || currentPath === "/dashboard",
+        isActive: currentPath === "/" || currentPath === "/dashboard" || currentPath == '/mail_list',
         items: [
           { title: "Dashboard", url: "/dashboard" },
-          {title: 'All Mails', url: '/mail_list'},
+          { title: 'All Mails', url: '/mail_list' },
         ],
       },
     ];
