@@ -29,21 +29,70 @@ router.get('/getMails',
       
       console.log('[EMAILS] Fetching mails for client:', client_id);
       
-      const { data, error } = await supabase
-        .from('incoming-mails') 
-        .select('*')
-        .eq("client_id", client_id)
-        .eq('read', false)
-        .order('send_at', { ascending: true })
-        .limit(100);
-
-      if (error) {
-        console.error('[EMAILS] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+      //checking the users preference (showing assigned mails or not)
+      const { data: pref, error: preferror} = await supabase
+        .from('clients')
+        .select('show_assigned_mails_in_all_mails')
+        .eq('id', client_id)
+        .single();
+      
+      if (preferror) {
+        console.error('[EMAILS] Pref fetch error:', preferror.message);
+        return res.status(500).json({ error: 'Konnte Präferenzen nicht laden' });
       }
 
-      console.log('[EMAILS] Fetched', data.length, 'unread mails');
-      res.json(data);
+      let mails = [];
+
+      //getting the mails based on customer preference
+      if (pref?.show_assigned_mails_in_all_mails) {
+        const { data, error } = await supabase
+          .from('incoming-mails')
+          .select('*')
+          .eq('client_id', client_id)
+          .eq('read', false)
+          .order('send_at', { ascending: true })
+          .limit(100);
+
+        if (error) {
+          console.error('[EMAILS] Supabase error:', error.message);
+          return res.status(500).json({ error: 'Datenbankfehler' });
+        }
+        mails = data ?? [];
+      } else {
+        const { data: unassignedCustomers, error: custErr } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('client_id', client_id)
+          .is('employee_id', null);
+
+        if (custErr) {
+          console.error('[EMAILS] Customers fetch error:', custErr.message);
+          return res.status(500).json({ error: 'Datenbankfehler' });
+        }
+
+        const ids = (unassignedCustomers ?? []).map(c => c.id);
+        if (ids.length === 0) {
+          return res.json([]);
+        }
+
+        const { data, error } = await supabase
+          .from('incoming-mails')
+          .select('*')
+          .eq('client_id', client_id)
+          .in('customer_id', ids)
+          .eq('read', false)
+          .order('send_at', { ascending: true })
+          .limit(100);
+
+        if (error) {
+          console.error('[EMAILS] Supabase error:', error.message);
+          return res.status(500).json({ error: 'Datenbankfehler' });
+        }
+        mails = data ?? [];
+      }
+
+      console.log('[EMAILS] Fetched', mails.length, 'unread mails');
+      res.json(mails);
     } catch (err) {
       console.error('[EMAILS] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });

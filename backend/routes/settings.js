@@ -50,6 +50,7 @@ router.post('/updateSignature',
   }
 );
 
+//uptaing the confimation mail send when a customer sends a mail to the client
 router.post('/updateConfirmMail', 
   authenticate, 
   async (req, res) => {

@@ -1080,7 +1080,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
             });
           }
         } else {
-          btn.disabled
+          btn.disabled = false;
           window.open(url, '_blank', 'noopener,noreferrer');
         }
       } catch (e : any) {
