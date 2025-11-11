@@ -501,14 +501,14 @@ log.info("[customer-ticket] Page setup complete, rendering");
           <!-- Resize Handle -->
           <div
             id="resizeHandle"
-            class="h-1.5 bg-border hover:bg-primary cursor-ns-resize transition-colors relative group flex-shrink-0"
+            class="h-1.5 bg-border hover:bg-primary cursor-ns-resize transition-colors relative group shrink-0"
             title="Drag to resize"
           >
             <div class="absolute inset-x-0 -top-2 -bottom-2"></div>
           </div>
           
           <!-- Header with Collapse Button -->
-          <div class="flex items-center justify-between px-6 pt-3 pb-2 flex-shrink-0">
+          <div class="flex items-center justify-between px-6 pt-3 pb-2 shrink-0">
             <label for="answer" class="text-sm font-medium leading-none">
               Your Reply
             </label>
@@ -551,7 +551,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
                 data-signature={signature}
                 id="sendButton"
                 type="button"
-                class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 flex-shrink-0"
+                class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 shrink-0"
               >
                 <svg
                   class="mr-2 h-4 w-4"
@@ -575,7 +575,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
       </div>
 
       <!-- Right Sidebar -->
-      <div class="w-80 flex-shrink-0 border-l bg-muted/30 flex flex-col overflow-hidden">
+      <div class="w-80 shrink-0 border-l bg-muted/30 flex flex-col overflow-hidden">
         <div class="flex-1 overflow-y-auto p-6 space-y-6">
           
           <!-- Customer Information Component -->
@@ -995,6 +995,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
             scrollHeight = list.scrollTop;
           }
           preview.dataset.originalHtml = preview.innerHTML;
+          btn.disabled = true;
           preview.innerHTML = `
             <div class="inline-block bg-white border rounded-lg shadow-md overflow-hidden h-9/10 w-full">
               <div class="flex justify-between items-center px-2 py-1 bg-gray-50 border-b">
@@ -1085,6 +1086,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
         console.error('[attachment]', e);
         alert('Fehler: ' + e.message);
       }
+      btn.disabled = false;
     };
 
     console.log("[customer-ticket-client] All event listeners attached");
