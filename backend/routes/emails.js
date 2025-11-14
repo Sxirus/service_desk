@@ -199,6 +199,8 @@ router.post('/sendMail',
       const { to } = req.body;
       const subject = req.sanitized.subject;
       const text = req.sanitized.text;
+      const client_id = req.user.client_id;
+      const employee_id = req.user.employee_id;
 
       console.log('[EMAILS] Sending mail to customer:', customerId);
 
@@ -208,6 +210,80 @@ router.post('/sendMail',
           success: false, 
           error: 'Invalid recipient email address' 
         });
+      }
+
+      const {data: settings, error: settingsFetchError} = await supabase
+        .from('clients')
+        .select('auto_assign_employee_on_send')
+        .eq('id', client_id)
+        .single();
+      
+      if (settingsFetchError) {
+        console.error('[Emails] Error fetching the clients send settings, employee will not be assigned');
+      }
+
+      const autoAssign = settings.auto_assign_employee_on_send;
+      console.log('[Emails] Auto assign employee:', autoAssign);
+
+      if(autoAssign) {
+        // Verify employee belongs to user's client
+        const { data: employee, error: employeeError } = await supabase
+          .from('employees')
+          .select('client_id')
+          .eq('id', employee_id)
+          .single();
+
+        if (employeeError || !employee) {
+          console.error('[Emails] Employee not found:', employee_id);
+          return res.status(404).json({ error: 'Employee not found' });
+        }
+
+        if (employee.client_id !== client_id) {
+          console.warn('[Emails] Unauthorized employee access attempt:', {
+            employee_id,
+            employee_client_id: employee.client_id,
+            user_client_id: client_id
+          });
+          return res.status(403).json({ error: 'Employee does not belong to your client' });
+        }
+
+        // Verify customer belongs to user's client
+        const { data: customer, error: customerError } = await supabase
+          .from('customers')
+          .select('client_id, employee_id')
+          .eq('id', customerId)
+          .single();
+
+        if (customerError || !customer) {
+          console.error('[Emails] Customer not found:', customerId);
+          return res.status(404).json({ error: 'Customer not found' });
+        }
+
+        if (customer.client_id !== client_id) {
+          console.warn('[Emails] Unauthorized customer access attempt:', {
+            customerId,
+            customer_client_id: customer.client_id,
+            user_client_id: client_id
+          });
+          return res.status(403).json({ error: 'Customer does not belong to your client' });
+        }
+
+        if (customer.employee_id != employee_id) {
+          // Both verified - proceed with assignment
+          const { data, error } = await supabase
+            .from('customers')
+            .update({ employee_id: employee_id })
+            .eq('id', customerId);
+
+          if (error) {
+            console.error('[Emails] Assignment update failed:', error.message);
+            return res.status(500).json({ error: 'Datenbankfehler' });
+          }
+
+          console.log('[Emails] Successfully assigned employee', employee_id, 'to customer', customerId);
+        } else {
+          console.log('[Emails] Employee was already assigned')
+        }
       }
 
       // Create transporter
@@ -235,7 +311,7 @@ router.post('/sendMail',
       const { data, error } = await supabase
         .from('sent-mail')
         .insert([{
-          employee_id: req.user.employee_id, // Use authenticated user's employee_id
+          employee_id: employee_id,
           text_content: text,
           customer_id: customerId
         }]);

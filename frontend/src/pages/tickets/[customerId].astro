@@ -913,16 +913,16 @@ log.info("[customer-ticket] Page setup complete, rendering");
         if (body.trim() !== '') {
           console.log("[customer-ticket-client] Sending email");
 
-        // add signature
-        if (signature && signature.trim() !== '') {
-          body += `\n\n-- \n${signature}`;
-        }
+          // add signature
+          if (signature && signature.trim() !== '') {
+            body += `\n\n-- \n${signature}`;
+          }
 
-        await apiClient.post(`/emails/sendMail?customerId=${customerId}`, {
-          to: emailAddress,
-          subject: newSubject,
-          text: body
-        });
+          await apiClient.post(`/emails/sendMail?customerId=${customerId}`, {
+            to: emailAddress,
+            subject: newSubject,
+            text: body
+          });
 
           console.log("[customer-ticket-client] Email sent successfully");
         } else {

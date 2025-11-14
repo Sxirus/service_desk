@@ -16,9 +16,6 @@
 import Layout from "../../layouts/BaseLayout.astro";
 import { createClient } from "../../lib/supabase.ts";
 import { getCompletePageContext } from "../../lib/auth-helpers.ts";
-import { ROLE_IDS } from "../../types/database.ts";
-import type { EmailSignatureResponse } from "../../types/database.ts";
-import { apiClient } from "../../utils/api.ts";
 import ToggleSwitch from "@/components/ToggleSwitch";
 
 // Components
@@ -92,7 +89,7 @@ const [
 
   supabase
     .from('clients')
-    .select('show_assigned_mails_in_all_mails')
+    .select('show_assigned_mails_in_all_mails, auto_assign_employee_on_send')
     .eq('id', clientId)
     .single()
 ])
@@ -116,7 +113,8 @@ const signature = signatureJSON?.email_signature;
 const confirmation_subject = confirmationJSON?.confirmation_mail_subject;
 const confirmation_body = confirmationJSON?.confirm_mail;
 
-const show_assigned_mails_in_all_mails = truefalseSettingsJSON?.show_assigned_mails_in_all_mails
+const show_assigned_mails_in_all_mails = truefalseSettingsJSON?.show_assigned_mails_in_all_mails;
+const auto_assign_employee_on_send = truefalseSettingsJSON?.auto_assign_employee_on_send;
 
 
 console.log("[general-settings] Page setup complete, rendering");
@@ -341,12 +339,27 @@ console.log("[general-settings] Page setup complete, rendering");
             </div>
           </div>
         </div>
-        <ToggleSwitch
-          client:visible
-          defaultChecked={show_assigned_mails_in_all_mails}
-          eventName="show-assigned-mails-toggle"
-          label = "Show assigned mails in all mails"
-        />
+        <!-- Yes/No settings section -->
+        <ul>
+          <!-- Show assigned mails in all mails setting -->
+          <li>
+            <ToggleSwitch
+              client:visible
+              defaultChecked={show_assigned_mails_in_all_mails}
+              eventName="show-assigned-mails-toggle"
+              label = "Show assigned mails in all mails"
+            />
+          </li>
+          <!-- Auto assign employee on send setting -->
+          <li>
+            <ToggleSwitch
+              client:visible
+              defaultChecked={auto_assign_employee_on_send}
+              eventName="auto-assign-employee-on-send-toggle"
+              label = "Auto assign an employee when he sends an answer"
+            />
+          </li>
+        <ul>
         <!-- Future Settings Sections -->
         <div class="rounded-lg border border-dashed p-6 text-center">
           <p class="text-sm text-muted-foreground">
@@ -558,19 +571,49 @@ console.log("[general-settings] Page setup complete, rendering");
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
           }
 
-          console.log('[settings-script] Show assigned mails saved succesfully');
+          console.log('[settings-script] Show assigned mails setting saved succesfully');
 
           toast.success("Changes saved", {
             description: "Assigned mails in all mails setting saved successfully"
           });
 
         } catch (error) {
-          console.error("[settings-script] Failed to save confirm mail:", error);
+          console.error("[settings-script] Failed to save the setting (show assigned mails in all mails)", error);
           toast.error("Failed to save", {
             description: error instanceof Error ? error.message : "An unexpected error occurred.",
           });
         } 
       }else {
+        console.error('[settings-script] Value not found');
+      }
+    });
+
+    //handler for the auto assign employees on send email toggle
+    window.addEventListener('auto-assign-employee-on-send-toggle', async (event) => {
+      const value = (event as CustomEvent).detail.value;
+      if (typeof value == "boolean") {
+        try {
+          const response = await apiClient.post('/settings/updateAutoAssignEmployeeOnSend', {
+            value: value
+          });
+          
+          if (!response.success) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          console.log('[settings-script] Auto assign employee setting saved successfully');
+
+          toast.success('Changes saved', {
+            description: 'Auto assign employee when a mail is send, saved successfully'
+          });
+
+        } catch (error) {
+          console.error("[settings-script] Failed to save the setting (auto assign employee when email is send):", error);
+          toast.error("Failed to save", {
+            description: error instanceof Error ? error.message : "An unexpected error occurred.",
+          });
+        }
+      } else {
         console.error('[settings-script] Value not found');
       }
     });

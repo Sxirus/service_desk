@@ -284,4 +284,33 @@ router.post('/updateShowAssignedMails',
   }
 );
 
+//updating the setting auto_assign_employee_on_send
+router.post('/updateAutoAssignEmployeeOnSend',
+  authenticate,
+  async (req, res) => {
+    try {
+      const client_id = req.user.client_id;
+      const value = req.body.value;
+
+      console.log('[SETTINGS] Updating auto assign employee on send');
+      
+      const { data, error } = await supabase
+        .from('clients')
+        .update({auto_assign_employee_on_send: value})
+        .eq('id', client_id)
+
+      if (error) {
+        console.error('[SETTINGS] auto assign employee on send update failed:', error.message);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+
+      console.log('[SETTINGS] Auto assign employee on send updated successfully');
+      res.json({success: true, data})
+    } catch (err) {
+      console.error('[SETTINGS] Server error:', err.message);
+      res.status(500).json({ success: false, error: 'Servererror' });
+    }
+  }
+)
+
 module.exports = router;

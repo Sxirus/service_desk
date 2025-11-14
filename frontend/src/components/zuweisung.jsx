@@ -164,7 +164,6 @@ export function Assign({
     return () => document.removeEventListener("click", onClick);
   }, []);
 
-  console.log('Suggestions', suggestions);
   return (
     <div className="w-full max-w-xl mx-auto">
       <div className="relative">
