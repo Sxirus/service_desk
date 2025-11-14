@@ -7,7 +7,6 @@ type Props = {
   label?: string;
   disabled?: boolean;
   className?: string;
-  id?: string;
 };
 
 export default function ToggleSwitch({

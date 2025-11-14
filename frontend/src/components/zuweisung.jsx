@@ -164,6 +164,7 @@ export function Assign({
     return () => document.removeEventListener("click", onClick);
   }, []);
 
+  console.log('Suggestions', suggestions);
   return (
     <div className="w-full max-w-xl mx-auto">
       <div className="relative">
@@ -191,7 +192,7 @@ export function Assign({
           >
             {suggestions.map((s, i) => (
               <li
-                key={s.id}
+                key={s.text}
                 id={`${listboxId}-opt-${i}`}
                 role="option"
                 aria-selected={i === hovered}
