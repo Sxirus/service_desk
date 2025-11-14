@@ -19,6 +19,7 @@ import { getCompletePageContext } from "../../lib/auth-helpers.ts";
 import { ROLE_IDS } from "../../types/database.ts";
 import type { EmailSignatureResponse } from "../../types/database.ts";
 import { apiClient } from "../../utils/api.ts";
+import ToggleSwitch from "@/components/ToggleSwitch";
 
 // Components
 import AdminShell from "@/components/AdminShell";
@@ -74,7 +75,8 @@ console.log("[general-settings] Fetching email signature for client_id:", authCo
 //fetching data
 const [ 
   {data: signatureJSON, error: signatureFetchError},
-  {data: confirmationJSON, error: confirmationFetchError}
+  {data: confirmationJSON, error: confirmationFetchError},
+  {data: truefalseSettingsJSON, error: truefalseSettingsFetchError}
 ] = await Promise.all([
   supabase
     .from('clients')
@@ -83,29 +85,39 @@ const [
     .single(),
   
   supabase
-  .from('clients')
-  .select('confirm_mail, confirmation_mail_subject')
-  .eq('id', clientId)
+    .from('clients')
+    .select('confirm_mail, confirmation_mail_subject')
+    .eq('id', clientId)
+    .single(),
+
+  supabase
+    .from('clients')
+    .select('show_assigned_mails_in_all_mails')
+    .eq('id', clientId)
+    .single()
 ])
 
 //error handling
 if (signatureFetchError) {
-  console.log('[Settings] Error fetching the signature', signatureFetchError);
+  console.log('[Settings-script] Error fetching the signature', signatureFetchError);
 }
 
 if (confirmationFetchError) {
-  console.log('[Settings] Error fetching the confirmation mail', confirmationFetchError)
+  console.log('[Settings-script] Error fetching the confirmation mail', confirmationFetchError);
+}
+
+if(truefalseSettingsFetchError) {
+  console.log('[Settings-script] Error fetching the true/false settings', truefalseSettingsFetchError);
 }
 
 //Data processing
 const signature = signatureJSON?.email_signature;
 
-var confirmation_subject = '';
-var confirmation_body = '';
-if (confirmationJSON) {
-  confirmation_subject = confirmationJSON[0].confirmation_mail_subject;
-  confirmation_body = confirmationJSON[0].confirm_mail;
-}
+const confirmation_subject = confirmationJSON?.confirmation_mail_subject;
+const confirmation_body = confirmationJSON?.confirm_mail;
+
+const show_assigned_mails_in_all_mails = truefalseSettingsJSON?.show_assigned_mails_in_all_mails
+
 
 console.log("[general-settings] Page setup complete, rendering");
 ---
@@ -329,6 +341,13 @@ console.log("[general-settings] Page setup complete, rendering");
             </div>
           </div>
         </div>
+        <ToggleSwitch
+          client:visible
+          defaultChecked={show_assigned_mails_in_all_mails}
+          eventName="show-assigned-mails-toggle"
+          label = "Show assigned mails in all mails"
+          id="show-assigned-mails-switch"
+        />
         <!-- Future Settings Sections -->
         <div class="rounded-lg border border-dashed p-6 text-center">
           <p class="text-sm text-muted-foreground">
@@ -440,6 +459,7 @@ console.log("[general-settings] Page setup complete, rendering");
       console.error("[settings-script] Save signature button or textarea not found");
     }
 
+    //save button for the confirmation email
     const saveConfirmationMailButton = document.getElementById('save-confirm-mail');
     const confirmSubjectTextarea = document.getElementById('confirm-subject') as HTMLTextAreaElement;
     const confirmBodyTextarea = document.getElementById('confirm-body') as HTMLTextAreaElement;
@@ -527,5 +547,33 @@ console.log("[general-settings] Page setup complete, rendering");
       console.error("[settings-script] Save confirm mail button or textarea not found");
     }
 
+    //handler for the show assigned mails in all mails toggle
+    window.addEventListener('show-assigned-mails-toggle', async (event) => {
+      const value = (event as CustomEvent).detail.value;
+      if (typeof value == "boolean") {
+        try {
+          const response = await apiClient.post('/settings/updateShowAssignedMails', {
+            value: value
+          });
+          if (!response.success) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          console.log('[settings-script] Show assigned mails saved succesfully');
+
+          toast.success("Changes saved", {
+            description: "Assigned mails in all mails setting saved successfully"
+          });
+
+        } catch (error) {
+          console.error("[settings-script] Failed to save confirm mail:", error);
+          toast.error("Failed to save", {
+            description: error instanceof Error ? error.message : "An unexpected error occurred.",
+          });
+        } 
+      }else {
+        console.error('[settings-script] Value not found');
+      }
+    });
   </script>
 </Layout>
