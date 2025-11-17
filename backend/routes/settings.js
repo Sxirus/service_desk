@@ -12,40 +12,103 @@ const { authenticate } = require('../middleware/auth');
 const { sanitizeText } = require('../middleware/validation');
 
 /**
- * Update email signature for authenticated user's client
+ * Update email signature
  * POST /api/settings/updateSignature
- * Body: { signature }
- * 
- * Authentication: Required
- * Authorization: Updates only user's own client
  */
-router.post('/updateSignature',
+router.post('/updateSignature', 
   authenticate,
-  sanitizeText('signature', { required: true, maxLength: 10000 }),
+  sanitizeText('signature', { required: false, maxLength: 5000 }),
   async (req, res) => {
     try {
-      const signature = req.sanitized.signature;
       const client_id = req.user.client_id;
+      const signature = req.sanitized.signature || '';
 
-      console.log('[SETTINGS] Updating signature for client:', client_id);
+      console.log('[SETTINGS] Updating email signature for client:', client_id);
 
       const { data, error } = await supabase
         .from('clients')
         .update({ email_signature: signature })
-        .eq('id', client_id)
-        .select()
-        .single();
+        .eq('id', client_id);
 
       if (error) {
-        console.error('[SETTINGS] Update failed:', error.message);
-        return res.status(500).json({ success: false, error: error.message });
+        console.error('[SETTINGS] Error updating signature:', error);
+        return res.status(500).json({ 
+          success: false, 
+          error: 'Failed to update signature' 
+        });
       }
 
-      console.log('[SETTINGS] Signature updated successfully');
-      res.json({ success: true, data });
+      res.json({ success: true });
     } catch (err) {
-      console.error('[SETTINGS] Server error:', err.message);
-      res.status(500).json({ success: false, error: 'Servererror' });
+      console.error('[SETTINGS] Server error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+/**
+ * Update email sending configuration
+ * POST /api/settings/updateEmailConfig
+ */
+router.post('/updateEmailConfig',
+  authenticate,
+  async (req, res) => {
+    try {
+      const client_id = req.user.client_id;
+      const { sendingMode, primaryEmailId } = req.body;
+
+      console.log('[SETTINGS] Updating email config for client:', client_id, {
+        sendingMode,
+        primaryEmailId
+      });
+
+      // Validate sending mode
+      if (!['primary', 'thread-based'].includes(sendingMode)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid sending mode'
+        });
+      }
+
+      // If primary mode, validate primary email exists and belongs to client
+      if (sendingMode === 'primary' && primaryEmailId) {
+        const { data: email, error: emailError } = await supabase
+          .from('client-emails')
+          .select('id, client_id')
+          .eq('id', primaryEmailId)
+          .eq('client_id', client_id)
+          .single();
+
+        if (emailError || !email) {
+          return res.status(400).json({
+            success: false,
+            error: 'Selected email does not exist or does not belong to your client'
+          });
+        }
+      }
+
+      const updateData = {
+        email_sending_mode: sendingMode,
+        primary_email_id: sendingMode === 'primary' ? primaryEmailId : null
+      };
+
+      const { data, error } = await supabase
+        .from('clients')
+        .update(updateData)
+        .eq('id', client_id);
+
+      if (error) {
+        console.error('[SETTINGS] Error updating email config:', error);
+        return res.status(500).json({ 
+          success: false, 
+          error: 'Failed to update email configuration' 
+        });
+      }
+
+      res.json({ success: true });
+    } catch (err) {
+      console.error('[SETTINGS] Server error:', err);
+      res.status(500).json({ success: false, error: err.message });
     }
   }
 );

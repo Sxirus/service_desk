@@ -71,6 +71,21 @@ export const ROLE_IDS = {
 
 export type RoleId = typeof ROLE_IDS[keyof typeof ROLE_IDS];
 
+export interface EmailProvider {
+  name: string;
+  smtp: string;
+  smtp_port: number;
+}
+
+export interface ClientEmail {
+  id: number;
+  email_address: string;
+  active: boolean;
+  provider_id: number;
+  'email-provider': EmailProvider;
+}
+
+
 // ============================================================================
 // RPC RESPONSE TYPES
 // ============================================================================
