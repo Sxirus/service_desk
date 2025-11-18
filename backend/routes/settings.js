@@ -113,6 +113,39 @@ router.post('/updateEmailConfig',
   }
 );
 
+//uptaing the confimation mail send when a customer sends a mail to the client
+router.post('/updateConfirmMail', 
+  authenticate, 
+  async (req, res) => {
+    try {
+      const subject = req.body.subject;
+      const body = req.body.body;
+      const client_id = req.user.client_id;
+      console.log(subject, body, client_id);
+
+      console.log('[SETTINGS] Updating confirmation mail for client:', client_id);
+
+      const { data, error} = await supabase
+        .from('clients')
+        .update({
+          confirm_mail: body,
+          confirmation_mail_subject: subject
+        })
+        .eq('id', client_id);
+
+      if (error) {
+        console.error('[SETTINGS] Confirmation mail update failed:', error.message);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+
+      console.log('[SETTINGS] Confirm mail updated successfully');
+      res.json({ success: true, data })
+    } catch (err) {
+      console.error('[SETTINGS] Server error:', err.message);
+      res.status(500).json({ success: false, error: 'Servererror' });
+    }
+});
+
 /**
  * Get all settings for authenticated user's client
  * GET /api/settings/getAllSettings
@@ -284,5 +317,63 @@ router.get('/getShopifyStatus',
     }
   }
 );
+
+//updating the setting show_assigned_mails_in_all_mails
+router.post('/updateShowAssignedMails',
+  authenticate,
+  async (req, res) => {
+    try {
+      const client_id = req.user.client_id;
+      const value = req.body.value;
+
+      console.log('[SETTINGS] Updating show assigned mails setting for client:', client_id);
+
+      const { data, error } = await supabase
+        .from('clients')
+        .update({show_assigned_mails_in_all_mails: value})
+        .eq('id', client_id)
+      
+      if (error) {
+        console.error('[SETTINGS] Show assigned mails update failed:', error.message);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+
+      console.log('[SETTINGS] Show assigned mails updated successfully');
+      res.json({ success: true, data })
+    } catch (err) {
+      console.error('[SETTINGS] Server error:', err.message);
+      res.status(500).json({ success: false, error: 'Servererror' });
+    }
+  }
+);
+
+//updating the setting auto_assign_employee_on_send
+router.post('/updateAutoAssignEmployeeOnSend',
+  authenticate,
+  async (req, res) => {
+    try {
+      const client_id = req.user.client_id;
+      const value = req.body.value;
+
+      console.log('[SETTINGS] Updating auto assign employee on send');
+      
+      const { data, error } = await supabase
+        .from('clients')
+        .update({auto_assign_employee_on_send: value})
+        .eq('id', client_id)
+
+      if (error) {
+        console.error('[SETTINGS] auto assign employee on send update failed:', error.message);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+
+      console.log('[SETTINGS] Auto assign employee on send updated successfully');
+      res.json({success: true, data})
+    } catch (err) {
+      console.error('[SETTINGS] Server error:', err.message);
+      res.status(500).json({ success: false, error: 'Servererror' });
+    }
+  }
+)
 
 module.exports = router;
