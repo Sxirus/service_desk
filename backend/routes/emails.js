@@ -180,7 +180,7 @@ router.get('/getEmailsFromCustomer',
 );
 
 /**
- * Send email to customer
+ * Send email to customer - USING CLIENT SMTP CONFIG FROM DATABASE
  * POST /api/emails/sendMail?customerId=123
  * Body: { to, subject, text }
  * 
@@ -195,20 +195,26 @@ router.post('/sendMail',
   sanitizeText('subject', { required: true, maxLength: 500 }),
   async (req, res) => {
     try {
+      const client_id = req.user.client_id;
       const customerId = req.sanitized.customerId;
-      const { to } = req.body;
+      const { to, threadEmailAddress } = req.body;
       const subject = req.sanitized.subject;
       const text = req.sanitized.text;
       const client_id = req.user.client_id;
       const employee_id = req.user.employee_id;
 
-      console.log('[EMAILS] Sending mail to customer:', customerId);
+      console.log('[EMAILS] Sending mail with thread context:', { 
+        customerId, 
+        threadEmailAddress 
+      });
+
+      console.log('[EMAILS] Sending mail to customer:', customerId, 'using client SMTP:', client_id);
 
       // Validate recipient email
       if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
         return res.status(400).json({ 
           success: false, 
-          error: 'Invalid recipient email address' 
+          error: 'Ungültige Empfänger-Email-Adresse' 
         });
       }
 
@@ -285,53 +291,84 @@ router.post('/sendMail',
           console.log('[Emails] Employee was already assigned')
         }
       }
+      
+      // 1. SMTP Konfiguration aus Datenbank holen (mit Provider JOIN)
+      const smtpConfig = await getClientSmtpConfig(client_id, threadEmailAddress);
+      
+      if (!smtpConfig) {
+        return res.status(500).json({ 
+          success: false, 
+          error: 'Keine SMTP Konfiguration für diesen Client gefunden. Bitte kontaktieren Sie den Administrator.' 
+        });
+      }
 
-      // Create transporter
-      const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT),
-        secure: process.env.SMTP_SECURE,
-        auth: {
-          user: process.env.IMAP_USER,
-          pass: process.env.IMAP_PASS,
-        },
+      console.log('[EMAILS] Using SMTP config:', {
+        provider: smtpConfig.provider,
+        host: smtpConfig.host,
+        port: smtpConfig.port,
+        from: smtpConfig.auth.user
       });
 
-      // Send email
+      // 2. Create transporter mit Datenbank-Konfiguration
+      const transporter = nodemailer.createTransport(smtpConfig);
+
+      // 3. Verify SMTP connection (optional aber empfohlen)
+      try {
+        await transporter.verify();
+        console.log('[EMAILS] SMTP connection verified for provider:', smtpConfig.provider);
+      } catch (verifyError) {
+        console.error('[EMAILS] SMTP verification failed for provider:', smtpConfig.provider, verifyError);
+        return res.status(500).json({ 
+          success: false, 
+          error: `SMTP Verbindung zu ${smtpConfig.provider} fehlgeschlagen: ${verifyError.message}` 
+        });
+      }
+
+      // 4. Send email
       const info = await transporter.sendMail({
-        from: `${process.env.MAIL_USER}`,
+        from: `"Service Desk" <${smtpConfig.auth.user}>`,
         to,
         subject,
         text,
       });
 
-      console.log('[EMAILS] Email sent:', info.messageId);
+      console.log('[EMAILS] Email sent via', smtpConfig.provider, ':', info.messageId);
 
-      // Store in database with authenticated employee_id
+      // 5. Store in database with authenticated employee_id
       const { data, error } = await supabase
         .from('sent-mail')
         .insert([{
           employee_id: employee_id,
           text_content: text,
-          customer_id: customerId
+          customer_id: customerId,
+          sent_via: smtpConfig.auth.user, // Welche Email verwendet wurde
+          provider_name: smtpConfig.provider // Welcher Provider verwendet wurde
         }]);
 
       if (error) {
         console.error('[EMAILS] Database insert error:', error);
+        // Email wurde gesendet, aber DB-Speicherung fehlgeschlagen
         return res.status(500).json({ 
           success: false, 
-          error: 'Failed to save sent email' 
+          error: 'Email gesendet, aber Speicherung fehlgeschlagen',
+          messageId: info.messageId,
+          sentVia: smtpConfig.auth.user
         });
       }
 
       res.json({
         success: true,
         messageId: info.messageId,
+        sentVia: smtpConfig.auth.user,
+        provider: smtpConfig.provider,
         insertedData: data
       });
     } catch (err) {
       console.error('[EMAILS] Send error:', err);
-      res.status(500).json({ success: false, error: err.message });
+      res.status(500).json({ 
+        success: false, 
+        error: 'Email konnte nicht gesendet werden: ' + err.message 
+      });
     }
   }
 );
@@ -433,6 +470,179 @@ router.get('/getMailsbyCustomerIds',
     } catch (err) {
       console.error('[EMAILS] Server error:', err.message);
       res.status(500).json({ success: false, error: 'Servererror' });
+    }
+  }
+);
+
+async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
+  try {
+    console.log('[EMAILS] Fetching SMTP config for client:', client_id, 'thread email:', threadEmailAddress);
+
+    // 1. Hole Client-Einstellungen (Modus & primäre Email)
+    const { data: clientSettings, error: clientError } = await supabase
+      .from('clients')
+      .select('email_sending_mode, primary_email_id')
+      .eq('id', client_id)
+      .single();
+
+    if (clientError || !clientSettings) {
+      console.error('[EMAILS] Client settings error:', clientError);
+      return getEnvSmtpConfig();
+    }
+
+    const { email_sending_mode, primary_email_id } = clientSettings;
+
+    // 2. Thread-Based Mode: Verwende die Email, von der die ursprüngliche Nachricht kam
+    if (email_sending_mode === 'thread-based' && threadEmailAddress) {
+      console.log('[EMAILS] Thread-based mode, looking for email:', threadEmailAddress);
+      
+      const { data: threadEmail, error: threadError } = await supabase
+        .from('client-emails')
+        .select(`
+          id,
+          email_address, 
+          password,
+          email-provider (
+            smtp,
+            smtp_port
+          )
+        `)
+        .eq('client_id', client_id)
+        .eq('email_address', threadEmailAddress)
+        .eq('active', true)
+        .single();
+
+      if (!threadError && threadEmail && threadEmail['email-provider']) {
+        const provider = threadEmail['email-provider'];
+        console.log('[EMAILS] Using thread-based email:', threadEmail.email_address);
+        
+        return {
+          host: provider.smtp,
+          port: parseInt(provider.smtp_port),
+          secure: parseInt(provider.smtp_port) === 465,
+          auth: {
+            user: threadEmail.email_address,
+            pass: threadEmail.password
+          },
+          provider: 'Thread-Based: ' + threadEmail.email_address
+        };
+      } else {
+        console.warn('[EMAILS] Thread email not found, falling back to primary mode');
+      }
+    }
+
+    // 3. Primary Mode: Verwende die konfigurierte primäre Email
+    if (email_sending_mode === 'primary' && primary_email_id) {
+      console.log('[EMAILS] Primary mode, using primary email ID:', primary_email_id);
+      
+      const { data: primaryEmail, error: primaryError } = await supabase
+        .from('client-emails')
+        .select(`
+          id,
+          email_address, 
+          password,
+          email-provider (
+            smtp,
+            smtp_port
+          )
+        `)
+        .eq('id', primary_email_id)
+        .eq('client_id', client_id)
+        .eq('active', true)
+        .single();
+
+      if (!primaryError && primaryEmail && primaryEmail['email-provider']) {
+        const provider = primaryEmail['email-provider'];
+        console.log('[EMAILS] Using primary email:', primaryEmail.email_address);
+        
+        return {
+          host: provider.smtp,
+          port: parseInt(provider.smtp_port),
+          secure: parseInt(provider.smtp_port) === 465,
+          auth: {
+            user: primaryEmail.email_address,
+            pass: primaryEmail.password
+          },
+          provider: 'Primary: ' + primaryEmail.email_address
+        };
+      }
+    }
+
+    // 4. Fallback: Erste verfügbare Email
+    console.warn('[EMAILS] Using fallback - first available email');
+    const { data: fallbackEmails, error: fallbackError } = await supabase
+      .from('client-emails')
+      .select(`
+        email_address, 
+        password,
+        email-provider (
+          smtp,
+          smtp_port
+        )
+      `)
+      .eq('client_id', client_id)
+      .eq('active', true)
+      .order('id', { ascending: true })
+      .limit(1);
+
+    if (!fallbackError && fallbackEmails && fallbackEmails.length > 0) {
+      const fallbackEmail = fallbackEmails[0];
+      const provider = fallbackEmail['email-provider'];
+      
+      if (provider && provider.smtp) {
+        return {
+          host: provider.smtp,
+          port: parseInt(provider.smtp_port),
+          secure: parseInt(provider.smtp_port) === 465,
+          auth: {
+            user: fallbackEmail.email_address,
+            pass: fallbackEmail.password
+          },
+          provider: 'Fallback: ' + fallbackEmail.email_address
+        };
+      }
+    }
+    console.error('[EMAILS] No valid SMTP configuration found for client:', client_id);
+    return null;
+  } catch (err) {
+    console.error('[EMAILS] SMTP config error:', err);
+    return null;
+  }
+}
+
+// In emails.js - Temporäre Debug-Route
+router.get('/debug-client-emails', 
+  authenticate,
+  async (req, res) => {
+    try {
+      const client_id = req.user.client_id;
+      
+      const { data, error } = await supabase
+        .from('client-emails')
+        .select(`
+          id,
+          email_address,
+          client_id,
+          active,
+          provider_id,
+          "email-provider" (
+            name,
+            smtp,
+            smtp_port
+          )
+        `)
+        .eq('client_id', client_id)
+        .eq('active', true);
+
+      console.log('[DEBUG] Client emails for client_id:', client_id, data);
+
+      res.json({
+        client_id,
+        emails: data,
+        count: data?.length || 0
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
     }
   }
 );

@@ -108,7 +108,9 @@ const [
   { data: macroGroups, error: macroGroupsError },
   { data: clientData, error: clientError },
   { data: assignedEmployeeArray, error: assignedEmployeeErr},
-  { data: employeeArray, error: employeeErr}
+  { data: employeeArray, error: employeeErr},
+  // NEU: Client Email Configuration laden
+  { data: clientEmailConfig, error: clientEmailConfigError }
 ] = await Promise.all([
   supabase
     .from("customers")
@@ -183,11 +185,25 @@ const [
     .from("employees")
     .select("id, name")
     .eq("client_id", clientId)
-    .order("name")
+    .order("name"),
+  
+  // NEU: Client Email Configuration
+  supabase
+    .from('clients')
+    .select(`
+      email_sending_mode,
+      primary_email_id,
+      client-emails!primary_email_id (
+        id,
+        email_address
+      )
+    `)
+    .eq('id', clientId)
+    .single()
 ]);
 
 perf.end(queryTimer, {
-  queries: 5,
+  queries: 6, // ← Auf 6 erhöhen
   customerFound: !!customer,
   incomingMailsCount: incomingMails?.length || 0,
   sentMailsCount: sentMails?.length || 0,
@@ -208,6 +224,11 @@ if (employeeErr) {
   })
 } else {
   console.log("[customer-ticket] Data Loaded")
+}
+
+// NEU: Email Config Error
+if (clientEmailConfigError) {
+  console.error("[customer-ticket] Error fetching client email config:", clientEmailConfigError);
 }
 
 const errorCheckTimer = perf.start('page-load', 'error-handling');
@@ -334,7 +355,61 @@ if (!lastMail) {
 const emailAddress = lastMail.email_address;
 const newSubject = `RE: ${lastMail.subject}`;
 
+// NEU: Korrigierte Thread Email Address - Verwende received_by für Thread-Based Mode
+let threadEmailAddress = null;
+
+// Thread-Based Mode: Verwende received_by (welche unserer Emails die Nachricht empfangen hat)
+if (clientEmailConfig?.email_sending_mode === 'thread-based') {
+  // Priorität 1: received_by Feld verwenden
+  if (lastMail.received_by) {
+    threadEmailAddress = lastMail.received_by;
+    log.info("Using thread-based email from received_by:", threadEmailAddress);
+  }
+  // Priorität 2: to_email_address Feld als Fallback
+  else if (lastMail.to_email_address) {
+    threadEmailAddress = lastMail.to_email_address;
+    log.info("Using thread-based email from to_email_address (fallback):", threadEmailAddress);
+  }
+  // Priorität 3: Erste verfügbare Email des Clients
+  else {
+    const { data: clientEmails, error: clientEmailsError } = await supabase
+      .from('client-emails')
+      .select('email_address')
+      .eq('client_id', clientId)
+      .eq('active', true)
+      .order('id', { ascending: true })
+      .limit(1);
+    
+    if (!clientEmailsError && clientEmails && clientEmails.length > 0) {
+      threadEmailAddress = clientEmails[0].email_address;
+      log.info("Using fallback thread email (first available):", threadEmailAddress);
+    } else {
+      log.error("No thread email address found for thread-based mode!");
+    }
+  }
+}
+
+// NEU: Sender Email basierend auf Client Configuration ermitteln
+let senderEmail = null;
+if (clientEmailConfig?.email_sending_mode === 'primary' && clientEmailConfig['client-emails']?.[0]) {
+  senderEmail = clientEmailConfig['client-emails'][0].email_address;
+  log.info("Using primary email:", senderEmail);
+} else if (clientEmailConfig?.email_sending_mode === 'thread-based' && threadEmailAddress) {
+  senderEmail = threadEmailAddress;
+  log.info("Using thread-based email:", senderEmail);
+}
+
 const signature = clientData?.email_signature || "";
+
+log.info("Client email configuration:", {
+  mode: clientEmailConfig?.email_sending_mode,
+  primaryEmailId: clientEmailConfig?.primary_email_id,
+  senderEmail: senderEmail,
+  threadEmail: threadEmailAddress,
+  customerEmail: emailAddress,
+  lastMailReceivedBy: lastMail.received_by,
+  lastMailToEmail: lastMail.to_email_address
+});
 
 log.info("Client data loaded:", {
   name: clientData?.name,
@@ -549,6 +624,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
                 data-subject={newSubject}
                 data-customerid={customerId}
                 data-signature={signature}
+                data-threademail={threadEmailAddress}
                 id="sendButton"
                 type="button"
                 class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 shrink-0"
@@ -885,6 +961,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
       const newSubject = button.dataset.subject;
       const customerId = button.dataset.customerid;
       const signature = button.dataset.signature;
+      const threadEmailAddress = button.dataset.threademail; // NEU: Thread Email
 
       let body = textarea?.value || '';
       body = body.trim();
@@ -893,6 +970,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
         to: emailAddress,
         subject: newSubject,
         customerId: customerId,
+        threadEmailAddress: threadEmailAddress, // NEU
         bodyLength: body.length
       });
 
@@ -922,6 +1000,14 @@ log.info("[customer-ticket] Page setup complete, rendering");
             to: emailAddress,
             subject: newSubject,
             text: body
+          }
+
+          // NEU: Thread Email Address mitsenden für Thread-Based Mode
+          await apiClient.post(`/emails/sendMail?customerId=${customerId}`, {
+            to: emailAddress,
+            subject: newSubject,
+            text: body,
+            threadEmailAddress: threadEmailAddress // NEU: Wichtig für Thread-Based Mode
           });
 
           console.log("[customer-ticket-client] Email sent successfully");

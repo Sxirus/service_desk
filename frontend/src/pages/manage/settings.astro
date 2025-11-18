@@ -10,6 +10,7 @@
  * 
  * Features:
  * - Email signature management with XSS protection
+ * - Email sending configuration (primary email & mode)
  * - Additional settings can be added here
  */
 
@@ -64,23 +65,27 @@ if (!authContext.isAdmin) {
 console.log("[general-settings] Admin access verified");
 
 // ============================================================================
-// DATA LOADING - EMAIL SIGNATURE
+// DATA LOADING - ALL SETTINGS
 // ============================================================================
 
-console.log("[general-settings] Fetching email signature for client_id:", authContext.employee.client_id);
+console.log("[general-settings] Fetching settings for client_id:", clientId);
 
-//fetching data
+// Fetch all required data
 const [ 
+  {data: clientSettings, error: clientSettingsError},
+  {data: clientEmails, error: clientEmailsError},
   {data: signatureJSON, error: signatureFetchError},
   {data: confirmationJSON, error: confirmationFetchError},
   {data: truefalseSettingsJSON, error: truefalseSettingsFetchError}
 ] = await Promise.all([
+  // Client settings (signature, email mode, primary email)
   supabase
     .from('clients')
-    .select('email_signature')
+    .select('email_signature, email_sending_mode, primary_email_id')
     .eq("id", clientId)
     .single(),
   
+  // All available client emails for dropdown - KORRIGIERT
   supabase
     .from('clients')
     .select('confirm_mail, confirmation_mail_subject')
@@ -105,10 +110,48 @@ if (confirmationFetchError) {
 
 if(truefalseSettingsFetchError) {
   console.log('[Settings-script] Error fetching the true/false settings', truefalseSettingsFetchError);
+    .from('client-emails')
+    .select(`
+      id,
+      email_address,
+      active,
+      provider_id,
+      "email-provider" (
+        name,
+        smtp,
+        smtp_port
+      )
+    `)
+    .eq('client_id', clientId)  // WICHTIG: Nur Emails dieses Clients
+    .eq('active', true)
+    .order('email_address'),
+  
+  // Confirmation email settings
+  supabase
+    .from('clients')
+    .select('confirm_mail, confirmation_mail_subject')
+    .eq('id', clientId)
+    .single()
+]);
+
+// Error handling
+if (clientSettingsError) {
+  console.error('[Settings] Error fetching client settings:', clientSettingsError);
 }
 
-//Data processing
-const signature = signatureJSON?.email_signature;
+if (clientEmailsError) {
+  console.error('[Settings] Error fetching client emails:', clientEmailsError);
+}
+
+// Data processing
+const signature = clientSettings?.email_signature || '';
+const emailSendingMode = clientSettings?.email_sending_mode || 'primary';
+const primaryEmailId = clientSettings?.primary_email_id;
+const availableEmails = clientEmails || [];
+
+// DEBUG Logging
+console.log('[Settings] Available emails for client', clientId, ':', availableEmails);
+console.log('[Settings] Client settings:', { emailSendingMode, primaryEmailId });
 
 const confirmation_subject = confirmationJSON?.confirmation_mail_subject;
 const confirmation_body = confirmationJSON?.confirm_mail;
@@ -143,96 +186,135 @@ console.log("[general-settings] Page setup complete, rendering");
       <!-- Settings Sections -->
       <div class="space-y-6">
         
-        <!-- Email Signature Section -->
+        <!-- Email Sending Configuration Section -->
         <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
           <div class="p-6 space-y-4">
             <!-- Section Header -->
             <div class="space-y-1">
               <h3 class="text-lg font-semibold leading-none tracking-tight">
-                Email Signature
+                Email Sending Configuration
               </h3>
               <p class="text-sm text-muted-foreground">
-                Configure the default email signature for support responses
+                Configure how emails are sent from your service desk
               </p>
             </div>
 
-            <!-- Error Alert (if signature fetch failed) -->
-            {signatureFetchError && (
+            <!-- Error Alert (if emails fetch failed) -->
+            {clientEmailsError && (
               <div class="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
                 <div class="flex items-start gap-3">
-                  <svg
-                    class="h-5 w-5 text-destructive mt-0.5"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke-width="1.5"
-                    stroke="currentColor"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
-                    />
+                  <svg class="h-5 w-5 text-destructive mt-0.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                   </svg>
                   <div class="space-y-1">
                     <p class="text-sm font-medium text-destructive">
-                      Failed to load email signature
+                      Failed to load email configurations
                     </p>
                     <p class="text-sm text-muted-foreground">
-                      There was an error loading the signature. You can still edit and save a new one.
+                      There was an error loading your email accounts. You can still configure the settings.
                     </p>
                   </div>
                 </div>
               </div>
             )}
 
-            <!-- Signature Editor -->
-            <div class="space-y-2">
-              <label 
-                for="signature" 
-                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                Signature Content
-              </label>
-              <textarea
-                id="signature"
-                class="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-                placeholder="Enter your email signature here..."
-                rows="6"
-              >{signature}</textarea>
-              <p class="text-xs text-muted-foreground">
-                This signature will be automatically appended to all outgoing support emails.
-              </p>
-            </div>
+            <!-- No Emails Warning -->
+            {availableEmails.length === 0 && !clientEmailsError && (
+              <div class="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                <div class="flex items-start gap-3">
+                  <svg class="h-5 w-5 text-amber-600 mt-0.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                  </svg>
+                  <div class="space-y-1">
+                    <p class="text-sm font-medium text-amber-800">
+                      No email accounts configured
+                    </p>
+                    <p class="text-sm text-amber-700">
+                      Please configure at least one email account before setting up sending preferences.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
-            <!-- Action Button -->
-            <div class="flex items-center justify-end pt-2">
-              <button
-                id="save-signature"
-                type="button"
-                class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
-              >
-                <svg
-                  class="mr-2 h-4 w-4"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke-width="1.5"
-                  stroke="currentColor"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                Save Changes
-              </button>
-            </div>
+            <!-- Sending Mode Selection -->
+            {availableEmails.length > 0 && (
+              <div class="space-y-4">
+                <!-- Mode Selection -->
+                <div class="space-y-2">
+                  <label class="text-sm font-medium leading-none">Email Sending Mode</label>
+                  <div class="grid gap-2">
+                    <label class="flex items-center space-x-2">
+                      <input 
+                        type="radio" 
+                        name="sendingMode" 
+                        value="primary" 
+                        class="h-4 w-4 text-primary border-gray-300 focus:ring-primary"
+                        checked={emailSendingMode === 'primary'}
+                      />
+                      <span class="text-sm">
+                        <span class="font-medium">Use Primary Email</span>
+                        <span class="text-muted-foreground block text-xs">Always send from your selected primary email address</span>
+                      </span>
+                    </label>
+                    
+                    <label class="flex items-center space-x-2">
+                      <input 
+                        type="radio" 
+                        name="sendingMode" 
+                        value="thread-based" 
+                        class="h-4 w-4 text-primary border-gray-300 focus:ring-primary"
+                        checked={emailSendingMode === 'thread-based'}
+                      />
+                      <span class="text-sm">
+                        <span class="font-medium">Thread-Based Response</span>
+                        <span class="text-muted-foreground block text-xs">Always reply from the same email that received the original message</span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Primary Email Selection (only show when mode is primary) -->
+                <div id="primaryEmailSection" class={`space-y-2 ${emailSendingMode !== 'primary' ? 'hidden' : ''}`}>
+                  <label for="primaryEmail" class="text-sm font-medium leading-none">Primary Email Address</label>
+                  <select 
+                    id="primaryEmail"
+                    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <option value="">Select primary email...</option>
+                    {availableEmails.map((email) => (
+                      <option 
+                        value={email.id} 
+                        selected={email.id === primaryEmailId}
+                      >
+                      {email.email_address} ({(email['email-provider'] as any)?.name || 'Unknown Provider'})
+                      </option>
+                    ))}
+                  </select>
+                  <p class="text-xs text-muted-foreground">
+                    This email will be used as the sender for all outgoing emails in "Primary Email" mode.
+                  </p>
+                </div>
+
+                <!-- Action Button -->
+                <div class="flex items-center justify-end pt-2">
+                  <button
+                    id="save-email-config"
+                    type="button"
+                    class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+                  >
+                    <svg class="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Save Email Configuration
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        <!-- Confirmation Email Section -->
+        <!-- Email Signature Section -->
         <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
           <div class="p-6 space-y-4">
             <!-- Section Header -->
@@ -247,21 +329,12 @@ console.log("[general-settings] Page setup complete, rendering");
 
             <!-- Error Alert (if fetch failed) -->
             {confirmationFetchError && (
+            <!-- Error Alert (if signature fetch failed) -->
+            {clientSettingsError && (
               <div class="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
                 <div class="flex items-start gap-3">
-                  <svg
-                    class="h-5 w-5 text-destructive mt-0.5"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke-width="1.5"
-                    stroke="currentColor"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
-                    />
+                  <svg class="h-5 w-5 text-destructive mt-0.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                   </svg>
                   <div class="space-y-1">
                     <p class="text-sm font-medium text-destructive">
@@ -282,6 +355,8 @@ console.log("[general-settings] Page setup complete, rendering");
                 class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
               >
                 Subject
+              <label for="signature" class="text-sm font-medium leading-none">
+                Signature Content
               </label>
               <textarea
                 id="confirm-subject"
@@ -320,21 +395,10 @@ console.log("[general-settings] Page setup complete, rendering");
                 type="button"
                 class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
               >
-                <svg
-                  class="mr-2 h-4 w-4"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke-width="1.5"
-                  stroke="currentColor"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
+                <svg class="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                Save Changes
+                Save Signature
               </button>
             </div>
           </div>
@@ -372,17 +436,104 @@ console.log("[general-settings] Page setup complete, rendering");
 
   <script>
     /**
-     * Client-side script for email signature management
-     * Handles save operation with XSS protection and validation
+     * Client-side script for settings management
+     * Handles email configuration and signature saving
      */
 
     import { toast } from "sonner";
     import { validateEmailSignature, validateTextInput } from "../../lib/validation";
     import { apiClient } from "../../utils/api";
 
+    // ============================================================================
+    // EMAIL CONFIGURATION HANDLING
+    // ============================================================================
+
     /**
-     * Save button click handler with validation
+     * Email configuration save handler
      */
+    const saveEmailConfigButton = document.getElementById("save-email-config");
+    const sendingModeRadios = document.querySelectorAll('input[name="sendingMode"]');
+    const primaryEmailSelect = document.getElementById("primaryEmail");
+    const primaryEmailSection = document.getElementById("primaryEmailSection");
+
+    // Show/hide primary email selection based on mode
+    sendingModeRadios.forEach(radio => {
+      radio.addEventListener('change', () => {
+        if ((radio as HTMLInputElement).value === 'primary') {
+          primaryEmailSection?.classList.remove('hidden');
+        } else {
+          primaryEmailSection?.classList.add('hidden');
+        }
+      });
+    });
+
+    if (saveEmailConfigButton) {
+      saveEmailConfigButton.addEventListener("click", async () => {
+        const selectedMode = (document.querySelector('input[name="sendingMode"]:checked') as HTMLInputElement)?.value;
+        const primaryEmailId = (primaryEmailSelect as HTMLSelectElement)?.value;
+
+        console.log("[settings-script] Saving email configuration:", {
+          mode: selectedMode,
+          primaryEmailId: primaryEmailId
+        });
+
+        // Validation
+        if (selectedMode === 'primary' && !primaryEmailId) {
+          toast.error("Configuration incomplete", {
+            description: "Please select a primary email address for this mode."
+          });
+          return;
+        }
+
+        // Disable button during save
+        saveEmailConfigButton.setAttribute("disabled", "true");
+        saveEmailConfigButton.innerHTML = `
+          <svg class="mr-2 h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          Saving...
+        `;
+
+        try {
+          const response = await apiClient.post('/settings/updateEmailConfig', {
+            sendingMode: selectedMode,
+            primaryEmailId: selectedMode === 'primary' ? parseInt(primaryEmailId) : null
+          });
+
+          if (!response.success) {
+            throw new Error(response.error || 'Failed to save email configuration');
+          }
+
+          console.log("[settings-script] Email configuration saved successfully");
+          
+          toast.success("Configuration saved", {
+            description: "Email sending preferences have been updated.",
+          });
+
+        } catch (error) {
+          console.error("[settings-script] Failed to save email configuration:", error);
+          
+          toast.error("Failed to save", {
+            description: error instanceof Error ? error.message : "An unexpected error occurred.",
+          });
+        } finally {
+          // Re-enable button
+          saveEmailConfigButton.removeAttribute("disabled");
+          saveEmailConfigButton.innerHTML = `
+            <svg class="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Save Email Configuration
+          `;
+        }
+      });
+    }
+
+    // ============================================================================
+    // SIGNATURE HANDLING (existing code)
+    // ============================================================================
+
     const saveSignatureButton = document.getElementById("save-signature");
     const signatureTextarea = document.getElementById("signature") as HTMLTextAreaElement;
 
@@ -429,11 +580,8 @@ console.log("[general-settings] Page setup complete, rendering");
             signature: sanitizedSignature
           });
 
-          // Output response for debugging
-          console.log("[settings-script] Save response:", response);
-
           if (!response.success) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            throw new Error(response.error || 'Failed to save signature');
           }
 
           console.log("[settings-script] Signature saved successfully");
@@ -463,7 +611,7 @@ console.log("[general-settings] Page setup complete, rendering");
             <svg class="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            Save Changes
+            Save Signature
           `;
         }
       });
