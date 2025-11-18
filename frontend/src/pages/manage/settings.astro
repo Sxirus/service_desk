@@ -73,10 +73,9 @@ console.log("[general-settings] Fetching settings for client_id:", clientId);
 // Fetch all required data
 const [ 
   {data: clientSettings, error: clientSettingsError},
-  {data: clientEmails, error: clientEmailsError},
-  {data: signatureJSON, error: signatureFetchError},
   {data: confirmationJSON, error: confirmationFetchError},
-  {data: truefalseSettingsJSON, error: truefalseSettingsFetchError}
+  {data: truefalseSettingsJSON, error: truefalseSettingsFetchError},
+  {data: clientEmails, error: clientEmailsError},
 ] = await Promise.all([
   // Client settings (signature, email mode, primary email)
   supabase
@@ -85,31 +84,22 @@ const [
     .eq("id", clientId)
     .single(),
   
-  // All available client emails for dropdown - KORRIGIERT
+  //confirmation mail 
   supabase
     .from('clients')
     .select('confirm_mail, confirmation_mail_subject')
     .eq('id', clientId)
     .single(),
 
+  //true false settings
   supabase
     .from('clients')
     .select('show_assigned_mails_in_all_mails, auto_assign_employee_on_send')
     .eq('id', clientId)
-    .single()
-])
+    .single(),
 
-//error handling
-if (signatureFetchError) {
-  console.log('[Settings-script] Error fetching the signature', signatureFetchError);
-}
-
-if (confirmationFetchError) {
-  console.log('[Settings-script] Error fetching the confirmation mail', confirmationFetchError);
-}
-
-if(truefalseSettingsFetchError) {
-  console.log('[Settings-script] Error fetching the true/false settings', truefalseSettingsFetchError);
+  // All available client emails for dropdown - KORRIGIERT
+  supabase
     .from('client-emails')
     .select(`
       id,
@@ -124,17 +114,19 @@ if(truefalseSettingsFetchError) {
     `)
     .eq('client_id', clientId)  // WICHTIG: Nur Emails dieses Clients
     .eq('active', true)
-    .order('email_address'),
-  
-  // Confirmation email settings
-  supabase
-    .from('clients')
-    .select('confirm_mail, confirmation_mail_subject')
-    .eq('id', clientId)
-    .single()
-]);
+    .order('email_address')
+])
 
-// Error handling
+//error handling
+
+if (confirmationFetchError) {
+  console.log('[Settings-script] Error fetching the confirmation mail', confirmationFetchError);
+}
+
+if(truefalseSettingsFetchError) {
+  console.log('[Settings-script] Error fetching the true/false settings', truefalseSettingsFetchError);
+}
+  
 if (clientSettingsError) {
   console.error('[Settings] Error fetching client settings:', clientSettingsError);
 }
@@ -320,6 +312,95 @@ console.log("[general-settings] Page setup complete, rendering");
             <!-- Section Header -->
             <div class="space-y-1">
               <h3 class="text-lg font-semibold leading-none tracking-tight">
+                Email Signature
+              </h3>
+              <p class="text-sm text-muted-foreground">
+                Configure the default email signature for support responses
+              </p>
+            </div>
+
+            <!-- Error Alert (if signature fetch failed) -->
+            {clientSettingsError && (
+              <div class="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+                <div class="flex items-start gap-3">
+                  <svg
+                    class="h-5 w-5 text-destructive mt-0.5"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+                    />
+                  </svg>
+                  <div class="space-y-1">
+                    <p class="text-sm font-medium text-destructive">
+                      Failed to load email signature
+                    </p>
+                    <p class="text-sm text-muted-foreground">
+                      There was an error loading the signature. You can still edit and save a new one.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <!-- Signature Editor -->
+            <div class="space-y-2">
+              <label 
+                for="signature" 
+                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Signature Content
+              </label>
+              <textarea
+                id="signature"
+                class="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                placeholder="Enter your email signature here..."
+                rows="6"
+              >{signature}</textarea>
+              <p class="text-xs text-muted-foreground">
+                This signature will be automatically appended to all outgoing support emails.
+              </p>
+            </div>
+
+            <!-- Action Button -->
+            <div class="flex items-center justify-end pt-2">
+              <button
+                id="save-signature"
+                type="button"
+                class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+              >
+                <svg
+                  class="mr-2 h-4 w-4"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                Save Signature
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Confirmation Email Section -->
+        <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+          <div class="p-6 space-y-4">
+            <!-- Section Header -->
+            <div class="space-y-1">
+              <h3 class="text-lg font-semibold leading-none tracking-tight">
                 Confirm Mail
               </h3>
               <p class="text-sm text-muted-foreground">
@@ -329,12 +410,21 @@ console.log("[general-settings] Page setup complete, rendering");
 
             <!-- Error Alert (if fetch failed) -->
             {confirmationFetchError && (
-            <!-- Error Alert (if signature fetch failed) -->
-            {clientSettingsError && (
               <div class="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
                 <div class="flex items-start gap-3">
-                  <svg class="h-5 w-5 text-destructive mt-0.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                  <svg
+                    class="h-5 w-5 text-destructive mt-0.5"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+                    />
                   </svg>
                   <div class="space-y-1">
                     <p class="text-sm font-medium text-destructive">
@@ -355,8 +445,6 @@ console.log("[general-settings] Page setup complete, rendering");
                 class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
               >
                 Subject
-              <label for="signature" class="text-sm font-medium leading-none">
-                Signature Content
               </label>
               <textarea
                 id="confirm-subject"
@@ -395,14 +483,26 @@ console.log("[general-settings] Page setup complete, rendering");
                 type="button"
                 class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
               >
-                <svg class="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <svg
+                  class="mr-2 h-4 w-4"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
                 </svg>
-                Save Signature
+                Save Confirmation Email
               </button>
             </div>
           </div>
         </div>
+
         <!-- Yes/No settings section -->
         <ul>
           <!-- Show assigned mails in all mails setting -->

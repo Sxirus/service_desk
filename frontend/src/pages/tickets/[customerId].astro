@@ -993,13 +993,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
 
           // add signature
           if (signature && signature.trim() !== '') {
-            body += `\n\n-- \n${signature}`;
-          }
-
-          await apiClient.post(`/emails/sendMail?customerId=${customerId}`, {
-            to: emailAddress,
-            subject: newSubject,
-            text: body
+            body += `\n\n${signature}`;
           }
 
           // NEU: Thread Email Address mitsenden für Thread-Based Mode

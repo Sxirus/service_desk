@@ -195,7 +195,6 @@ router.post('/sendMail',
   sanitizeText('subject', { required: true, maxLength: 500 }),
   async (req, res) => {
     try {
-      const client_id = req.user.client_id;
       const customerId = req.sanitized.customerId;
       const { to, threadEmailAddress } = req.body;
       const subject = req.sanitized.subject;
