@@ -7,7 +7,7 @@
 
 const express = require('express');
 const router = express.Router();
-const crypto = require('crypto');
+const crypto = require('node:crypto');
 const supabase = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
 const { authorizeClient } = require('../middleware/authorization');

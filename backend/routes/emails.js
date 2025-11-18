@@ -362,7 +362,7 @@ async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
 
     if (clientError || !clientSettings) {
       console.error('[EMAILS] Client settings error:', clientError);
-      return getEnvSmtpConfig();
+      return null;
     }
 
     const { email_sending_mode, primary_email_id } = clientSettings;

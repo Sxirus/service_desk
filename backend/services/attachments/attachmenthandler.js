@@ -1,6 +1,6 @@
 const sharp = require("sharp");
 const supabase = require('../../config/supabase');
-const crypto = require('crypto');
+const crypto = require('node:crypto');
 const AdmZip = require('adm-zip');
 
 //jpeg/jpg scales

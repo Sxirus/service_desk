@@ -150,7 +150,7 @@ function validateOAuthState(req, res, next) {
  * Validate HMAC signature from Shopify
  */
 function validateShopifyHMAC(req, res, next) {
-  const crypto = require('crypto');
+  const crypto = require('node:crypto');
   const hmac = req.query.hmac;
 
   if (!hmac) {
