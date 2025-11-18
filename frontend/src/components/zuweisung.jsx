@@ -191,7 +191,7 @@ export function Assign({
           >
             {suggestions.map((s, i) => (
               <li
-                key={s.id}
+                key={s.text}
                 id={`${listboxId}-opt-${i}`}
                 role="option"
                 aria-selected={i === hovered}

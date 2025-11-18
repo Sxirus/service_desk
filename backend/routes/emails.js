@@ -29,21 +29,70 @@ router.get('/getMails',
       
       console.log('[EMAILS] Fetching mails for client:', client_id);
       
-      const { data, error } = await supabase
-        .from('incoming-mails') 
-        .select('*')
-        .eq("client_id", client_id)
-        .eq('read', false)
-        .order('send_at', { ascending: true })
-        .limit(100);
-
-      if (error) {
-        console.error('[EMAILS] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+      //checking the users preference (showing assigned mails or not)
+      const { data: pref, error: preferror} = await supabase
+        .from('clients')
+        .select('show_assigned_mails_in_all_mails')
+        .eq('id', client_id)
+        .single();
+      
+      if (preferror) {
+        console.error('[EMAILS] Pref fetch error:', preferror.message);
+        return res.status(500).json({ error: 'Konnte Präferenzen nicht laden' });
       }
 
-      console.log('[EMAILS] Fetched', data.length, 'unread mails');
-      res.json(data);
+      let mails = [];
+
+      //getting the mails based on customer preference
+      if (pref?.show_assigned_mails_in_all_mails) {
+        const { data, error } = await supabase
+          .from('incoming-mails')
+          .select('*')
+          .eq('client_id', client_id)
+          .eq('read', false)
+          .order('send_at', { ascending: true })
+          .limit(100);
+
+        if (error) {
+          console.error('[EMAILS] Supabase error:', error.message);
+          return res.status(500).json({ error: 'Datenbankfehler' });
+        }
+        mails = data ?? [];
+      } else {
+        const { data: unassignedCustomers, error: custErr } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('client_id', client_id)
+          .is('employee_id', null);
+
+        if (custErr) {
+          console.error('[EMAILS] Customers fetch error:', custErr.message);
+          return res.status(500).json({ error: 'Datenbankfehler' });
+        }
+
+        const ids = (unassignedCustomers ?? []).map(c => c.id);
+        if (ids.length === 0) {
+          return res.json([]);
+        }
+
+        const { data, error } = await supabase
+          .from('incoming-mails')
+          .select('*')
+          .eq('client_id', client_id)
+          .in('customer_id', ids)
+          .eq('read', false)
+          .order('send_at', { ascending: true })
+          .limit(100);
+
+        if (error) {
+          console.error('[EMAILS] Supabase error:', error.message);
+          return res.status(500).json({ error: 'Datenbankfehler' });
+        }
+        mails = data ?? [];
+      }
+
+      console.log('[EMAILS] Fetched', mails.length, 'unread mails');
+      res.json(mails);
     } catch (err) {
       console.error('[EMAILS] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });
@@ -151,6 +200,8 @@ router.post('/sendMail',
       const { to, threadEmailAddress } = req.body;
       const subject = req.sanitized.subject;
       const text = req.sanitized.text;
+      const client_id = req.user.client_id;
+      const employee_id = req.user.employee_id;
 
       console.log('[EMAILS] Sending mail with thread context:', { 
         customerId, 
@@ -167,6 +218,80 @@ router.post('/sendMail',
         });
       }
 
+      const {data: settings, error: settingsFetchError} = await supabase
+        .from('clients')
+        .select('auto_assign_employee_on_send')
+        .eq('id', client_id)
+        .single();
+      
+      if (settingsFetchError) {
+        console.error('[Emails] Error fetching the clients send settings, employee will not be assigned');
+      }
+
+      const autoAssign = settings.auto_assign_employee_on_send;
+      console.log('[Emails] Auto assign employee:', autoAssign);
+
+      if(autoAssign) {
+        // Verify employee belongs to user's client
+        const { data: employee, error: employeeError } = await supabase
+          .from('employees')
+          .select('client_id')
+          .eq('id', employee_id)
+          .single();
+
+        if (employeeError || !employee) {
+          console.error('[Emails] Employee not found:', employee_id);
+          return res.status(404).json({ error: 'Employee not found' });
+        }
+
+        if (employee.client_id !== client_id) {
+          console.warn('[Emails] Unauthorized employee access attempt:', {
+            employee_id,
+            employee_client_id: employee.client_id,
+            user_client_id: client_id
+          });
+          return res.status(403).json({ error: 'Employee does not belong to your client' });
+        }
+
+        // Verify customer belongs to user's client
+        const { data: customer, error: customerError } = await supabase
+          .from('customers')
+          .select('client_id, employee_id')
+          .eq('id', customerId)
+          .single();
+
+        if (customerError || !customer) {
+          console.error('[Emails] Customer not found:', customerId);
+          return res.status(404).json({ error: 'Customer not found' });
+        }
+
+        if (customer.client_id !== client_id) {
+          console.warn('[Emails] Unauthorized customer access attempt:', {
+            customerId,
+            customer_client_id: customer.client_id,
+            user_client_id: client_id
+          });
+          return res.status(403).json({ error: 'Customer does not belong to your client' });
+        }
+
+        if (customer.employee_id != employee_id) {
+          // Both verified - proceed with assignment
+          const { data, error } = await supabase
+            .from('customers')
+            .update({ employee_id: employee_id })
+            .eq('id', customerId);
+
+          if (error) {
+            console.error('[Emails] Assignment update failed:', error.message);
+            return res.status(500).json({ error: 'Datenbankfehler' });
+          }
+
+          console.log('[Emails] Successfully assigned employee', employee_id, 'to customer', customerId);
+        } else {
+          console.log('[Emails] Employee was already assigned')
+        }
+      }
+      
       // 1. SMTP Konfiguration aus Datenbank holen (mit Provider JOIN)
       const smtpConfig = await getClientSmtpConfig(client_id, threadEmailAddress);
       
@@ -213,7 +338,7 @@ router.post('/sendMail',
       const { data, error } = await supabase
         .from('sent-mail')
         .insert([{
-          employee_id: req.user.employee_id,
+          employee_id: employee_id,
           text_content: text,
           customer_id: customerId,
           sent_via: smtpConfig.auth.user, // Welche Email verwendet wurde

@@ -17,6 +17,7 @@
 import Layout from "../../layouts/BaseLayout.astro";
 import { createClient } from "../../lib/supabase.ts";
 import { getCompletePageContext } from "../../lib/auth-helpers.ts";
+import ToggleSwitch from "@/components/ToggleSwitch";
 
 // Components
 import AdminShell from "@/components/AdminShell";
@@ -73,7 +74,9 @@ console.log("[general-settings] Fetching settings for client_id:", clientId);
 const [ 
   {data: clientSettings, error: clientSettingsError},
   {data: clientEmails, error: clientEmailsError},
-  {data: confirmationJSON, error: confirmationError}
+  {data: signatureJSON, error: signatureFetchError},
+  {data: confirmationJSON, error: confirmationFetchError},
+  {data: truefalseSettingsJSON, error: truefalseSettingsFetchError}
 ] = await Promise.all([
   // Client settings (signature, email mode, primary email)
   supabase
@@ -84,6 +87,29 @@ const [
   
   // All available client emails for dropdown - KORRIGIERT
   supabase
+    .from('clients')
+    .select('confirm_mail, confirmation_mail_subject')
+    .eq('id', clientId)
+    .single(),
+
+  supabase
+    .from('clients')
+    .select('show_assigned_mails_in_all_mails, auto_assign_employee_on_send')
+    .eq('id', clientId)
+    .single()
+])
+
+//error handling
+if (signatureFetchError) {
+  console.log('[Settings-script] Error fetching the signature', signatureFetchError);
+}
+
+if (confirmationFetchError) {
+  console.log('[Settings-script] Error fetching the confirmation mail', confirmationFetchError);
+}
+
+if(truefalseSettingsFetchError) {
+  console.log('[Settings-script] Error fetching the true/false settings', truefalseSettingsFetchError);
     .from('client-emails')
     .select(`
       id,
@@ -126,6 +152,13 @@ const availableEmails = clientEmails || [];
 // DEBUG Logging
 console.log('[Settings] Available emails for client', clientId, ':', availableEmails);
 console.log('[Settings] Client settings:', { emailSendingMode, primaryEmailId });
+
+const confirmation_subject = confirmationJSON?.confirmation_mail_subject;
+const confirmation_body = confirmationJSON?.confirm_mail;
+
+const show_assigned_mails_in_all_mails = truefalseSettingsJSON?.show_assigned_mails_in_all_mails;
+const auto_assign_employee_on_send = truefalseSettingsJSON?.auto_assign_employee_on_send;
+
 
 console.log("[general-settings] Page setup complete, rendering");
 ---
@@ -287,13 +320,15 @@ console.log("[general-settings] Page setup complete, rendering");
             <!-- Section Header -->
             <div class="space-y-1">
               <h3 class="text-lg font-semibold leading-none tracking-tight">
-                Email Signature
+                Confirm Mail
               </h3>
               <p class="text-sm text-muted-foreground">
-                Configure the default email signature for support responses
+                Configure the default confirm mail, send when a email reaches you. (If you leave this empty nothing will be send)
               </p>
             </div>
 
+            <!-- Error Alert (if fetch failed) -->
+            {confirmationFetchError && (
             <!-- Error Alert (if signature fetch failed) -->
             {clientSettingsError && (
               <div class="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
@@ -303,36 +338,60 @@ console.log("[general-settings] Page setup complete, rendering");
                   </svg>
                   <div class="space-y-1">
                     <p class="text-sm font-medium text-destructive">
-                      Failed to load email signature
+                      Failed to load confirmation mail
                     </p>
                     <p class="text-sm text-muted-foreground">
-                      There was an error loading the signature. You can still edit and save a new one.
+                      There was an error loading the confirmation mail. You can still edit and save a new one.
                     </p>
                   </div>
                 </div>
               </div>
             )}
 
-            <!-- Signature Editor -->
+            <!-- Subject Editor -->
             <div class="space-y-2">
+              <label 
+                for="confirm-subject" 
+                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Subject
               <label for="signature" class="text-sm font-medium leading-none">
                 Signature Content
               </label>
               <textarea
-                id="signature"
-                class="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-                placeholder="Enter your email signature here..."
+                id="confirm-subject"
+                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                placeholder="Enter your email subject here..."
                 rows="6"
-              >{signature}</textarea>
+              >{confirmation_subject}</textarea>
               <p class="text-xs text-muted-foreground">
-                This signature will be automatically appended to all outgoing support emails.
+                This is the subject of the auto send confirmation mail
+              </p>
+            </div>
+
+            <!-- Email Body Editor -->
+            <div class="space-y-2">
+              <label 
+                for="confirm-body" 
+                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Email Body
+              </label>
+              <textarea
+                id="confirm-body"
+                class="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                placeholder="Enter your email body here..."
+                rows="6"
+              >{confirmation_body}</textarea>
+              <p class="text-xs text-muted-foreground">
+                This is the body of the auto send confirmation mail
               </p>
             </div>
 
             <!-- Action Button -->
             <div class="flex items-center justify-end pt-2">
               <button
-                id="save-signature"
+                id="save-confirm-mail"
                 type="button"
                 class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
               >
@@ -344,7 +403,27 @@ console.log("[general-settings] Page setup complete, rendering");
             </div>
           </div>
         </div>
-
+        <!-- Yes/No settings section -->
+        <ul>
+          <!-- Show assigned mails in all mails setting -->
+          <li>
+            <ToggleSwitch
+              client:visible
+              defaultChecked={show_assigned_mails_in_all_mails}
+              eventName="show-assigned-mails-toggle"
+              label = "Show assigned mails in all mails"
+            />
+          </li>
+          <!-- Auto assign employee on send setting -->
+          <li>
+            <ToggleSwitch
+              client:visible
+              defaultChecked={auto_assign_employee_on_send}
+              eventName="auto-assign-employee-on-send-toggle"
+              label = "Auto assign an employee when he sends an answer"
+            />
+          </li>
+        <ul>
         <!-- Future Settings Sections -->
         <div class="rounded-lg border border-dashed p-6 text-center">
           <p class="text-sm text-muted-foreground">
@@ -362,7 +441,7 @@ console.log("[general-settings] Page setup complete, rendering");
      */
 
     import { toast } from "sonner";
-    import { validateEmailSignature } from "../../lib/validation";
+    import { validateEmailSignature, validateTextInput } from "../../lib/validation";
     import { apiClient } from "../../utils/api";
 
     // ============================================================================
@@ -459,7 +538,7 @@ console.log("[general-settings] Page setup complete, rendering");
     const signatureTextarea = document.getElementById("signature") as HTMLTextAreaElement;
 
     if (saveSignatureButton && signatureTextarea) {
-      console.log("[settings-script] Save signature handler initialized");
+      console.log("[settings-script] Save sigature button handler initialized");
 
       saveSignatureButton.addEventListener("click", async () => {
         const signature = signatureTextarea.value || "";
@@ -536,6 +615,155 @@ console.log("[general-settings] Page setup complete, rendering");
           `;
         }
       });
+    } else {
+      console.error("[settings-script] Save signature button or textarea not found");
     }
+
+    //save button for the confirmation email
+    const saveConfirmationMailButton = document.getElementById('save-confirm-mail');
+    const confirmSubjectTextarea = document.getElementById('confirm-subject') as HTMLTextAreaElement;
+    const confirmBodyTextarea = document.getElementById('confirm-body') as HTMLTextAreaElement;
+
+    if (saveConfirmationMailButton && confirmSubjectTextarea && confirmBodyTextarea) {
+      console.log("[settings-script] Save confirm mail button handler initialized");
+
+      saveConfirmationMailButton.addEventListener("click", async () => {
+        let subject = confirmSubjectTextarea.value || "";
+        let body = confirmBodyTextarea.value || "";
+
+        console.log("[settings-script] validating confirm mail", {
+          subjectlength: subject.length,
+          bodylength: body.length
+        })
+
+        const validationSubject = validateTextInput(subject);
+        const validationBody = validateTextInput(body);
+
+        if (!validationSubject.isValid) {
+          console.error("[settings-script] Validation failed:", validationSubject.error);
+          toast.error("Invalid subject", {
+            description: validationSubject.error
+          });
+          return;
+        } else if (!validationBody.isValid) {
+          console.error ("[settings-script] Validation failed", validationBody.error);
+          toast.error("Invalid body", {
+            description: validationBody.error
+          });
+          return;
+        }
+
+        subject = validationSubject.sanitized || "";
+        body = validationBody.sanitized || "";
+
+        console.log("[settings-script] Saving confirmation email");
+
+        //disable button during save
+        saveConfirmationMailButton.setAttribute("disabled", "true");
+        saveConfirmationMailButton.innerHTML = `
+          <svg class="mr-2 h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          Saving...
+        `;
+
+        try {
+          const response = await apiClient.post('/settings/updateConfirmMail', {
+            subject: subject,
+            body: body
+          })
+          if (!response.success) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          console.log("[settings-script] Confirm mail saved successfully");
+
+          //updating value incase somethign was changed sanitzing
+          confirmSubjectTextarea.value = subject;
+          confirmBodyTextarea.value = body;
+
+          toast.success("Changes saved", {
+            description: "Email signature has been updated successfully.",
+          });
+
+        } catch (error) {
+          console.error("[settings-script] Failed to save confirm mail:", error);
+          toast.error("Failed to save", {
+            description: error instanceof Error ? error.message : "An unexpected error occurred.",
+          });
+        } finally {
+          // Re-enable button
+          saveConfirmationMailButton.removeAttribute("disabled");
+          saveConfirmationMailButton.innerHTML = `
+            <svg class="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Save Changes
+          `;
+        }
+      })
+    } else {
+      console.error("[settings-script] Save confirm mail button or textarea not found");
+    }
+
+    //handler for the show assigned mails in all mails toggle
+    window.addEventListener('show-assigned-mails-toggle', async (event) => {
+      const value = (event as CustomEvent).detail.value;
+      if (typeof value == "boolean") {
+        try {
+          const response = await apiClient.post('/settings/updateShowAssignedMails', {
+            value: value
+          });
+          if (!response.success) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          console.log('[settings-script] Show assigned mails setting saved succesfully');
+
+          toast.success("Changes saved", {
+            description: "Assigned mails in all mails setting saved successfully"
+          });
+
+        } catch (error) {
+          console.error("[settings-script] Failed to save the setting (show assigned mails in all mails)", error);
+          toast.error("Failed to save", {
+            description: error instanceof Error ? error.message : "An unexpected error occurred.",
+          });
+        } 
+      }else {
+        console.error('[settings-script] Value not found');
+      }
+    });
+
+    //handler for the auto assign employees on send email toggle
+    window.addEventListener('auto-assign-employee-on-send-toggle', async (event) => {
+      const value = (event as CustomEvent).detail.value;
+      if (typeof value == "boolean") {
+        try {
+          const response = await apiClient.post('/settings/updateAutoAssignEmployeeOnSend', {
+            value: value
+          });
+          
+          if (!response.success) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          console.log('[settings-script] Auto assign employee setting saved successfully');
+
+          toast.success('Changes saved', {
+            description: 'Auto assign employee when a mail is send, saved successfully'
+          });
+
+        } catch (error) {
+          console.error("[settings-script] Failed to save the setting (auto assign employee when email is send):", error);
+          toast.error("Failed to save", {
+            description: error instanceof Error ? error.message : "An unexpected error occurred.",
+          });
+        }
+      } else {
+        console.error('[settings-script] Value not found');
+      }
+    });
   </script>
 </Layout>
