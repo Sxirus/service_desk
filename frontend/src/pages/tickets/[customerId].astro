@@ -647,6 +647,20 @@ log.info("[customer-ticket] Page setup complete, rendering");
               </button>
             </div>
           </div>
+
+          <!-- File uploead (attachments) -->
+          <div class="flex items-start gap-4">
+            <!-- Plus button -->
+            <button id="addFilesBtn" class="w-10 h-10 rounded-full bg-blue-600 text-white text-2xl flex items-center justify-center">
+              +
+            </button>
+
+            <!--Hidden file input getting only clicked by the plusbutton -->
+            <input id="fileInput" type="file" multiple class="hidden">
+
+            <!-- Preview for the uploaded files -->
+            <div id="attachment-preview" class="flex gap-3 flex-wrap"></div>
+          </div>
         </div>
       </div>
 
@@ -716,9 +730,10 @@ log.info("[customer-ticket] Page setup complete, rendering");
     // GET DOM ELEMENTS
     // ============================================================================
 
+    import { SelectContent } from '@radix-ui/react-select';
     import  { apiClient } from '../../utils/api.ts';
     import { createClient } from '@supabase/supabase-js';
-
+import { object } from 'astro:schema';
     console.log("[customer-ticket-client] Script initialized");
     const textarea = document.getElementById('answer') as HTMLTextAreaElement;
     const button = document.getElementById('sendButton') as HTMLButtonElement;
@@ -1032,6 +1047,10 @@ log.info("[customer-ticket] Page setup complete, rendering");
     });
 
 
+
+    // ============================================================================
+    // handle showing attachemts (currently only incomming mails)
+    // ============================================================================
     declare global {
       interface Window {
         handleShowAttachment: (btn: HTMLButtonElement) => Promise<void> | void;
@@ -1169,6 +1188,70 @@ log.info("[customer-ticket] Page setup complete, rendering");
       }
       btn.disabled = false;
     };
+
+    // ============================================================================
+    // handle upload attachments
+    // ============================================================================
+    const addFilesBtn = document.getElementById("addFilesBtn");
+    const fileInput = document.getElementById("fileInput") as HTMLInputElement;
+    const attachmentPreview = document.getElementById("attachment-preview");
+    const selectedFiles : File[] = []
+    const objectURLs: string[] = [];
+
+    if (addFilesBtn && fileInput && attachmentPreview) {
+      addFilesBtn.addEventListener("click", () => fileInput.click());
+
+      fileInput.addEventListener("change", () => {
+        const files: File[] = fileInput.files ? Array.from(fileInput.files) : [];
+        
+        files.forEach(file => {
+          selectedFiles.push(file);
+        });
+        renderPreview();
+        fileInput.value = "";
+      });
+    } else {
+      console.log("[customer-ticket-client] Missing attachment upload button or attachment preview");
+    }
+    
+    //function to render the preview of the selected attachments
+    function renderPreview() {
+      if (attachmentPreview) {
+        attachmentPreview.innerHTML = "";
+
+        // Clear old object URLs
+        objectURLs.forEach(url => URL.revokeObjectURL(url));
+        objectURLs.length = 0;
+
+        selectedFiles.forEach((file, index) => {
+          const objectURL = URL.createObjectURL(file);
+          objectURLs.push(objectURL); // Track the URL
+
+          const wrapper = document.createElement("div");
+          wrapper.className = "border rounded p-2 w-32 text-xs flex flex-col gap-1"
+
+          //clickeble filename (opens in other tab)
+          const link = document.createElement("a");
+          link.textContent = file.name;
+          link.href = objectURL;
+          link.target = "_blank";
+          link.className = "text-blue-600 underline truncate";
+          wrapper.appendChild(link);
+
+          //remove button
+          const removeBtn = document.createElement("button");
+          removeBtn.textContent = "x";
+          removeBtn.className = "seld-end text-[10px] text-red-500"
+          removeBtn.onclick = () => {
+            selectedFiles.splice(index, 1);
+            renderPreview();
+          };
+          wrapper.appendChild(removeBtn);
+          attachmentPreview.appendChild(wrapper);
+        });
+      }
+    }
+
 
     console.log("[customer-ticket-client] All event listeners attached");
   </script>
