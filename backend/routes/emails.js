@@ -14,6 +14,7 @@ const { authorizeCustomerAccess } = require('../middleware/authorization');
 const { validateId, sanitizeText } = require('../middleware/validation');
 const multer = require('multer');
 const upload = multer();
+const { storeOutgoingAttachmentsInDB } = require('../services/attachments/outgoing');
 
 /**
  * Get unread mails for authenticated user's client
@@ -336,6 +337,11 @@ router.post('/sendMail',
         to,
         subject,
         text,
+        attachments: attachments.map(file => ({
+          filename: file.originalname,
+          content: file.buffer,
+          contentType: file.mimetype
+        }))
       });
 
       console.log('[EMAILS] Email sent via', smtpConfig.provider, ':', info.messageId);
@@ -349,7 +355,9 @@ router.post('/sendMail',
           customer_id: customerId,
           sent_via: smtpConfig.auth.user, // Welche Email verwendet wurde
           provider_name: smtpConfig.provider // Welcher Provider verwendet wurde
-        }]);
+        }])
+        .select()
+        .single();
 
       if (error) {
         console.error('[EMAILS] Database insert error:', error);
@@ -361,6 +369,8 @@ router.post('/sendMail',
           sentVia: smtpConfig.auth.user
         });
       }
+      
+      storeOutgoingAttachmentsInDB(attachments, client_id, data.id);
 
       res.json({
         success: true,

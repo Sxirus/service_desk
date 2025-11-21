@@ -1002,7 +1002,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
 
       try {
         // Only send if there's content
-        if (body.trim() !== '' && selectedFiles.length > 0) {
+        if (body.trim() !== '' || selectedFiles.length > 0) {
           console.log("[customer-ticket-client] Sending email");
 
           // add signature

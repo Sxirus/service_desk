@@ -210,4 +210,33 @@ async function compressDocx(inputBuffer, opts = {}) {
   return { buffer: newZip.toBuffer(), changed };
 }
 
-module.exports = { downscaleAttachments };
+//function to convert multer files to the file format we use
+function convertMulterFilesToNodemailerAttachments(multerFiles) {
+  return multerFiles.map(file => {
+    const attachment = {
+      filename: file.originalname,
+      content: file.buffer,
+      contentType: file.mimetype,
+      contentDisposition: 'attachment',
+      // Generiere eine Content-ID ähnlich wie bei empfangenen Emails
+      contentId: `<${generateContentId()}>`,
+      cid: generateContentId(),
+      headers: {
+        'Content-Type': file.mimetype,
+        'Content-Disposition': `attachment; filename="${file.originalname}"`,
+        'Content-Transfer-Encoding': 'base64',
+        'X-Attachment-Id': generateContentId()
+      },
+      size: file.size
+    };
+    
+    return attachment;
+  });
+}
+
+//helper for contentid generation
+function generateContentId() {
+  return Math.random().toString(36).substring(2, 15) + 
+         Math.random().toString(36).substring(2, 15);
+}
+module.exports = { downscaleAttachments, convertMulterFilesToNodemailerAttachments};

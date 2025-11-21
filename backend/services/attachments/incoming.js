@@ -4,7 +4,7 @@ const {downscaleAttachments} = require('./attachmenthandler')
 
 //Function for uploading the attachments to storage (incoming mails)
 async function storeIncomingAttachmentInDB(attachments, clientId, emailId) {
-  console.log("[Attachment-Handler] Saving attachments", attachments.length);
+  console.log("[Attachment-Handler-Incomming] Saving attachments", attachments.length);
   const downscaledAttachments =  await downscaleAttachments(attachments)
   for (const att of downscaledAttachments) {
     try {
@@ -58,7 +58,6 @@ async function storeIncomingAttachmentInDB(attachments, clientId, emailId) {
       }
     } catch (error) {
       console.log("Error saving in the database", error);
-      throw new Error(error);
     }
   }
 }
