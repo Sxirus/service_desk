@@ -129,6 +129,8 @@ export const apiClient = {
     return this.request(endpoint, { method: 'DELETE' });
   },
 
+
+  //post request with form data
   async postFormData(endpoint: string, formData: FormData) {
     const session = await getSession();
 

@@ -733,7 +733,6 @@ log.info("[customer-ticket] Page setup complete, rendering");
     import { SelectContent } from '@radix-ui/react-select';
     import  { apiClient } from '../../utils/api.ts';
     import { createClient } from '@supabase/supabase-js';
-import { object } from 'astro:schema';
     console.log("[customer-ticket-client] Script initialized");
     const textarea = document.getElementById('answer') as HTMLTextAreaElement;
     const button = document.getElementById('sendButton') as HTMLButtonElement;
@@ -976,7 +975,7 @@ import { object } from 'astro:schema';
       const newSubject = button.dataset.subject;
       const customerId = button.dataset.customerid;
       const signature = button.dataset.signature;
-      const threadEmailAddress = button.dataset.threademail; // NEU: Thread Email
+      const threadEmailAddress = button.dataset.threademail || ""; // NEU: Thread Email
 
       let body = textarea?.value || '';
       body = body.trim();
@@ -1003,7 +1002,7 @@ import { object } from 'astro:schema';
 
       try {
         // Only send if there's content
-        if (body.trim() !== '') {
+        if (body.trim() !== '' && selectedFiles.length > 0) {
           console.log("[customer-ticket-client] Sending email");
 
           // add signature
@@ -1011,13 +1010,26 @@ import { object } from 'astro:schema';
             body += `\n\n${signature}`;
           }
 
-          // NEU: Thread Email Address mitsenden für Thread-Based Mode
-          await apiClient.post(`/emails/sendMail?customerId=${customerId}`, {
-            to: emailAddress,
-            subject: newSubject,
-            text: body,
-            threadEmailAddress: threadEmailAddress // NEU: Wichtig für Thread-Based Mode
+          //Formdata damit die attachments mitgesendet werden können
+          const formData = new FormData();
+
+          selectedFiles.forEach(file => {
+            formData.append('attachments', file);
           });
+
+          // Ensure a string value is appended (dataset fields may be undefined)
+          if (emailAddress && newSubject) {
+            formData.append('to', String(emailAddress));
+            formData.append('subject', newSubject);
+            formData.append('text', body);
+            formData.append('threadEmailAddress', threadEmailAddress);
+
+            //sending mail
+            await apiClient.postFormData(`/emails/sendMail?customerId=${customerId}`, formData);
+          } else {
+            console.log("[customer-ticket-client] Cant send email, missing data");
+            return
+          }
 
           console.log("[customer-ticket-client] Email sent successfully");
         } else {

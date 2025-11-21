@@ -12,6 +12,8 @@ const nodemailer = require('nodemailer');
 const { authenticate } = require('../middleware/auth');
 const { authorizeCustomerAccess } = require('../middleware/authorization');
 const { validateId, sanitizeText } = require('../middleware/validation');
+const multer = require('multer');
+const upload = multer();
 
 /**
  * Get unread mails for authenticated user's client
@@ -191,6 +193,7 @@ router.post('/sendMail',
   authenticate,
   validateId('customerId'),
   authorizeCustomerAccess,
+  upload.array('attachments'),
   sanitizeText('text', { required: true, maxLength: 50000 }),
   sanitizeText('subject', { required: true, maxLength: 500 }),
   async (req, res) => {
@@ -202,9 +205,13 @@ router.post('/sendMail',
       const client_id = req.user.client_id;
       const employee_id = req.user.employee_id;
 
+      const attachments = req.files || [];
+
       console.log('[EMAILS] Sending mail with thread context:', { 
         customerId, 
-        threadEmailAddress 
+        threadEmailAddress,
+        attachmentCount: attachments.length,
+        files: attachments.map(f => f.originalname)
       });
 
       console.log('[EMAILS] Sending mail to customer:', customerId, 'using client SMTP:', client_id);
