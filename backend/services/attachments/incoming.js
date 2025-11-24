@@ -44,7 +44,7 @@ async function storeIncomingAttachmentInDB(attachments, clientId, emailId) {
       const attachmentReference = {
         email_id: emailId,
         client_id: clientId,
-        objectPath: objectPath,
+        object_path: objectPath,
         filename: att.filename || base,
         mime_type: att.contentType || 'application/octet-stream',
         byte_size: att.content.byteLength,

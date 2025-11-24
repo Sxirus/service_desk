@@ -668,4 +668,29 @@ router.get('/debug-client-emails',
   }
 );
 
+//getting a signed url for an attachment
+router.post('/getSignedUrl',
+  authenticate,
+  async (req, res) => {
+    const location = req.body.location;
+    const path = req.body.path;
+
+    console.log(location);
+    console.log(path);
+    try {
+      const { data, error } = await supabase
+        .storage
+        .from(location)
+        .createSignedUrl(path, 60 * 5);
+
+      if (error) {
+        return res.status(500).json({error: error.message});
+      }
+
+      return res.json(data.signedUrl);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+);
 module.exports = router;
