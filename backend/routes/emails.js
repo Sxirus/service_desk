@@ -675,8 +675,11 @@ router.post('/getSignedUrl',
     const location = req.body.location;
     const path = req.body.path;
 
-    console.log(location);
-    console.log(path);
+    console.log('[EMAILS] creating signed url for', {
+      path: path,
+      location: location
+    })
+
     try {
       const { data, error } = await supabase
         .storage
