@@ -40,7 +40,7 @@ async function storeOutgoingAttachmentsInDB(attachments, clientId, emailId) {
       const checksum = crypto.createHash('sha256').update(att.content).digest('hex');
       
       //attachment data(reference), to save later
-      const attachmentReference= {
+      const attachmentReference = {
         email_id: emailId,
         client_id: clientId,
         object_path: objectPath,

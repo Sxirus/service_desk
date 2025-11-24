@@ -5,7 +5,8 @@ const {downscaleAttachments} = require('./attachmenthandler')
 //Function for uploading the attachments to storage (incoming mails)
 async function storeIncomingAttachmentInDB(attachments, clientId, emailId) {
   console.log("[Attachment-Handler-Incomming] Saving attachments", attachments.length);
-  const downscaledAttachments =  await downscaleAttachments(attachments)
+  const downscaledAttachments =  await downscaleAttachments(attachments);
+  const attachmentData = [];
   for (const att of downscaledAttachments) {
     try {
       console.log("Content Type: ",att.contentType);
@@ -39,26 +40,33 @@ async function storeIncomingAttachmentInDB(attachments, clientId, emailId) {
       //checksum
       const checksum = crypto.createHash('sha256').update(att.content).digest('hex');
 
-      //store reference in email-attachments
-      const { error: insertError } = await supabase
-        .from('email-attachments')
-        .insert({
-          email_id: emailId,
-          client_id: clientId,
-          object_path: objectPath,
-          filename: att.filename || base,
-          mime_type: att.contentType || 'application/octet-stream',
-          byte_size: att.content.byteLength,
-          checksum_sha256: checksum
-        });
-
-      if (insertError) {
-        console.error('Insert-Fehler:', insertError);
-        throw insertError;
+      //attachment data(reference), to save later
+      const attachmentReference = {
+        email_id: emailId,
+        client_id: clientId,
+        objectPath: objectPath,
+        filename: att.filename || base,
+        mime_type: att.contentType || 'application/octet-stream',
+        byte_size: att.content.byteLength,
+        checksum_sha256: checksum
       }
+      attachmentData.push(attachmentReference);
+
     } catch (error) {
       console.log("Error saving in the database", error);
     }
+  }
+  try {
+    const {error: insertError} = await supabase
+      .from('incoming-mails')
+      .update({attachments: attachmentData})
+      .eq('id', emailId);
+
+    if (insertError) {
+      console.error('[Attachment-Handler-Outgoing] Insert-Fehler:', insertError);
+    }
+  } catch (err) {
+    console.log("[Attachment-Handler-Incomming] Error saving in the Database", err)
   }
 }
 

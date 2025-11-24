@@ -370,7 +370,12 @@ router.post('/sendMail',
         });
       }
       
-      storeOutgoingAttachmentsInDB(attachments, client_id, data.id);
+      if (attachments.length > 0) {
+        storeOutgoingAttachmentsInDB(attachments, client_id, data.id);
+      } else {
+        console.log('[Email] No attachments, procceding');
+      }
+      
 
       res.json({
         success: true,
