@@ -5,7 +5,7 @@
 // Import required modules
 const { parse } = require('postcss');
 const supabase = require('../config/supabase');  // Supabase client for database operations
-const { saveAttachment } = require('./attachments/attachmenthandler');
+const { storeIncomingAttachmentInDB } = require('./attachments/incoming');
 const nodemailer = require('nodemailer');
 
 /**
@@ -99,7 +99,7 @@ async function saveEmail(parsedEmail, clientId, InboxEmail, confirmation) {
     //saving attachments
     if (attachments.length > 0) {
         console.log(`[${InboxEmail}] Saving attachments`);
-        saveAttachment(attachments, clientId, email.id);
+        storeIncomingAttachmentInDB(attachments, clientId, email.id);
     } else {
         console.log(`[${InboxEmail}] Mail had no attachments, proceding`);
     }

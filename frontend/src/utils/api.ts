@@ -128,6 +128,32 @@ export const apiClient = {
   async delete(endpoint: string) {
     return this.request(endpoint, { method: 'DELETE' });
   },
+
+
+  //post request with form data
+  async postFormData(endpoint: string, formData: FormData) {
+    const session = await getSession();
+
+    if (!session) {
+      throw new Error('Not authenticated - please log in');
+    }
+
+    const url = endpoint.startsWith('http')
+      ? endpoint
+      : `${this.baseURL}${endpoint}`;
+    
+    console.log(`[apiClient] POST (multipart) ${url}`);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: formData,
+    });
+    return response.json();
+  }
 };
 
 /**

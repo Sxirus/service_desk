@@ -12,6 +12,9 @@ const nodemailer = require('nodemailer');
 const { authenticate } = require('../middleware/auth');
 const { authorizeCustomerAccess } = require('../middleware/authorization');
 const { validateId, sanitizeText } = require('../middleware/validation');
+const multer = require('multer');
+const upload = multer();
+const { storeOutgoingAttachmentsInDB } = require('../services/attachments/outgoing');
 
 /**
  * Get unread mails for authenticated user's client
@@ -191,6 +194,7 @@ router.post('/sendMail',
   authenticate,
   validateId('customerId'),
   authorizeCustomerAccess,
+  upload.array('attachments'),
   sanitizeText('text', { required: true, maxLength: 50000 }),
   sanitizeText('subject', { required: true, maxLength: 500 }),
   async (req, res) => {
@@ -202,9 +206,13 @@ router.post('/sendMail',
       const client_id = req.user.client_id;
       const employee_id = req.user.employee_id;
 
+      const attachments = req.files || [];
+
       console.log('[EMAILS] Sending mail with thread context:', { 
         customerId, 
-        threadEmailAddress 
+        threadEmailAddress,
+        attachmentCount: attachments.length,
+        files: attachments.map(f => f.originalname)
       });
 
       console.log('[EMAILS] Sending mail to customer:', customerId, 'using client SMTP:', client_id);
@@ -329,6 +337,11 @@ router.post('/sendMail',
         to,
         subject,
         text,
+        attachments: attachments.map(file => ({
+          filename: file.originalname,
+          content: file.buffer,
+          contentType: file.mimetype
+        }))
       });
 
       console.log('[EMAILS] Email sent via', smtpConfig.provider, ':', info.messageId);
@@ -342,7 +355,9 @@ router.post('/sendMail',
           customer_id: customerId,
           sent_via: smtpConfig.auth.user, // Welche Email verwendet wurde
           provider_name: smtpConfig.provider // Welcher Provider verwendet wurde
-        }]);
+        }])
+        .select()
+        .single();
 
       if (error) {
         console.error('[EMAILS] Database insert error:', error);
@@ -354,6 +369,13 @@ router.post('/sendMail',
           sentVia: smtpConfig.auth.user
         });
       }
+      
+      if (attachments.length > 0) {
+        storeOutgoingAttachmentsInDB(attachments, client_id, data.id);
+      } else {
+        console.log('[Email] No attachments, procceding');
+      }
+      
 
       res.json({
         success: true,
@@ -646,4 +668,29 @@ router.get('/debug-client-emails',
   }
 );
 
+//getting a signed url for an attachment
+router.post('/getSignedUrl',
+  authenticate,
+  async (req, res) => {
+    const location = req.body.location;
+    const path = req.body.path;
+
+    console.log(location);
+    console.log(path);
+    try {
+      const { data, error } = await supabase
+        .storage
+        .from(location)
+        .createSignedUrl(path, 60 * 5);
+
+      if (error) {
+        return res.status(500).json({error: error.message});
+      }
+
+      return res.json(data.signedUrl);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+);
 module.exports = router;
