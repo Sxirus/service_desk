@@ -211,7 +211,7 @@ export const CustomerInfo: React.FC<CustomerInfoProps> = ({
               {addressLines.length > 0 && (
                 <div className="pt-2 border-t">
                   <div className="flex items-start gap-2 mb-1">
-                    <MapPin className="h-3.5 w-3.5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                    <MapPin className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
                     <p className="text-xs text-muted-foreground">Address</p>
                   </div>
                   <div className="text-sm ml-5">

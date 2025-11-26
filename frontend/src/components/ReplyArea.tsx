@@ -1,0 +1,538 @@
+/**
+ * ReplyArea Component
+ * 
+ * Resizable and collapsible reply area for composing email responses.
+ * Features:
+ * - Smooth resize with throttled mouse tracking
+ * - Collapse/expand with persistent state
+ * - File attachment support with preview
+ * - Memory-safe file handling
+ * - Accessible keyboard controls
+ */
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { apiClient } from '@/utils/api';
+import { FileUploadManager } from '@/utils/attachmentManager';
+import type { ReplyAreaProps, FileUploadState } from '@/types/ticket.types';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+
+const MIN_HEIGHT = 150;
+const MAX_HEIGHT = 600;
+const COLLAPSED_HEIGHT = 52;
+const DEFAULT_HEIGHT = 180;
+
+/**
+ * File attachment preview item component
+ */
+interface AttachmentPreviewItemProps {
+  fileState: FileUploadState;
+  index: number;
+  onRemove: (index: number) => void;
+}
+
+const AttachmentPreviewItem: React.FC<AttachmentPreviewItemProps> = ({ 
+  fileState, 
+  index, 
+  onRemove 
+}) => {
+  return (
+    <div 
+      className="border rounded p-2 w-32 text-xs flex flex-col gap-1 bg-card"
+      role="listitem"
+    >
+      <a
+        href={fileState.objectURL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-600 underline truncate hover:text-blue-800"
+        title={fileState.file.name}
+      >
+        {fileState.file.name}
+      </a>
+      <button
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onRemove(index);
+          console.log('Remove clicked for index', index);
+        }}
+        className="self-end text-[10px] text-red-500 hover:text-red-700 font-bold"
+        aria-label={`Remove ${fileState.file.name}`}
+        type="button"
+      >
+        ✕ Remove
+      </button>
+    </div>
+  );
+};
+
+/**
+ * Main ReplyArea Component
+ */
+export const ReplyArea: React.FC<ReplyAreaProps> = ({
+  emailAddress,
+  subject,
+  customerId,
+  signature,
+  threadEmailAddress,
+  onEmailSent
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadManagerRef = useRef<FileUploadManager>(new FileUploadManager());
+  const rafIdRef = useRef<number | null>(null);
+
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [containerHeight, setContainerHeight] = useState(DEFAULT_HEIGHT);
+  const [isResizing, setIsResizing] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<FileUploadState[]>([]);
+
+  // Refs for resize functionality
+  const resizeStateRef = useRef({
+    startY: 0,
+    startHeight: 0
+  });
+
+  /**
+   * Load saved state from localStorage on mount
+   */
+  useEffect(() => {
+    const savedCollapsed = localStorage.getItem('replyAreaCollapsed') === 'true';
+    const savedHeight = localStorage.getItem('replyAreaHeight');
+
+    setIsCollapsed(savedCollapsed);
+
+    if (savedHeight) {
+      const height = parseInt(savedHeight);
+      if (height >= MIN_HEIGHT && height <= MAX_HEIGHT) {
+        setContainerHeight(height);
+      }
+    }
+  }, []);
+
+  /**
+   * Listen for macro selection events
+   */
+  useEffect(() => {
+    const handleMacroChosen = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const text = customEvent?.detail?.text || '';
+
+      if (!text || !textareaRef.current) return;
+
+      // Append macro text to textarea
+      const currentValue = textareaRef.current.value;
+      const newValue = currentValue + (currentValue ? '\n\n' : '') + text;
+      
+      setReplyText(newValue);
+      textareaRef.current.value = newValue;
+      
+      // Focus and move cursor to end
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(newValue.length, newValue.length);
+    };
+
+    window.addEventListener('MacroChoosen', handleMacroChosen);
+    return () => window.removeEventListener('MacroChoosen', handleMacroChosen);
+  }, []);
+
+  /**
+   * Clean up file upload manager on unmount
+   */
+  useEffect(() => {
+    return () => {
+      uploadManagerRef.current.clear();
+    };
+  }, []);
+
+  /**
+   * Toggle collapse/expand
+   */
+  const handleToggleCollapse = useCallback(() => {
+    const newCollapsed = !isCollapsed;
+    setIsCollapsed(newCollapsed);
+    localStorage.setItem('replyAreaCollapsed', newCollapsed.toString());
+  }, [isCollapsed]);
+
+  /**
+   * Start resize operation
+   */
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    if (isCollapsed) return;
+
+    e.preventDefault();
+    setIsResizing(true);
+    
+    resizeStateRef.current = {
+      startY: e.clientY,
+      startHeight: containerRef.current?.offsetHeight || DEFAULT_HEIGHT
+    };
+
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+  }, [isCollapsed]);
+
+  /**
+   * Handle resize with throttled updates (optimized for performance)
+   */
+  useEffect(() => {
+    if (!isResizing) return;
+
+    let lastY = resizeStateRef.current.startY;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      lastY = e.clientY;
+
+      // Cancel previous frame if still pending
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
+
+      // Schedule update on next frame (throttles to ~60fps)
+      rafIdRef.current = requestAnimationFrame(() => {
+        const deltaY = resizeStateRef.current.startY - lastY;
+        const newHeight = Math.min(
+          Math.max(resizeStateRef.current.startHeight + deltaY, MIN_HEIGHT),
+          MAX_HEIGHT
+        );
+        
+        setContainerHeight(newHeight);
+        rafIdRef.current = null;
+      });
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+
+      // Save final height
+      if (containerRef.current) {
+        const finalHeight = containerRef.current.offsetHeight;
+        localStorage.setItem('replyAreaHeight', finalHeight.toString());
+      }
+
+      // Cancel any pending frame
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      
+      // Cancel any pending animation frame on cleanup
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
+  }, [isResizing]);
+
+  /**
+   * Handle file selection
+   */
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const errors = uploadManagerRef.current.addFiles(Array.from(files));
+    
+    if (errors.length > 0) {
+      setError(errors.join('\n'));
+    }
+
+    setAttachments(uploadManagerRef.current.getFileStates());
+    
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, []);
+
+  /**
+   * Remove attachment
+   */
+  const handleRemoveAttachment = useCallback((index: number) => {
+    console.log('[ReplyArea] Removing attachment at index:', index);
+    uploadManagerRef.current.removeFile(index);
+    const updatedStates = uploadManagerRef.current.getFileStates();
+    console.log('[ReplyArea] Updated file states:', updatedStates);
+    setAttachments([...updatedStates]);
+  }, []);
+
+  /**
+   * Send email
+   */
+  const handleSend = async () => {
+    setError(null);
+    setIsSending(true);
+
+    try {
+      const body = replyText.trim();
+      const files = uploadManagerRef.current.getFiles();
+
+      // Validate email address format
+      if (!emailAddress || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailAddress)) {
+        setError('Invalid recipient email address');
+        setIsSending(false);
+        return;
+      }
+
+      // Validate subject
+      if (!subject || subject.trim().length === 0) {
+        setError('Email subject is required');
+        setIsSending(false);
+        return;
+      }
+
+      // Validate body/attachments
+      if (body === '' && files.length === 0) {
+        setError('Please enter a message or attach a file');
+        setIsSending(false);
+        return;
+      }
+
+      // Build body with signature
+      let fullBody = body;
+      if (signature && signature.trim() !== '') {
+        fullBody += `\n\n${signature}`;
+      }
+
+      // Create FormData for attachments
+      const formData = new FormData();
+      formData.append('to', emailAddress);
+      formData.append('subject', subject);
+      formData.append('text', fullBody);
+      formData.append('threadEmailAddress', threadEmailAddress || '');
+
+      files.forEach(file => {
+        formData.append('attachments', file);
+      });
+
+      // Send email
+      await apiClient.postFormData(`/emails/sendMail?customerId=${customerId}`, formData);
+
+      // Mark conversation as read
+      try {
+        await apiClient.post(`/emails/makeRead?customerId=${customerId}`);
+      } catch (readErr) {
+        console.warn('[ReplyArea] Failed to mark as read:', readErr);
+        // Non-critical error, continue
+      }
+
+      // Clear state only on success
+      uploadManagerRef.current.clear();
+      setAttachments([]);
+      setReplyText('');
+      
+      // Callback or redirect
+      if (onEmailSent) {
+        onEmailSent();
+      } else {
+        window.location.href = '/dashboard';
+      }
+    } catch (err) {
+      console.error('[ReplyArea] Send failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to send email. Please try again.');
+      setIsSending(false);
+      // Don't clear form on error so user doesn't lose their message
+    }
+  };
+
+  const effectiveHeight = isCollapsed ? COLLAPSED_HEIGHT : containerHeight;
+
+  return (
+    <div
+      ref={containerRef}
+      className="border-t bg-card flex flex-col"
+      style={{ minHeight: `${COLLAPSED_HEIGHT}px`, height: `${effectiveHeight}px` }}
+      role="region"
+      aria-label="Email reply area"
+    >
+      {/* Resize Handle */}
+      <div
+        className="h-1.5 bg-border hover:bg-primary cursor-ns-resize transition-colors relative group shrink-0"
+        onMouseDown={handleResizeStart}
+        title="Drag to resize"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize reply area"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowUp' && !isCollapsed) {
+            setContainerHeight(prev => Math.min(prev + 20, MAX_HEIGHT));
+          } else if (e.key === 'ArrowDown' && !isCollapsed) {
+            setContainerHeight(prev => Math.max(prev - 20, MIN_HEIGHT));
+          }
+        }}
+      >
+        <div className="absolute inset-x-0 -top-2 -bottom-2" aria-hidden="true"></div>
+      </div>
+
+      {/* Header with Collapse Button */}
+      <div className="flex items-center justify-between px-6 pt-3 pb-2 shrink-0">
+        <label htmlFor="reply-textarea" className="text-sm font-medium leading-none">
+          Your Reply
+        </label>
+        <button
+          type="button"
+          onClick={handleToggleCollapse}
+          className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors"
+          title={isCollapsed ? 'Expand reply area' : 'Collapse reply area'}
+          aria-label={isCollapsed ? 'Expand reply area' : 'Collapse reply area'}
+          aria-expanded={!isCollapsed}
+        >
+          <svg
+            className={`h-4 w-4 transition-transform duration-200 ${isCollapsed ? 'rotate-180' : ''}`}
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth="1.5"
+            stroke="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M19.5 8.25l-7.5 7.5-7.5-7.5"
+            />
+          </svg>
+        </button>
+      </div>
+
+      {/* Reply Content */}
+      {!isCollapsed && (
+        <div className="px-6 pb-4 flex-1 flex flex-col min-h-0">
+          {error && (
+            <Alert variant="destructive" className="mb-3">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="flex gap-3 items-end h-full">
+            <div className="flex-1 h-full relative">
+              <textarea
+                ref={textareaRef}
+                id="reply-textarea"
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                className="w-full h-full min-h-0 rounded-md border border-input bg-background px-3 py-2 pb-12 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                placeholder="Type your reply..."
+                disabled={isSending}
+                aria-label="Reply message"
+              />
+              
+              {/* Floating Attachment Button */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isSending}
+                className="absolute bottom-2 left-2 h-8 w-8 rounded-full bg-primary/70 hover:bg-primary text-primary-foreground flex items-center justify-center transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Add attachments"
+                title="Attach files"
+              >
+                <svg
+                  className="h-4 w-4"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth="2"
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13"
+                  />
+                </svg>
+              </button>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                onChange={handleFileSelect}
+                className="hidden"
+                aria-label="File input"
+              />
+            </div>
+
+            <Button
+              onClick={handleSend}
+              disabled={isSending}
+              className="shrink-0"
+              aria-label="Send reply"
+            >
+              {isSending ? (
+                <>
+                  <svg 
+                    className="mr-2 h-4 w-4 animate-spin" 
+                    xmlns="http://www.w3.org/2000/svg" 
+                    fill="none" 
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="mr-2 h-4 w-4"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth="1.5"
+                    stroke="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
+                    />
+                  </svg>
+                  Send Reply
+                </>
+              )}
+            </Button>
+          </div>
+
+          {/* File Upload Section - Attachments List */}
+          {attachments.length > 0 && (
+            <div className="mt-3">
+              <div 
+                className="flex gap-3 flex-wrap"
+                role="list"
+                aria-label="Selected attachments"
+              >
+                {attachments.map((fileState, index) => (
+                  <AttachmentPreviewItem
+                    key={index}
+                    fileState={fileState}
+                    index={index}
+                    onRemove={handleRemoveAttachment}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
