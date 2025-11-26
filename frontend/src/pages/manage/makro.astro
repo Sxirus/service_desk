@@ -1,0 +1,34 @@
+---
+import { getCompletePageContext } from "@/lib/auth-helpers";
+import { createClient } from "../../lib/supabase.ts";
+import Layout from "../../layouts/BaseLayout.astro";
+import AdminShell from "@/components/AdminShell";
+
+// Initialize Supabase client with request context
+const supabase = createClient({
+  request: Astro.request, 
+  cookies: Astro.cookies 
+});
+
+const pageContext = await getCompletePageContext(supabase, Astro.cookies);
+
+if (!pageContext) {
+  console.error("[general-settings] Authentication failed, redirecting to login");
+  return Astro.redirect("/");
+}
+
+const { authContext, sidebarData } = pageContext;
+
+---
+<Layout title="Makro Editor">
+    <AdminShell 
+    client:load
+    user={sidebarData.user}
+    firstTeam={sidebarData.team ?? undefined}
+    crumbParentLabel="Administration"
+    crumbParentHref="/manage/settings"
+    crumbCurrent="General Settings"
+    isAdmin={authContext.isAdmin}
+    currentPath="/manage/settings"
+  ></AdminShell>
+</Layout>
