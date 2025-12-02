@@ -39,7 +39,7 @@ router.get('/getMacros',
       }
 
       console.log('[MACROS] Fetched', data.length, 'macros');
-      res.json(data);
+      res.json({success: true, data});
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });
@@ -91,7 +91,7 @@ router.get('/getMacro',
       }
 
       console.log('[MACROS] Macro fetched successfully');
-      res.json(data);
+      res.json({success: true, data});
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });

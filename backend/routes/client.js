@@ -40,7 +40,7 @@ router.get('/getEmployees',
       }
 
       console.log('[CLIENT] Fetched', data.length, 'employees');
-      res.json(data);
+      res.json({success: true, data});
     } catch (err) {
       console.error('[CLIENT] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });

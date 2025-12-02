@@ -50,7 +50,11 @@ const result = await fetch(`http://localhost:3000/api/emails/getMails`, {
     'Content-Type': 'application/json'
   }
 });
-const last10mails = await result.json();
+const resultArray = await result.json();
+if (resultArray.success != true) {
+  console.log("Error loading the mails");
+}
+const last10mails: any[] = resultArray?.data ?? [];
 
 // Admin Rolle prüfen. Rolle 1 = admin
 const { data: myRoles, error: rolesErr } = await supabase
