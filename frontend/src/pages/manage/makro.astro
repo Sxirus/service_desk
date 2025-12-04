@@ -86,117 +86,47 @@ var first = true
         </p>
       </div>
 
-      <div id="main-section">
-        <div id="macro-section" class="rounded-lg border-black border-2 bg-card text-card-foreground shadow-sm" data-macro-array={JSON.stringify(macroArray)}>
-          {initialMacroArray.map((macro) => {
-            const wasFirst = first;
-            first = false
-            return (
-            <div class="relative group">
-              <button class={`macro-item hover:cursor-pointer p-3 flex w-full min-h-10 border-black ${wasFirst ? 'border-t-0' : 'border-t-2'}`} 
-                data-macro-id={macro.id} 
-                data-is-macro={macro.isMacro} 
-                data-macro-title={macro.title}
-                data-macro-text={macro.text}
-                >
-                <p class="justify-start">
-                  {macro.isMacro ? "📄 "   : "📁 "}
-                  {macro.title}
-                </p>
-                {/* Delete Button - nur beim Hover sichtbar */}
-                <button 
-                  class="delete-btn absolute right-2 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 text-white w-6 h-6 rounded text-xs hover:cursor-pointer"
-                  data-macro-id={macro.id}
-                  data-is-macro={macro.isMacro}
-                >
-                  ×
+      <div>
+        <button id="addButton"></button>
+        <div id="main-section">
+          <div id="macro-section" class="rounded-lg border-black border-2 bg-card text-card-foreground shadow-sm" data-macro-array={JSON.stringify(macroArray)}>
+            {initialMacroArray.map((macro) => {
+              const wasFirst = first;
+              first = false
+              return (
+              <div class="relative group">
+                <button class={`macro-item hover:cursor-pointer p-3 flex w-full min-h-10 border-black ${wasFirst ? 'border-t-0' : 'border-t-2'}`} 
+                  data-macro-id={macro.id} 
+                  data-is-macro={macro.isMacro} 
+                  data-macro-title={macro.title}
+                  data-macro-text={macro.text}
+                  >
+                  <p class="justify-start">
+                    {macro.isMacro ? "📄 "   : "📁 "}
+                    {macro.title}
+                  </p>
+                  {/* Delete Button - nur beim Hover sichtbar */}
+                  <button 
+                    class="delete-btn absolute right-2 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 text-white w-6 h-6 rounded text-xs hover:cursor-pointer"
+                    data-macro-id={macro.id}
+                    data-is-macro={macro.isMacro}
+                  >
+                    ×
+                  </button>
                 </button>
-              </button>
-            </div>
-            );
-          })}
+              </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
   </AdminShell>
   <script>
 
-    // var filteredMacroArray: any[] = [];
-    // const macroArray = JSON.parse(document.getElementById('macro-section')?.dataset.macroArray || '[]') as any[];
-    // const stack = [];
+  import  { apiClient } from '../../utils/api.ts';
 
-    // //event listener für die macro section
-    // document.getElementById('macro-section')?.addEventListener('click', (event) => {
-    //   const target = event.target;
-    //   if (!target || !(target instanceof Element)) return;
-
-    //   const macroButton = target.closest('.macro-item') as HTMLButtonElement;
-    //   const deleteButton = target.closest('.delete-btn') as HTMLButtonElement;
-
-    //   // Delete Button wurde geklickt
-    //   if (deleteButton) {
-    //     event.stopPropagation(); // Verhindert dass macro-item auch ausgelöst wird
-    //     const macroId = deleteButton.dataset.macroId;
-    //     const isMacro = deleteButton.dataset.isMacro;
-    //     console.log('Lösche Macro:', macroId, isMacro);
-    //     return;
-    //   }
-
-    //   // Haupt-Button wurde geklickt
-    //   if (macroButton) {
-    //     const macroId = macroButton.dataset.macroId;
-    //     const isMacro = macroButton.dataset.isMacro === "true";
-    //     const macroTitle = macroButton.dataset.macroTitle;
-        
-    //     if (isMacro != null) {
-    //       if (isMacro == true) {
-    //         const macroText = macroButton.dataset.macroText;
-    //         console.log("Starting Macro editor for:", {
-    //           id: macroId,
-    //           title: macroTitle,
-    //           text: macroText
-    //         })
-    //       } else {
-    //         console.log("Switching to Group:", macroId);
-    //         filteredMacroArray = macroArray.filter((item: any) => item.group_id == macroId);
-    //         const mainSection = document.getElementById('main-section');
-    //         if (mainSection) {
-    //           mainSection.innerHTML = ` <div id="macro-section" class="rounded-lg border-black border-2 bg-card text-card-foreground shadow-sm" data-macro-array={JSON.stringify(macroArray)}>
-    //             ${filteredMacroArray.map((macro, index) => {
-
-    //             const wasFirst = index === 0;
-    //             return `
-    //               <div class="relative group">
-    //                 <button class="macro-item hover:cursor-pointer p-3 flex w-full min-h-10 border-black ${wasFirst ? 'border-t-0' : 'border-t-2'} pr-12" 
-    //                   data-macro-id="${macro.id}" 
-    //                   data-is-macro="${macro.isMacro}" 
-    //                   data-macro-title="${macro.title}"
-    //                   data-macro-text="${macro.text}">
-    //                   <p class="justify-start">
-    //                     ${macro.isMacro ? "📄 " : "📁 "}
-    //                     ${macro.title}
-    //                   </p>
-    //                 </button>
-    //                 <button 
-    //                   class="delete-btn absolute right-2 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 text-white w-6 h-6 rounded text-xs hover:cursor-pointer"
-    //                   data-macro-id="${macro.id}"
-    //                   data-is-macro="${macro.isMacro}"
-    //                 >
-    //                   ×
-    //                 </button>
-    //               </div>
-    //             `;
-    //           }).join('')}
-    //           </div>`;
-    //         }
-    //       }
-    //     } else {
-    //       console.log("Error, Button has no is Macro property")
-    //     }
-    //     return
-    //   }
-    //   });
-      var filteredMacroArray: any[] = [];
+  var filteredMacroArray: any[] = [];
   const macroArray = JSON.parse(document.getElementById('macro-section')?.dataset.macroArray || '[]') as any[];
   const navigationStack = [{ id: null, title: "Root" }]; // Stack für Navigation
 
@@ -211,7 +141,14 @@ var first = true
     if (deleteButton) {
       event.stopPropagation();
       const macroId = deleteButton.dataset.macroId;
-      console.log('Lösche Macro:', macroId);
+      const isMacro = deleteButton.dataset.isMacro === "true";
+      if (isMacro) {
+        console.log("[Macro Editor] Deleting macro:", macroId);
+        deleteMacro(macroId);
+      } else {
+        console.log("[Macro Editor] Deleting group", macroId);
+        deleteGroup(macroId);
+      }
       return;
     }
 
@@ -222,7 +159,7 @@ var first = true
       
       if (isMacro) {
         const macroText = macroButton.dataset.macroText;
-        console.log("Starting Macro editor for:", { id: macroId, title: macroTitle, text: macroText });
+        console.log("[Macro Editor] Starting Macro editor for:", { id: macroId, title: macroTitle, text: macroText });
       } else {
         // Zur Gruppe navigieren
         navigateToGroup(macroId, macroTitle);
@@ -231,7 +168,7 @@ var first = true
   });
 
   function navigateToGroup(groupId : any, groupTitle : any) {
-    console.log("Switching to Group:", groupId);
+    console.log("[Macro Editor] Switching to Group:", groupId);
     
     // Zur Navigation History hinzufügen
     navigationStack.push({ id: groupId, title: groupTitle });
@@ -255,7 +192,7 @@ var first = true
       }
       
       renderMacroList(filteredMacroArray);
-      console.log("Zurück zu:", previousGroup.title);
+      console.log("[Macro Editor] Zurück zu:", previousGroup.title);
     }
   }
 
@@ -296,6 +233,68 @@ var first = true
         </div>
       `;
     }
+  }
+
+  async function deleteGroup(groupId: any ) {
+    const index = macroArray.findIndex(item => item.id == groupId && item.isMacro == false);
+    if (index !== -1) {
+      try {
+        const response = await apiClient.delete('/macros/deleteMacroGroup', {
+          groupId: groupId
+        })
+
+        if (!response.success) {
+          throw new Error(response.error || "Failed to delete group");
+        }
+
+        macroArray.splice(index, 1);
+        console.log("[Macro Editor] Deleted group", groupId);
+
+        //Change UI
+        const currentGroup = navigationStack[navigationStack.length - 1];
+        filteredMacroArray = macroArray.filter((item : any) => item.group_id == currentGroup.id);
+        renderMacroList(filteredMacroArray);
+      } catch {
+
+      }
+
+    } else {
+      console.log("[Macro Editor] Group ID not found:", groupId);
+    }
+  }
+
+  async function deleteMacro(macroId: any) {
+    const index = macroArray.findIndex(item => item.id == macroId && item.isMacro == true);
+    if (index !== -1){
+      try {
+        const response = await apiClient.delete('/macros/deleteMacro', {
+          macroId: macroId,
+        });
+
+        if (!response.success) {
+          throw new Error(response.error || "Failed to delete macro");
+        }
+          macroArray.splice(index, 1);
+          console.log("[Macro Editor] Deleted macro", macroId);
+
+          //change UI
+          const currentGroup = navigationStack[navigationStack.length - 1];
+          filteredMacroArray = macroArray.filter((item : any) => item.group_id == currentGroup.id);
+          renderMacroList(filteredMacroArray);
+
+      } catch (error) {
+        console.error("[Macro Editor] An error occured, while deleting the macro", error)
+      }
+    } else {
+      console.log('')
+    }
+  }
+
+  function clearStackAnGoToRoot(){
+    navigationStack.length = 0;
+    navigationStack.push({ id: null, title: "Root" });
+    filteredMacroArray = macroArray.filter(item => item.group_id == null);
+    renderMacroList(filteredMacroArray);
   }
 
   // Global

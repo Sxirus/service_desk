@@ -125,8 +125,11 @@ export const apiClient = {
    * @param endpoint - The API endpoint
    * @returns Response JSON
    */
-  async delete(endpoint: string) {
-    return this.request(endpoint, { method: 'DELETE' });
+  async delete(endpoint: string, data?: any) {
+    return this.request(endpoint, { 
+      method: 'DELETE',
+      body: data ? JSON.stringify(data) : undefined,
+    });
   },
 
 

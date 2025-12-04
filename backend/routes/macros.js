@@ -163,27 +163,6 @@ router.put('/updateMacro',
 
       console.log('[MACROS] Updating macro:', macroId);
 
-      // Verify macro belongs to user's client
-      const { data: existingMacro, error: fetchError } = await supabase
-        .from('macros')
-        .select('client_id')
-        .eq('id', macroId)
-        .single();
-
-      if (fetchError || !existingMacro) {
-        console.error('[MACROS] Macro not found:', macroId);
-        return res.status(404).json({ error: 'Macro not found' });
-      }
-
-      if (existingMacro.client_id !== client_id) {
-        console.warn('[MACROS] Unauthorized update attempt:', {
-          macro_id: macroId,
-          macro_client_id: existingMacro.client_id,
-          user_client_id: client_id
-        });
-        return res.status(403).json({ error: 'Access denied to this macro' });
-      }
-
       // Build update object with only provided fields
       const updates = {};
       if (req.sanitized.title !== undefined) updates.title = req.sanitized.title;
@@ -228,30 +207,8 @@ router.delete('/deleteMacro',
   async (req, res) => {
     try {
       const macroId = req.sanitized.macroId;
-      const client_id = req.user.client_id;
 
       console.log('[MACROS] Deleting macro:', macroId);
-
-      // Verify macro belongs to user's client
-      const { data: existingMacro, error: fetchError } = await supabase
-        .from('macros')
-        .select('client_id')
-        .eq('id', macroId)
-        .single();
-
-      if (fetchError || !existingMacro) {
-        console.error('[MACROS] Macro not found:', macroId);
-        return res.status(404).json({ error: 'Macro not found' });
-      }
-
-      if (existingMacro.client_id !== client_id) {
-        console.warn('[MACROS] Unauthorized delete attempt:', {
-          macro_id: macroId,
-          macro_client_id: existingMacro.client_id,
-          user_client_id: client_id
-        });
-        return res.status(403).json({ error: 'Access denied to this macro' });
-      }
 
       // Delete macro
       const { error } = await supabase
@@ -269,6 +226,32 @@ router.delete('/deleteMacro',
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });
+    }
+  }
+);
+
+router.delete('/deleteMacroGroup',
+  authenticate,
+  async (req, res) => {
+    try {
+      const groupId = req.body.groupId;
+
+      console.log('[MACROS] Deleting group', groupId);
+
+      const { error } = await supabase
+        .from('macro_groups')
+        .delete()
+        .eq('id', groupId);
+
+      if (error) {
+        console.error('[MACROS] Delete failed:', error.message);
+      }
+
+      console.log('[MACROS] Group deleted successfully');
+      res.json({success: true});
+    } catch (err) {
+      console.error('[MACROS] Failed to delete macro group', err.message);
+      res.status(500).json({ success: false, error: 'Severfehler'});
     }
   }
 );
