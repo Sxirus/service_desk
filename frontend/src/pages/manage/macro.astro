@@ -194,6 +194,11 @@ var first = true
       if (mainSection) {
         mainSection.innerHTML = `<div class="rounded-lg border bg-card text-card-foreground shadow-sm">
           <div class="p-6 space-y-4">
+            <div class="space-y-1">
+              <h3 class="text-lg font-semibold leading-none tracking-tight">
+                Add New Macro
+              </h3>
+            </div>
 
             <!-- Title Editor -->
             <div class="space-y-2">
@@ -327,30 +332,35 @@ var first = true
       if (mainSection) {
         mainSection.innerHTML = `<div class="rounded-lg border bg-card text-card-foreground shadow-sm">
           <div class="p-6 space-y-4">
-
+            <div class="space-y-1">
+              <h3 class="text-lg font-semibold leading-none tracking-tight">
+                Add New Group
+              </h3>
+            </div>
+            
             <!-- Title Editor -->
             <div class="space-y-2">
               <label 
-                for="new-macro-title" 
+                for="new-group-name" 
                 class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
               >
-                Title
+                Name
               </label>
               <textarea
-                id="new-macro-title"
+                id="new-group-name"
                 class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-                placeholder="Enter your title here..."
+                placeholder="Enter your group name here..."
                 rows="6"
               ></textarea>
               <p class="text-xs text-muted-foreground">
-                This is the title of the macro.
+                This is the name of the group.
               </p>
             </div>
 
             <!-- Action Button -->
             <div class="flex items-center justify-end pt-2">
               <button
-                id="save-new-macro-btn"
+                id="save-new-group-btn"
                 type="button"
                 class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
               >
@@ -368,11 +378,68 @@ var first = true
                     d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"j
                   />
                 </svg>
-                Save Macro
+                Save Group
               </button>
             </div>
           </div>
         </div>`;
+
+        //save button
+        const saveNewGroupBtn = document.getElementById("save-new-group-btn");
+        const newGroupNameTextarea = document.getElementById('new-group-name') as HTMLTextAreaElement;
+
+        if (saveNewGroupBtn && newGroupNameTextarea) {
+          saveNewGroupBtn.addEventListener('click', async () => {
+            const groupId = navigationStack[navigationStack.length - 1].id;
+            const groupName = newGroupNameTextarea.value || "";
+
+            console.log('[Macro Editor] Creating group',{
+              name: groupName,
+              group: groupId
+            });
+
+            // Disable button during save
+            saveNewGroupBtn.setAttribute("disabled", "true");
+            saveNewGroupBtn.innerHTML = `
+              <svg class="mr-2 h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Saving...
+            `;
+
+            try {
+              const response = await apiClient.post('/macros/createGroup', {
+                name: groupName,
+                groupId: groupId
+              });
+
+              if(!response.success) {
+                throw new Error(response.error || "Failed to save group");
+              }
+              console.log('[Macro Editor] Created group successfully')
+
+              toast.success("Group created", {
+                description: "The Group has been saved.",
+              });
+
+              const data = response.data;
+
+              macroArray.push({id: data.id, name: data.name, title: data.name, group_id: data.group_id, isMacro: false})
+              macroArray.sort((a, b) => Number(a.isMacro) - Number(b.isMacro));
+            } catch (error) {
+              console.error("[Macro Editor] Failed to save group:", error);
+              
+              toast.error("Failed to save", {
+                description: error instanceof Error ? error.message : "An unexpected error occurred.",
+              });
+            } finally {
+              clearStackAnGoToRoot();
+            }
+          });
+        } else {
+          console.log("[Macro Editor] Something went wrong in the group editor (Textarea or buttons not found)");
+        }
       }
     }
 

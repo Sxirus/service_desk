@@ -132,11 +132,46 @@ router.post('/createMacro',
         .single();
 
       if (error) {
-        console.error('[MACROS] Create failed:', error.message);
+        console.error('[MACROS] Create macro failed:', error.message);
         return res.status(500).json({ error: 'Datenbankfehler' });
       }
 
       console.log('[MACROS] Macro created successfully:', data.id);
+      res.json({ success: true, data: data });
+    } catch (err) {
+      console.error('[MACROS] Server error:', err.message);
+      res.status(500).json({ error: 'Serverfehler' });
+    }
+  }
+);
+
+//create a new group
+router.post('/createGroup', 
+  authenticate, 
+  async (req, res) => {
+    try {
+      const name = req.body.name;
+      const groupId = req.body.groupId;
+      const client_id = req.user.client_id;
+
+      console.log('[MACROS] Creating new group for client:', client_id);
+
+      const { data, error } = await supabase
+        .from('macro_groups')
+        .insert([{
+          client_id: client_id,
+          name: name,
+          group_id: groupId
+        }])
+        .select()
+        .single()
+
+      if (error) {
+        console.error('[MACROS] Create group failed', error.message);
+        return res.status(500).json({ error: 'Datenbankfehler' });
+      }
+
+      console.log('[MACROS] Group created successfully:', data.id);
       res.json({ success: true, data: data });
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
