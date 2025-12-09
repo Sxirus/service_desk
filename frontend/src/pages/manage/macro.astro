@@ -3,7 +3,6 @@ import { getCompletePageContext } from "@/lib/auth-helpers";
 import { createClient } from "../../lib/supabase.ts";
 import Layout from "../../layouts/BaseLayout.astro";
 import AdminShell from "@/components/AdminShell";
-import type { LucideConstruction } from "lucide-react";
 
 // Initialize Supabase client with request context
 const supabase = createClient({
@@ -144,12 +143,12 @@ var first = true
 
     const macroVariables = [
       {name: "Customer ID", text: "{customerID}", shopify: false},
-      {name: "Employee Name", text: "employeeName", shopify: false},
-      {name: "Full Customer Name", text: "customerFullName", shopify: false},
-      {name: "Customer First Name", text: "customerFirstName", shopify: false},
-      {name: "Customer Last Name", text: "customerLastName", shopify: false},
-      {name: "Last Order Number (Shopify)", text: "shopifyLastOrderNumber", shopify: true},
-      {name: "Customer Email Adress", text: "customerEmail", shopify: true}
+      {name: "Employee Name", text: "{employeeName}", shopify: false},
+      {name: "Full Customer Name", text: "{customerFullName}", shopify: false},
+      {name: "Customer First Name", text: "{customerFirstName}", shopify: false},
+      {name: "Customer Last Name", text: "{customerLastName}", shopify: false},
+      {name: "Customer Email Adress", text: "{customerEmail}", shopify: false},
+      {name: "Last Order Number (Shopify)", text: "{shopifyLastOrderNumber}", shopify: true},
     ]
 
     const addButton = document.getElementById('addButton');
