@@ -196,7 +196,6 @@ router.put('/updateMacro',
   async (req, res) => {
     try {
       const macroId = req.sanitized.macroId;
-      const client_id = req.user.client_id;
 
       console.log('[MACROS] Updating macro:', macroId);
 
@@ -223,7 +222,7 @@ router.put('/updateMacro',
       }
 
       console.log('[MACROS] Macro updated successfully');
-      res.json({ success: true, data });
+      res.json({ success: true, data: data });
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });
