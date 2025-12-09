@@ -191,8 +191,15 @@ var first = true
 
     function addMacro() {
       const mainSection = document.getElementById('main-section');
+      if (navigationStack[navigationStack.length - 1].title !== "Editor") {
+        navigationStack.push({ id: null, title: 'Editor'})
+      }
       if (mainSection) {
-        mainSection.innerHTML = `<div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+        mainSection.innerHTML = `
+        <button onclick="goBack()" class="mb-4 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
+          ← Zurück zu ${navigationStack[navigationStack.length - 2].title}
+        </button>
+        <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
           <div class="p-6 space-y-4">
             <div class="space-y-1">
               <h3 class="text-lg font-semibold leading-none tracking-tight">
@@ -329,8 +336,15 @@ var first = true
 
     function addGroup() {
       const mainSection = document.getElementById('main-section');
+      if (navigationStack[navigationStack.length - 1].title !== "Editor") {
+        navigationStack.push({ id: null, title: 'Editor'})
+      }
       if (mainSection) {
-        mainSection.innerHTML = `<div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+        mainSection.innerHTML = `
+        <button onclick="goBack()" class="mb-4 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
+          ← Zurück zu ${navigationStack[navigationStack.length - 2].title}
+        </button>
+        <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
           <div class="p-6 space-y-4">
             <div class="space-y-1">
               <h3 class="text-lg font-semibold leading-none tracking-tight">
