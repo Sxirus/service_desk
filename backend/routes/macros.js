@@ -115,6 +115,7 @@ router.post('/createMacro',
     try {
       const title = req.sanitized.title;
       const text = req.sanitized.text;
+      const groupId = req.body.groupId;
       const client_id = req.user.client_id;
 
       console.log('[MACROS] Creating macro for client:', client_id);
@@ -124,7 +125,8 @@ router.post('/createMacro',
         .insert([{
           client_id: client_id,
           title: title,
-          text: text
+          text: text,
+          group_id: groupId
         }])
         .select()
         .single();
@@ -135,7 +137,7 @@ router.post('/createMacro',
       }
 
       console.log('[MACROS] Macro created successfully:', data.id);
-      res.json({ success: true, data });
+      res.json({ success: true, data: data });
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });

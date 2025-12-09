@@ -109,8 +109,8 @@ export function AppSidebar({
             url: "/manage/shopify",
           },
           {
-            title: "Makro Editor",
-            url: "/manage/makro"
+            title: "Macro Editor",
+            url: "/manage/macro"
           }
         ],
       });
