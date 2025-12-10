@@ -95,7 +95,7 @@ router.get('/getMails',
       }
 
       console.log('[EMAILS] Fetched', mails.length, 'unread mails');
-      res.json(mails);
+      res.json({success: true, data: mails});
     } catch (err) {
       console.error('[EMAILS] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });
@@ -174,7 +174,7 @@ router.get('/getEmailsFromCustomer',
       }
 
       console.log('[EMAILS] Fetched', allMails.length, 'total emails');
-      res.json(allMails);
+      res.json({success: true, allMails});
     } catch (err) {
       console.error('[EMAILS] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });
@@ -487,7 +487,7 @@ router.get('/getMailsbyCustomerIds',
       }
 
       console.log('[EMAILS] Fetched', data.length, 'mails for', authorizedIds.length, 'customers');
-      res.json(data);    
+      res.json({success: true, data});    
     } catch (err) {
       console.error('[EMAILS] Server error:', err.message);
       res.status(500).json({ success: false, error: 'Servererror' });
@@ -658,6 +658,7 @@ router.get('/debug-client-emails',
       console.log('[DEBUG] Client emails for client_id:', client_id, data);
 
       res.json({
+        success: true,
         client_id,
         emails: data,
         count: data?.length || 0
@@ -689,8 +690,9 @@ router.post('/getSignedUrl',
       if (error) {
         return res.status(500).json({error: error.message});
       }
+      const signedUrl = data.signedUrl
 
-      return res.json(data.signedUrl);
+      return res.json({success: true, signedUrl});
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }

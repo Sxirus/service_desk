@@ -58,7 +58,7 @@ router.get('/getCustomerById',
       }
 
       console.log('[CUSTOMERS] Customer fetched successfully');
-      res.json([data]); // Return as array to match original API format
+      res.json({success: true, data: [data]}); // Return as array to match original API format
     } catch (err) {
       console.error('[CUSTOMERS] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });
@@ -121,7 +121,7 @@ router.get('/getAssignedCustomers',
       }
 
       console.log('[CUSTOMERS] Fetched', data.length, 'assigned customers');
-      res.json(data);
+      res.json({success: true, data});
     } catch (err) {
       console.error('[CUSTOMERS] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });
@@ -158,7 +158,7 @@ router.get('/getAllCustomers',
       }
 
       console.log('[CUSTOMERS] Fetched', data.length, 'customers');
-      res.json(data);
+      res.json({success: true, data});
     } catch (err) {
       console.error('[CUSTOMERS] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });

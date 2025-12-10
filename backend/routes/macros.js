@@ -39,7 +39,7 @@ router.get('/getMacros',
       }
 
       console.log('[MACROS] Fetched', data.length, 'macros');
-      res.json(data);
+      res.json({success: true, data});
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });
@@ -91,7 +91,7 @@ router.get('/getMacro',
       }
 
       console.log('[MACROS] Macro fetched successfully');
-      res.json(data);
+      res.json({success: true, data});
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });
@@ -115,6 +115,7 @@ router.post('/createMacro',
     try {
       const title = req.sanitized.title;
       const text = req.sanitized.text;
+      const groupId = req.body.groupId;
       const client_id = req.user.client_id;
 
       console.log('[MACROS] Creating macro for client:', client_id);
@@ -124,18 +125,54 @@ router.post('/createMacro',
         .insert([{
           client_id: client_id,
           title: title,
-          text: text
+          text: text,
+          group_id: groupId
         }])
         .select()
         .single();
 
       if (error) {
-        console.error('[MACROS] Create failed:', error.message);
+        console.error('[MACROS] Create macro failed:', error.message);
         return res.status(500).json({ error: 'Datenbankfehler' });
       }
 
       console.log('[MACROS] Macro created successfully:', data.id);
-      res.json({ success: true, data });
+      res.json({ success: true, data: data });
+    } catch (err) {
+      console.error('[MACROS] Server error:', err.message);
+      res.status(500).json({ error: 'Serverfehler' });
+    }
+  }
+);
+
+//create a new group
+router.post('/createGroup', 
+  authenticate, 
+  async (req, res) => {
+    try {
+      const name = req.body.name;
+      const groupId = req.body.groupId;
+      const client_id = req.user.client_id;
+
+      console.log('[MACROS] Creating new group for client:', client_id);
+
+      const { data, error } = await supabase
+        .from('macro_groups')
+        .insert([{
+          client_id: client_id,
+          name: name,
+          group_id: groupId
+        }])
+        .select()
+        .single()
+
+      if (error) {
+        console.error('[MACROS] Create group failed', error.message);
+        return res.status(500).json({ error: 'Datenbankfehler' });
+      }
+
+      console.log('[MACROS] Group created successfully:', data.id);
+      res.json({ success: true, data: data });
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });
@@ -159,30 +196,8 @@ router.put('/updateMacro',
   async (req, res) => {
     try {
       const macroId = req.sanitized.macroId;
-      const client_id = req.user.client_id;
 
       console.log('[MACROS] Updating macro:', macroId);
-
-      // Verify macro belongs to user's client
-      const { data: existingMacro, error: fetchError } = await supabase
-        .from('macros')
-        .select('client_id')
-        .eq('id', macroId)
-        .single();
-
-      if (fetchError || !existingMacro) {
-        console.error('[MACROS] Macro not found:', macroId);
-        return res.status(404).json({ error: 'Macro not found' });
-      }
-
-      if (existingMacro.client_id !== client_id) {
-        console.warn('[MACROS] Unauthorized update attempt:', {
-          macro_id: macroId,
-          macro_client_id: existingMacro.client_id,
-          user_client_id: client_id
-        });
-        return res.status(403).json({ error: 'Access denied to this macro' });
-      }
 
       // Build update object with only provided fields
       const updates = {};
@@ -207,7 +222,7 @@ router.put('/updateMacro',
       }
 
       console.log('[MACROS] Macro updated successfully');
-      res.json({ success: true, data });
+      res.json({ success: true, data: data });
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });
@@ -228,30 +243,8 @@ router.delete('/deleteMacro',
   async (req, res) => {
     try {
       const macroId = req.sanitized.macroId;
-      const client_id = req.user.client_id;
 
       console.log('[MACROS] Deleting macro:', macroId);
-
-      // Verify macro belongs to user's client
-      const { data: existingMacro, error: fetchError } = await supabase
-        .from('macros')
-        .select('client_id')
-        .eq('id', macroId)
-        .single();
-
-      if (fetchError || !existingMacro) {
-        console.error('[MACROS] Macro not found:', macroId);
-        return res.status(404).json({ error: 'Macro not found' });
-      }
-
-      if (existingMacro.client_id !== client_id) {
-        console.warn('[MACROS] Unauthorized delete attempt:', {
-          macro_id: macroId,
-          macro_client_id: existingMacro.client_id,
-          user_client_id: client_id
-        });
-        return res.status(403).json({ error: 'Access denied to this macro' });
-      }
 
       // Delete macro
       const { error } = await supabase
@@ -269,6 +262,32 @@ router.delete('/deleteMacro',
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });
+    }
+  }
+);
+
+router.delete('/deleteMacroGroup',
+  authenticate,
+  async (req, res) => {
+    try {
+      const groupId = req.body.groupId;
+
+      console.log('[MACROS] Deleting group', groupId);
+
+      const { error } = await supabase
+        .from('macro_groups')
+        .delete()
+        .eq('id', groupId);
+
+      if (error) {
+        console.error('[MACROS] Delete failed:', error.message);
+      }
+
+      console.log('[MACROS] Group deleted successfully');
+      res.json({success: true});
+    } catch (err) {
+      console.error('[MACROS] Failed to delete macro group', err.message);
+      res.status(500).json({ success: false, error: 'Severfehler'});
     }
   }
 );

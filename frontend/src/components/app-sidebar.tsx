@@ -108,6 +108,10 @@ export function AppSidebar({
             title: "Shopify Integration", 
             url: "/manage/shopify",
           },
+          {
+            title: "Macro Editor",
+            url: "/manage/macro"
+          }
         ],
       });
     }

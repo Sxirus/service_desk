@@ -194,7 +194,7 @@ router.get('/getAllSettings',
       };
 
       console.log('[SETTINGS] Settings fetched successfully');
-      res.json(safeData);
+      res.json({success: true, safeData});
     } catch (err) {
       console.error('[SETTINGS] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });
