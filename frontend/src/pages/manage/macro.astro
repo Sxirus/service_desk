@@ -269,7 +269,22 @@ var first = true
               </button>
             </div>
           </div>
-        </div>`;
+        </div>
+        <div class="rounded-lg border bg-card text-card-foreground shadow-sm mt-4">
+          <div class="p-6 space-y-4">
+            <div class="space-y-1">
+              <h3 class="text-lg font-semibold leading-none tracking-tight">
+                Variables
+              </h3>
+            </div>
+            ${macroVariables.map((variable) => {
+              return `
+              <p>${variable.name} : ${variable.text}</p>
+              `
+            }).join('')}
+          </div>
+        </div>
+        `;
         
         //save button
         const saveNewMacroBtn = document.getElementById('save-new-macro-btn');
@@ -395,7 +410,8 @@ var first = true
               </button>
             </div>
           </div>
-        </div>`;
+        </div>  
+        `;
 
         //save button
         const saveNewGroupBtn = document.getElementById("save-new-group-btn");
@@ -580,7 +596,22 @@ var first = true
               </button>
             </div>
           </div>
-        </div>`;
+        </div>
+        <div class="rounded-lg border bg-card text-card-foreground shadow-sm mt-4">
+          <div class="p-6 space-y-4">
+            <div class="space-y-1">
+              <h3 class="text-lg font-semibold leading-none tracking-tight">
+                Variables
+              </h3>
+            </div>
+            ${macroVariables.map((variable) => {
+              return `
+              <p>${variable.name} : ${variable.text}</p>
+              `
+            }).join('')}
+          </div>
+        </div>
+        `;
 
         //save button
         const saveMacroBtn = document.getElementById('save-macro-btn');
