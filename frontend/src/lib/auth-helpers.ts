@@ -45,12 +45,13 @@ export async function getAuthContext(
   preAuthenticatedUser?: any
 ): Promise<AuthContext | null> {
   // Verify user
-  var user = preAuthenticatedUser;
-  log.info("Using preAuthenticatedUser for Auth");
-
-  if (!user) {
+  let user = preAuthenticatedUser;
+  
+  if (user) {
+    log.info("Using preAuthenticatedUser for Auth");
+  } else {
     log.info("No pre-authenticated user provided, fetching from Supabase");
-    let { data: user_supabase , error: userErr } = await supabase.auth.getUser();
+    const { data: user_supabase , error: userErr } = await supabase.auth.getUser();
     user = user_supabase.user;
     if (userErr || !user) {
       console.error("[auth] User verification failed:", userErr?.message);

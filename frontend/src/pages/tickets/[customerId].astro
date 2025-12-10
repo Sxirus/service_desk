@@ -13,19 +13,29 @@
  * Uses: Auth helper for DRY authentication/authorization
  * 
  * Performance: Tracks all major operations when ENABLE_PERFORMANCE_TRACKING=true
+ * 
+ * Architecture:
+ * - Server-side: Data loading and authentication (Astro)
+ * - Client-side: Interactive components (React with client:load)
+ * - Separation of concerns: Each major feature in its own component
  */
 
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import { formatDate } from "../../utils/formatDate.js";
-import { MacroSearch } from "../../components/macroSearch.jsx";
-import { Assign } from "../../components/zuweisung.jsx";
 import { createClient } from "../../lib/supabase.ts";
-import { ShopifyOrders } from "../../components/ShopifyOrders";
-import { CustomerInfo } from "../../components/CustomerInfo";
 import { getCompletePageContext } from "../../lib/auth-helpers.ts";
 import { createPageLogger, perf } from "../../utils/logger.ts";
 import AdminShell from "@/components/AdminShell";
-import type { ShopifyConfig, ShopifyClientData } from "../../types/shopify.types";
+import { EmailThread } from "@/components/EmailThread";
+import { ReplyArea } from "@/components/ReplyArea";
+import { TicketSidebar } from "@/components/TicketSidebar";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import type { 
+  ThreadEmail, 
+  IncomingEmail, 
+  SentEmail,
+  BrowserTokens,
+  MacroContext
+} from "@/types/ticket.types";
 
 
 const log = createPageLogger('customer-ticket');
@@ -42,6 +52,12 @@ const pageLoadTimer = perf.start('page-load', 'total');
 
 const { params } = Astro;
 const customerId = params.customerId;
+
+// Validate customerId format (positive integer)
+if (!customerId || !/^\d+$/.test(customerId) || parseInt(customerId) < 1) {
+  log.error('Invalid customer ID format:', customerId);
+  return new Response("Invalid customer ID", { status: 400 });
+}
 
 log.info('Customer ID: ', customerId);
 
@@ -62,11 +78,6 @@ if (!session) {
   log.error('No session found, redirecting to login');
   return Astro.redirect("/");
 }
-
-//getting tokens for browser session
-const browserTokens = session 
-  ? { access: session.access_token, refresh: session.refresh_token }
-  : null;
 
 log.info('Verifying authentication');
 // PASS PRE-AUTHENTICATED USER - NO DOUBLE AUTH!
@@ -203,7 +214,7 @@ const [
 ]);
 
 perf.end(queryTimer, {
-  queries: 6, // ← Auf 6 erhöhen
+  queries: 6,
   customerFound: !!customer,
   incomingMailsCount: incomingMails?.length || 0,
   sentMailsCount: sentMails?.length || 0,
@@ -226,7 +237,6 @@ if (employeeErr) {
   console.log("[customer-ticket] Data Loaded")
 }
 
-// NEU: Email Config Error
 if (clientEmailConfigError) {
   console.error("[customer-ticket] Error fetching client email config:", clientEmailConfigError);
 }
@@ -287,23 +297,29 @@ perf.end(errorCheckTimer);
 
 const processingTimer = perf.start('page-load', 'data-processing');
 
-//emails
-const emailArray = [
-  ...(incomingMails || []).map((mail: any) => ({
+/**
+ * Combine and sort incoming and sent emails into a unified thread
+ * Type-safe email array with proper TypeScript interfaces
+ */
+const emailArray: ThreadEmail[] = [
+  ...(incomingMails || []).map((mail: any): IncomingEmail => ({
     ...mail,
     type: 'incoming',
-    email_adress: mail.email_address,
-    has_attachments: mail.attachments?.length > 0
+    email_address: mail.email_address,
+    has_attachments: mail.attachments?.length > 0,
+    attachments: mail.attachments || []
   })),
-  ...(sentMails || []).map((mail: any) => ({
+  ...(sentMails || []).map((mail: any): SentEmail => ({
     ...mail,
     type: 'sent',
     employee_id: mail.employee_id,
-    has_attachments: mail.attachments?.length > 0
+    has_attachments: mail.attachments?.length > 0,
+    attachments: mail.attachments || []
   }))
 ].sort((a, b) => new Date(a.send_at).getTime() - new Date(b.send_at).getTime());
 
 log.info("Emails loaded:", emailArray.length);
+log.info("EmailArray Content:", emailArray);
 
 let lastMail = incomingMails && incomingMails.length > 0 
   ? incomingMails[incomingMails.length - 1] 
@@ -320,7 +336,6 @@ if (!lastMail) {
 const emailAddress = lastMail.email_address;
 const newSubject = `RE: ${lastMail.subject}`;
 
-// NEU: Korrigierte Thread Email Address - Verwende received_by für Thread-Based Mode
 let threadEmailAddress = null;
 
 // Thread-Based Mode: Verwende received_by (welche unserer Emails die Nachricht empfangen hat)
@@ -364,6 +379,9 @@ if (clientEmailConfig?.email_sending_mode === 'primary' && clientEmailConfig['cl
   log.info("Using thread-based email:", senderEmail);
 }
 
+/**
+ * Email signature for replies
+ */
 const signature = clientData?.email_signature || "";
 
 log.info("Client email configuration:", {
@@ -384,35 +402,44 @@ log.info("Client data loaded:", {
 
 log.info("Macros loaded:", macroArray?.length || 0);
 
-const shopifyConfig: ShopifyConfig = {
+/**
+ * Shopify configuration for sidebar
+ */
+const shopifyConfig = {
   connected: clientData?.shopify_connected || false,
   customerId: customerId as string
 };
 
-//getting the employee that is assigned
-var assignedEmployeeName = null;
-if (assignedEmployeeArray[0].employee_id != null) {
-  let assignedEmployeeId = assignedEmployeeArray[0].employee_id
-  assignedEmployeeName = employeeArray.find((item : any) => item.id === assignedEmployeeId).name
+/**
+ * Get assigned employee name
+ */
+let assignedEmployeeName: string | null = null;
+if (assignedEmployeeArray && assignedEmployeeArray[0]?.employee_id != null) {
+  const assignedEmployeeId = assignedEmployeeArray[0].employee_id;
+  const assignedEmployee = employeeArray?.find((item: any) => item.id === assignedEmployeeId);
+  assignedEmployeeName = assignedEmployee?.name || null;
 }
 
-//transforming the employeeArray to fit in the type search
-const transEmployeeArray = employeeArray.map((employee : any) => ({
+/**
+ * Transform employee array for Assign component
+ */
+const transformedEmployees = (employeeArray || []).map((employee: any) => ({
   title: employee.name,
   text: employee.id
-}))
+}));
 
-//context for macro interpreter
-var ctx = {
-  customerID: customerId,
+/**
+ * Context for macro text interpolation
+ */
+const macroContext: MacroContext = {
+  customerID: customerId as string,
   employeeName: assignedEmployeeName,
   customerFullName: customer.name,
-  customerFirstName: customer.name.split(" ")[0],
-  customerLastName: customer.name.split(" ")[1],
-  //TODO get the right order number
-  shopifyLastOrderNumber: null,
+  customerFirstName: customer.name.split(" ")[0] || customer.name,
+  customerLastName: customer.name.split(" ")[1] || "",
+  shopifyLastOrderNumber: null, // TODO: Get from Shopify API
   customerEmail: emailAddress
-}
+};
 
 perf.end(processingTimer, {
   emailCount: emailArray.length,
@@ -431,807 +458,66 @@ perf.printReport('customer-ticket');
 log.info("[customer-ticket] Page setup complete, rendering");
 ---
 
-<BaseLayout title={customer?.name || "Customer Ticket"}>
+<BaseLayout title={`${customer?.name} - Ticket` || "Customer Ticket"}>
   <AdminShell 
     client:load
     user={sidebarData.user}
     firstTeam={sidebarData.team ?? undefined}
     crumbParentLabel="Dashboard"
     crumbParentHref="/dashboard"
-    crumbCurrent={customer?.name || "Ticket"}
+    crumbCurrent={`${customer?.name} - Ticket` || "Ticket"}
     isAdmin={authContext.isAdmin}
     currentPath={`/tickets/${customerId}`}
   >
     <div class="flex gap-6 h-[calc(100vh-5rem)] -mx-6 -mb-6 overflow-hidden">
-      <!-- Main Content Area - Email Thread -->
-      <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <!-- Main Content Area -->
+      <main class="flex-1 flex flex-col min-w-0 overflow-hidden" role="main">
         <!-- Page Header -->
-        <div class="px-6 mt-2 pt-0 py-2">
-          <h1 class="text-2xl font-bold tracking-tight">Conversation with {customer?.name}</h1>
-        </div>
+        <header class="px-6 mt-2 pt-0 py-2">
+          <h1 class="text-2xl font-bold tracking-tight">
+            Conversation with {customer?.name}
+          </h1>
+        </header>
 
-        <!-- Email Thread -->
-        <div id="emailThread" class="flex-1 px-6 overflow-y-auto overflow-x-hidden">
-          <div id="mailList" class="space-y-4 pb-4">
-            {emailArray.map((mail) => {
-              const isOutgoing = mail.type === 'sent';
-              
-              return (
-                <div class={`rounded-lg border ${
-                  isOutgoing 
-                    ? 'bg-blue-50 border-blue-200' 
-                    : 'bg-card border-border'
-                } shadow-sm`}>
-                  <div class="p-4">
-                    <!-- Message Header -->
-                    <div class="flex items-start justify-between mb-3">
-                      <div class="flex items-center gap-2">
-                        <div class={`flex h-8 w-8 items-center justify-center rounded-full ${
-                          isOutgoing ? 'bg-blue-600' : 'bg-muted'
-                        }`}>
-                          <svg
-                            class={`h-4 w-4 ${isOutgoing ? 'text-white' : 'text-muted-foreground'}`}
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke-width="1.5"
-                            stroke="currentColor"
-                          >
-                            <path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-                            />
-                          </svg>
-                        </div>
-                        <div>
-                          <p class={`text-sm font-semibold ${
-                            isOutgoing ? 'text-blue-900' : 'text-foreground'
-                          }`}>
-                            {isOutgoing ? 'You' : customer?.name || 'Customer'}
-                          </p>
-                          <p class="text-xs text-muted-foreground">
-                            {isOutgoing ? 'Support Agent' : 'Customer'}
-                          </p>
-                        </div>
-                      </div>
-                      <time class="text-xs text-muted-foreground">
-                        {formatDate(mail.send_at)}
-                      </time>
-                    </div>
-
-                    <!-- Message Body -->
-                    <div class="text-sm text-foreground whitespace-pre-wrap leading-relaxed" style="word-break: break-word; overflow-wrap: anywhere;">
-                      {mail.text_content}
-                    </div>
-                    <div id="sb-token-holder"
-                    data-access={browserTokens?.access || ''}
-                    data-refresh={browserTokens?.refresh || ''}
-                    hidden></div>
-                    {mail.has_attachments && (
-                      <div class="mt-3">
-                        <div class="flex flex-wrap gap-2" id={"atts-" + mail.id}>
-                          {mail.attachments.map((att: any) => (
-                            <button
-                              class="inline-flex items-center gap-2 rounded-md bg-accent px-2.5 py-1 text-xs hover:bg-accent/80"
-                              title={"Öffnen: " + att.filename}
-                              data-mail={mail.id}
-                              data-att={att.id}
-                              data-path={att.object_path}
-                              data-mime={att.mime_type}
-                              data-type={mail.type}
-                              onclick="handleShowAttachment(this)"
-                            >
-                              📎 {att.filename}
-                            </button>
-                          ))}
-                        </div>
-                        {/* Preview-Container für angezeigte Bilder/Previews */}
-                        <div id={"preview-" + mail.id} class="mt-2 flex flex-wrap gap-2"></div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <!-- Reply Area (Resizable & Collapsible) -->
-        <div id="replyContainer" class="border-t bg-card flex flex-col" style="min-height: 52px; height: 180px;">
-          <!-- Resize Handle -->
-          <div
-            id="resizeHandle"
-            class="h-1.5 bg-border hover:bg-primary cursor-ns-resize transition-colors relative group shrink-0"
-            title="Drag to resize"
-          >
-            <div class="absolute inset-x-0 -top-2 -bottom-2"></div>
-          </div>
-          
-          <!-- Header with Collapse Button -->
-          <div class="flex items-center justify-between px-6 pt-3 pb-2 shrink-0">
-            <label for="answer" class="text-sm font-medium leading-none">
-              Your Reply
-            </label>
-            <button
-              id="collapseButton"
-              type="button"
-              class="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors"
-              title="Collapse reply area"
-            >
-              <svg
-                id="collapseIcon"
-                class="h-4 w-4 transition-transform duration-200"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width="1.5"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M19.5 8.25l-7.5 7.5-7.5-7.5"
-                />
-              </svg>
-            </button>
-          </div>
-
-          <!-- Reply Content -->
-          <div id="replyContent" class="px-6 pb-4 flex-1 flex flex-col min-h-0">
-            <div class="flex gap-3 items-end h-full">
-              <textarea
-                id="answer"
-                class="flex-1 h-full min-h-0 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-                placeholder="Type your reply..."
-              ></textarea>
-              <button
-                data-email={emailAddress}
-                data-subject={newSubject}
-                data-customerid={customerId}
-                data-signature={signature}
-                data-threademail={threadEmailAddress}
-                id="sendButton"
-                type="button"
-                class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 shrink-0"
-              >
-                <svg
-                  class="mr-2 h-4 w-4"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke-width="1.5"
-                  stroke="currentColor"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
-                  />
-                </svg>
-                Send Reply
-              </button>
-            </div>
-          </div>
-
-          <!-- File uploead (attachments) -->
-          <div class="flex items-start gap-4">
-            <!-- Plus button -->
-            <button id="addFilesBtn" class="w-10 h-10 rounded-full bg-blue-600 text-white text-2xl flex items-center justify-center">
-              +
-            </button>
-
-            <!--Hidden file input getting only clicked by the plusbutton -->
-            <input id="fileInput" type="file" multiple class="hidden">
-
-            <!-- Preview for the uploaded files -->
-            <div id="attachment-preview" class="flex gap-3 flex-wrap"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Right Sidebar -->
-      <div class="w-80 shrink-0 border-l bg-muted/30 flex flex-col overflow-hidden">
-        <div class="flex-1 overflow-y-auto p-6 space-y-6">
-          
-          <!-- Customer Information Component -->
-          <CustomerInfo 
+        <!-- Email Thread Component -->
+        <ErrorBoundary client:load>
+          <EmailThread 
             client:load
+            emails={emailArray}
             customer={customer}
-            emailAddress={emailAddress}
-            shopifyConfig={shopifyConfig}
-            clientData={clientData || {}}
           />
+        </ErrorBoundary>
 
-          <!-- Shopify Orders Component -->
-          <ShopifyOrders 
+        <!-- Reply Area Component -->
+        <ErrorBoundary client:load>
+          <ReplyArea 
             client:load
-            shopifyConfig={shopifyConfig}
-            clientData={clientData || {}}
+            emailAddress={emailAddress}
+            subject={newSubject}
+            customerId={customerId as string}
+            signature={signature}
+            threadEmailAddress={threadEmailAddress}
           />
+        </ErrorBoundary>
+      </main>
 
-          <!-- Quick Responses Card -->
-          <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
-            <div class="p-4 space-y-3">
-              <h3 class="font-semibold leading-none tracking-tight">
-                Quick Responses
-              </h3>
-              <MacroSearch
-                client:load
-                items={macroArray}
-                groups={macroGroups}
-                placeholder="Search macros..."
-                eventName='MacroChoosen' 
-                customerID={customerId} 
-                ctx={ctx}            
-                />
-            </div>
-          </div>
-
-          <!-- Ticket zuweisen -->
-          <div id="Zuweisen" data-customerid={customerId} class="rounded-lg border bg-card text-card-foreground shadow-sm">
-            <div class="p-4 space-y-3">
-              <h3 class="font-semibold leading-none tracking-tight">
-                Assign Employee
-              </h3>
-              <Assign
-                client:load
-                items={transEmployeeArray}
-                placeholder="Search employee..."
-                eventName='Zuweisung'
-                customerId={customerId}
-                assigned={assignedEmployeeName}
-              />
-            </div>
-          </div>     
-        </div>
-      </div>
+      <!-- Sidebar Component -->
+      <ErrorBoundary client:load>
+        <TicketSidebar 
+          client:load
+          customer={customer}
+          emailAddress={emailAddress}
+          shopifyConfig={shopifyConfig}
+          clientData={clientData || {}}
+          macros={macroArray || []}
+          macroGroups={macroGroups || []}
+          employees={transformedEmployees}
+          assignedEmployeeName={assignedEmployeeName}
+          macroContext={macroContext}
+        />
+      </ErrorBoundary>
     </div>
   </AdminShell>
 
-  <!-- Token für den Browser bereitstellen -->
 
-  <script>
-    // ============================================================================
-    // GET DOM ELEMENTS
-    // ============================================================================
-
-    import  { apiClient } from '../../utils/api.ts';
-    import { createClient } from '@supabase/supabase-js';
-    console.log("[customer-ticket-client] Script initialized");
-    const textarea = document.getElementById('answer') as HTMLTextAreaElement;
-    const button = document.getElementById('sendButton') as HTMLButtonElement;
-    const replyContainer = document.getElementById('replyContainer') as HTMLElement;
-    const resizeHandle = document.getElementById('resizeHandle') as HTMLElement;
-    const collapseButton = document.getElementById('collapseButton') as HTMLElement;
-    const collapseIcon = document.getElementById('collapseIcon') as HTMLElement;
-    const replyContent = document.getElementById('replyContent') as HTMLElement;
-
-    console.log("[customer-ticket-client] DOM elements found:", {
-      textarea: !!textarea,
-      button: !!button,
-      replyContainer: !!replyContainer,
-      resizeHandle: !!resizeHandle,
-      collapseButton: !!collapseButton
-    });
-
-    // Supabase-Browserclient (ENV mit PUBLIC_-Prefix)
-    const supabaseBrowser = createClient(
-      import.meta.env.PUBLIC_SUPABASE_URL,
-      import.meta.env.PUBLIC_SUPABASE_ANON_KEY,
-      { auth: { persistSession: true, autoRefreshToken: true } }
-    );
-
-    const el = document.getElementById('sb-token-holder') as HTMLElement | null;
-    const access = el?.dataset.access || '';
-    const refresh = el?.dataset.refresh || '';
-    if (access && refresh) {
-      await supabaseBrowser.auth.setSession({ access_token: access, refresh_token: refresh });
-    }
-
-    // ============================================================================
-    // COLLAPSE/EXPAND FUNCTIONALITY
-    // ============================================================================
-
-    let isCollapsed = false;
-    const COLLAPSED_HEIGHT = '52px';
-    
-    // Load saved collapsed state
-    const savedCollapsedState = localStorage.getItem('replyAreaCollapsed');
-    
-    if (savedCollapsedState === 'true') {
-      isCollapsed = true;
-      if (replyContainer && replyContent && collapseIcon) {
-        replyContainer.style.height = COLLAPSED_HEIGHT;
-        replyContent.style.display = 'none';
-        collapseIcon.style.transform = 'rotate(180deg)';
-        console.log("[customer-ticket-client] Loaded collapsed state");
-      }
-    }
-
-    // Toggle collapse/expand
-    collapseButton?.addEventListener('click', () => {
-      isCollapsed = !isCollapsed;
-      
-      console.log("[customer-ticket-client] Toggle collapse:", isCollapsed);
-
-      if (isCollapsed) {
-        // Collapse
-        if (replyContainer && replyContent && collapseIcon) {
-          replyContainer.style.height = COLLAPSED_HEIGHT;
-          replyContent.style.display = 'none';
-          collapseIcon.style.transform = 'rotate(180deg)';
-          collapseButton.setAttribute('title', 'Expand reply area');
-        }
-      } else {
-        // Expand
-        const savedHeight = localStorage.getItem('replyAreaHeight') || '180';
-        if (replyContainer && replyContent && collapseIcon) {
-          replyContainer.style.height = `${savedHeight}px`;
-          replyContent.style.display = 'flex';
-          collapseIcon.style.transform = 'rotate(0deg)';
-          collapseButton.setAttribute('title', 'Collapse reply area');
-        }
-      }
-
-      // Save collapsed state
-      localStorage.setItem('replyAreaCollapsed', isCollapsed.toString());
-    });
-
-    // ============================================================================
-    // RESIZE FUNCTIONALITY
-    // ============================================================================
-
-    let isResizing = false;
-    let startY = 0;
-    let startHeight = 0;
-    const MIN_HEIGHT = 150;
-    const MAX_HEIGHT = 600;
-
-    // Load saved height from localStorage
-    const savedHeight = localStorage.getItem('replyAreaHeight');
-    if (savedHeight && replyContainer) {
-      const height = parseInt(savedHeight);
-      if (height >= MIN_HEIGHT && height <= MAX_HEIGHT) {
-        replyContainer.style.height = `${height}px`;
-        console.log("[customer-ticket-client] Loaded saved height:", height);
-      }
-    }
-
-    // Start resize
-    resizeHandle?.addEventListener('mousedown', (e: MouseEvent) => {
-      e.preventDefault();
-      if(isCollapsed) return; // Prevent resizing when collapsed
-      isResizing = true;
-      startY = e.clientY;
-      startHeight = replyContainer?.offsetHeight || 180;
-      document.body.style.cursor = 'ns-resize';
-      document.body.style.userSelect = 'none';
-      
-      console.log("[customer-ticket-client] Resize started at height:", startHeight);
-    });
-
-    // Handle resize
-    document.addEventListener('mousemove', (e: MouseEvent) => {
-      if (!isResizing || isCollapsed || !replyContainer) return;
-
-      const deltaY = startY - e.clientY;
-      const newHeight = Math.min(Math.max(startHeight + deltaY, MIN_HEIGHT), MAX_HEIGHT);
-      
-      replyContainer.style.height = `${newHeight}px`;
-    });
-
-    // End resize
-    document.addEventListener('mouseup', () => {
-      if(isCollapsed) return; // Prevent resizing when collapsed
-      if (isResizing) {
-        isResizing = false;
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-        
-        // Save height to localStorage
-        if (replyContainer) {
-          const currentHeight = replyContainer.offsetHeight;
-          localStorage.setItem('replyAreaHeight', currentHeight.toString());
-          console.log("[customer-ticket-client] Resize ended, height saved:", currentHeight);
-        }
-      }
-    });
-
-    // ============================================================================
-    // MACRO FUNCTIONALITY
-    // ============================================================================
-
-    /**
-     * Listen for macro selection events from React component
-     * When a macro is chosen, append its text to the textarea
-     */
-    window.addEventListener('MacroChoosen', (e) => {
-      console.log("[customer-ticket-client] MacroChoosen event received");
-      
-      const macrochoosen = e as CustomEvent;
-      const text = macrochoosen?.detail?.text || '';
-      
-      if (!textarea || !text) {
-        console.log("[customer-ticket-client] Missing textarea or text, skipping");
-        return;
-      }
-
-      console.log("[customer-ticket-client] Appending macro text to textarea");
-
-      // Append text to textarea (with newline if content exists)
-      textarea.value += (textarea.value ? '\n\n' : '') + text;
-
-      // Focus textarea and move cursor to end
-      textarea.focus();
-      const end = textarea.value.length;
-      textarea.setSelectionRange(end, end);
-
-      // Trigger input events for any listeners
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
-      textarea.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-
-    // ============================================================================
-    // Zuweisung FUNCTIONALITY
-    // ============================================================================
-    window.addEventListener('Zuweisung', async (e) => {
-      console.log("[customer-ticket-client] Zuweisung event received");
-
-      const zuweisung = e as CustomEvent;
-      const employeeId = zuweisung?.detail?.text;
-      const zuweisungElement = document.getElementById("Zuweisen");
-
-      // Check for valid employeeId
-      if (employeeId === undefined || employeeId === null) {
-        console.log("[customer-ticket-client] Missing employeeId, skipping");
-        return;
-      }
-      
-      // Check for zuweisung element
-      if (!zuweisungElement) {
-        console.log("[customer-ticket-client] Zuweisung element not found, skipping");
-        return;
-      }
-      const customerId = zuweisungElement.dataset.customerid;
-
-      // Check for valid customerId
-      if (!customerId) {
-        console.log("[customer-ticket-client] Missing customerId, skipping");
-        return;
-      }
-
-      await apiClient.post('/client/assignEmployee', {
-        employee_id: parseInt(employeeId),
-        customer_id: parseInt(customerId)
-      });
-    });
-
-
-    // ============================================================================
-    // AUTO-SCROLL MAIL LIST
-    // ============================================================================
-
-    /**
-     * Auto-scroll mail list to bottom on page load
-     * Shows the most recent messages first
-     */
-    (function () {
-      console.log("[customer-ticket-client] Auto-scrolling email thread to bottom");
-      const list = document.getElementById('emailThread');
-      if (list) {
-        list.scrollTop = list.scrollHeight;
-        console.log("[customer-ticket-client] Email thread scrolled to:", list.scrollHeight);
-      }
-    })();
-
-    // ============================================================================
-    // SEND EMAIL FUNCTIONALITY
-    // ============================================================================
-
-    /**
-     * Send button click handler
-     * Sends the reply email and marks conversation as read
-     */
-    button?.addEventListener('click', async () => {
-      console.log("[customer-ticket-client] Send button clicked");
-
-      const emailAddress = button.dataset.email;
-      const newSubject = button.dataset.subject;
-      const customerId = button.dataset.customerid;
-      const signature = button.dataset.signature;
-      const threadEmailAddress = button.dataset.threademail || ""; // NEU: Thread Email
-
-      let body = textarea?.value || '';
-      body = body.trim();
-
-      console.log("[customer-ticket-client] Email data:", {
-        to: emailAddress,
-        subject: newSubject,
-        customerId: customerId,
-        threadEmailAddress: threadEmailAddress, // NEU
-        bodyLength: body.length
-      });
-
-      // Disable button during send
-      if (button) {
-        button.setAttribute('disabled', 'true');
-        button.innerHTML = `
-          <svg class="mr-2 h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          Sending...
-        `;
-      }
-
-      try {
-        // Only send if there's content
-        if (body.trim() !== '' || selectedFiles.length > 0) {
-          console.log("[customer-ticket-client] Sending email");
-
-          // add signature
-          if (signature && signature.trim() !== '') {
-            body += `\n\n${signature}`;
-          }
-
-          //Formdata damit die attachments mitgesendet werden können
-          const formData = new FormData();
-
-          selectedFiles.forEach(file => {
-            formData.append('attachments', file);
-          });
-
-          // Ensure a string value is appended (dataset fields may be undefined)
-          if (emailAddress && newSubject) {
-            formData.append('to', String(emailAddress));
-            formData.append('subject', newSubject);
-            formData.append('text', body);
-            formData.append('threadEmailAddress', threadEmailAddress);
-
-            //sending mail
-            await apiClient.postFormData(`/emails/sendMail?customerId=${customerId}`, formData);
-          } else {
-            console.log("[customer-ticket-client] Cant send email, missing data");
-            return
-          }
-
-          console.log("[customer-ticket-client] Email sent successfully");
-        } else {
-          console.log("[customer-ticket-client] Empty message, skipping send");
-        }
-        
-        // Mark conversation as read
-        console.log("[customer-ticket-client] Marking conversation as read");
-        await apiClient.post(`/emails/makeRead?customerId=${customerId}`);
-
-        console.log("[customer-ticket-client] Redirecting to dashboard");
-        window.location.href = '/dashboard';
-      } catch (error) {
-        console.error("[customer-ticket-client] Error sending email:", error);
-        
-        // Re-enable button on error
-        if (button) {
-          button.removeAttribute('disabled');
-          button.innerHTML = `
-            <svg class="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-            </svg>
-            Send Reply
-          `;
-        }
-      }
-    });
-
-
-
-    // ============================================================================
-    // handle showing attachemts (currently only incomming mails)
-    // ============================================================================
-    declare global {
-      interface Window {
-        handleShowAttachment: (btn: HTMLButtonElement) => Promise<void> | void;
-      }
-    }
-    export {};
-
-    window.handleShowAttachment = async (btn) => {
-      const mailId = btn.dataset.mail;
-      const path   = btn.dataset.path?.trim();
-      const mime   = btn.dataset.mime;
-      const type = btn.dataset.type;
-      const preview = document.getElementById('emailThread');
-      if (!preview) return;
-      
-      if (!path) {
-        console.error('[attachment] missing path');
-        return;
-      }
-
-      let storage = "";
-      if (type == 'incoming') {
-        storage = "mail-attachments";
-      } else if (type == "sent") {
-        storage = "sent-attachments";
-      } else {
-        console.log("No type defined");
-      }
-
-      try {
-        const url = await apiClient.post('/emails/getSignedUrl', {
-          path: path,
-          location: storage
-        });
-
-
-        // Bilder inline zeigen, alles andere in neuem Tab öffnen
-        if (mime && mime.startsWith('image/')) {
-          const filename = path.split('/').pop();
-          const list = document.getElementById('emailThread');
-          let scrollHeight = 0;
-          if (list) {
-            scrollHeight = list.scrollTop;
-          }
-          preview.dataset.originalHtml = preview.innerHTML;
-          btn.disabled = true;
-          preview.innerHTML = `
-            <div class="inline-block bg-white border rounded-lg shadow-md overflow-hidden h-9/10 w-full">
-              <div class="flex justify-between items-center px-2 py-1 bg-gray-50 border-b">
-                <span class="text-xs font-medium text-gray-600 truncate">${filename}</span>
-                <div class="flex gap-1">
-
-                  <!-- Download -->
-                  <button
-                    id="download-${mailId}"
-                    title="Download"
-                    class="group relative h-9 w-9 flex items-center justify-center rounded-md bg-blue-600/80 hover:bg-blue-600 text-white shadow-md transition-transform hover:scale-105 active:scale-95"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M20 20H4"/>
-                    </svg>
-                    <span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] text-gray-700 bg-white/80 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition">
-                      Download
-                    </span>
-                  </button>
-
-                  <!-- Close -->
-                  <button
-                    id="close-preview-${mailId}"
-                    title="Close"
-                    class="group relative h-9 w-9 flex items-center justify-center rounded-md bg-gray-100/90 hover:bg-gray-200 text-gray-700 shadow-sm transition-transform hover:scale-105 active:scale-95"
-                  >
-                    ✕
-                    <span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] text-gray-700 bg-white/80 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition">
-                      Close
-                    </span>
-                  </button>
-                </div>
-              </div>
-              <img
-                src="${url}"
-                alt="${filename}"
-                class="block h-full w-full object-contain bg-gray-50"
-                style="max-width:100%;"
-              />
-            </div>
-          `;
-          // Close-Button Event
-          const closeBtn = document.getElementById(`close-preview-${mailId}`);
-          if (closeBtn) {
-            closeBtn.addEventListener('click', () => {
-              // Alten Zustand wiederherstellen
-              preview.innerHTML = preview.dataset.originalHtml || '';
-              if (list) {
-                list.scrollTop = scrollHeight;
-              }
-            });
-          }
-
-          // Download-Button Event
-          const dlBtn = document.getElementById(`download-${mailId}`);
-          if (dlBtn) {
-            dlBtn.addEventListener('click', async () => {
-              try {
-                if (filename) {
-                  // Datei per fetch holen (mit der signierten URL)
-                  const res = await fetch(url);
-                  if (!res.ok) throw new Error('Download fehlgeschlagen');
-                  const blob = await res.blob();
-
-                  // Temporären Download-Link erstellen
-                  const blobUrl = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = blobUrl;
-                  a.download = filename; // erzwingt Download
-                  document.body.appendChild(a);
-                  a.click();
-                  a.remove();
-                  URL.revokeObjectURL(blobUrl);
-                }
-                else {
-                  alert('Es gab einen Fehler');
-                }
-              } catch (err) {
-                console.error('[Download error]', err);
-                alert('Download fehlgeschlagen');
-              }
-            });
-          }
-        } else {
-          btn.disabled = false;
-          window.open(url, '_blank', 'noopener,noreferrer');
-        }
-      } catch (e : any) {
-        console.error('[attachment]', e);
-        alert('Fehler: ' + e.message);
-      }
-      btn.disabled = false;
-    };
-
-    // ============================================================================
-    // handle upload attachments
-    // ============================================================================
-    const addFilesBtn = document.getElementById("addFilesBtn");
-    const fileInput = document.getElementById("fileInput") as HTMLInputElement;
-    const attachmentPreview = document.getElementById("attachment-preview");
-    const selectedFiles : File[] = []
-    const objectURLs: string[] = [];
-
-    if (addFilesBtn && fileInput && attachmentPreview) {
-      addFilesBtn.addEventListener("click", () => fileInput.click());
-
-      fileInput.addEventListener("change", () => {
-        const files: File[] = fileInput.files ? Array.from(fileInput.files) : [];
-        
-        files.forEach(file => {
-          selectedFiles.push(file);
-        });
-        renderPreview();
-        fileInput.value = "";
-      });
-    } else {
-      console.log("[customer-ticket-client] Missing attachment upload button or attachment preview");
-    }
-    
-    //function to render the preview of the selected attachments
-    function renderPreview() {
-      if (attachmentPreview) {
-        attachmentPreview.innerHTML = "";
-
-        // Clear old object URLs
-        objectURLs.forEach(url => URL.revokeObjectURL(url));
-        objectURLs.length = 0;
-
-        selectedFiles.forEach((file, index) => {
-          const objectURL = URL.createObjectURL(file);
-          objectURLs.push(objectURL); // Track the URL
-
-          const wrapper = document.createElement("div");
-          wrapper.className = "border rounded p-2 w-32 text-xs flex flex-col gap-1"
-
-          //clickeble filename (opens in other tab)
-          const link = document.createElement("a");
-          link.textContent = file.name;
-          link.href = objectURL;
-          link.target = "_blank";
-          link.className = "text-blue-600 underline truncate";
-          wrapper.appendChild(link);
-
-          //remove button
-          const removeBtn = document.createElement("button");
-          removeBtn.textContent = "x";
-          removeBtn.className = "seld-end text-[10px] text-red-500"
-          removeBtn.onclick = () => {
-            selectedFiles.splice(index, 1);
-            renderPreview();
-          };
-          wrapper.appendChild(removeBtn);
-          attachmentPreview.appendChild(wrapper);
-        });
-      }
-    }
-
-
-    console.log("[customer-ticket-client] All event listeners attached");
-  </script>
 </BaseLayout>
