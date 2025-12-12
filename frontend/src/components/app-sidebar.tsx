@@ -111,6 +111,10 @@ export function AppSidebar({
           {
             title: "Macro Editor",
             url: "/manage/macro"
+          },
+          {
+            title: "Analytics",
+            url: "/manage/analytics"
           }
         ],
       });
