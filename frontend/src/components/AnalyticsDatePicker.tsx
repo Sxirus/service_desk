@@ -127,7 +127,7 @@ export function AnalyticsDatePicker({
                     <Button
                         variant="ghost"
                         size="sm"
-                        className=" justify-start font-normal"
+                        className="justify-start font-normal"
                         onClick={() => handlePreset(90)}
                     >
                         Last 90 days
