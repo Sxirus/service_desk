@@ -76,9 +76,10 @@ export function AppSidebar({
         title: "Service Desk",
         url: "/",
         icon: Home,
-        isActive: currentPath === "/" || currentPath === "/dashboard",
+        isActive: currentPath === "/" || currentPath === "/dashboard" || currentPath == '/mail_list',
         items: [
           { title: "Dashboard", url: "/dashboard" },
+          { title: 'All Mails', url: '/mail_list' },
         ],
       },
     ];
@@ -91,6 +92,10 @@ export function AppSidebar({
         icon: Bot,
         isActive: currentPath.startsWith("/manage"),
         items: [
+          {
+            title: "General Settings",
+            url: "/manage/settings"
+          },
           { 
             title: "Users", 
             url: "/manage/users",
@@ -99,6 +104,18 @@ export function AppSidebar({
             title: "Company", 
             url: "/manage/client",
           },
+          { 
+            title: "Shopify Integration", 
+            url: "/manage/shopify",
+          },
+          {
+            title: "Macro Editor",
+            url: "/manage/macro"
+          },
+          {
+            title: "Analytics",
+            url: "/manage/analytics"
+          }
         ],
       });
     }

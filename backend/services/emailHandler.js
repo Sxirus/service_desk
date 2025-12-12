@@ -3,7 +3,10 @@
 // Handles customer creation, email address management, and email storage for the service desk system
 
 // Import required modules
+const { parse } = require('postcss');
 const supabase = require('../config/supabase');  // Supabase client for database operations
+const { storeIncomingAttachmentInDB } = require('./attachments/incoming');
+const nodemailer = require('nodemailer');
 
 /**
  * Save a parsed email to the database with customer association
@@ -17,9 +20,9 @@ const supabase = require('../config/supabase');  // Supabase client for database
  * @param {string} clientId - Unique identifier for the client this email belongs to
  * @param {string} InboxEmail - The inbox email address this process belongs to (for logging and debugging)
  */
-async function saveEmail(parsedEmail, clientId, InboxEmail) {
+async function saveEmail(parsedEmail, clientId, InboxEmail, confirmation) {
     // Extract relevant email data for processing
-    const { subject, from, date, text, html, attachments = [] } = parsedEmail;
+    const { subject, from, to, date, text, html, attachments = [] } = parsedEmail;
     
     // Extract sender's email address from the parsed email structure
     const senderEmailAddress = Array.isArray(from.value) && from.value.length > 0 && from.value[0].address
@@ -29,6 +32,22 @@ async function saveEmail(parsedEmail, clientId, InboxEmail) {
         console.error(`[${InboxEmail}] Invalid sender email structure:`, from);
         return;
     }
+
+    // NEU: Extract recipient email addresses (to_email_address)
+    let toEmailAddress = null;
+    if (Array.isArray(to?.value) && to.value.length > 0) {
+        // Nehme die erste Empfänger-Email-Adresse
+        toEmailAddress = to.value[0].address;
+    } else if (to?.text) {
+        // Fallback: Versuche aus dem Text-Feld zu extrahieren
+        const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+        const match = to.text.match(emailRegex);
+        toEmailAddress = match ? match[0] : null;
+    }
+
+    // NEU: received_by ist die InboxEmail (welche unserer Emails hat die Nachricht empfangen)
+    const receivedBy = InboxEmail;
+
     let customerId;
 
     console.log(`[${InboxEmail}] Checking if email address exists:`, senderEmailAddress);
@@ -48,25 +67,51 @@ async function saveEmail(parsedEmail, clientId, InboxEmail) {
         console.log(`[${InboxEmail}] Email address exists, retrieving customer ID for "${senderEmailAddress}":`, customerId);
     }
 
-  // Insert the email into the incoming-mails table with customer association
-  const { data: email, error: emailError } = await supabase.from('incoming-mails').insert([
-    {
-        send_at: date,                           // When the email was sent
-        client_id: clientId,                     // Which client this email belongs to
-        customer_id: customerId,                 // Which customer sent this email
-        subject: subject,                        // Email subject line
-        text_content: text,                      // Plain text version of email content
-        html_content: html,                      // HTML version of email content
-        email_address: senderEmailAddress,      // Sender's email address for quick reference
-    }
-  ]).select().single();
+    // NEU: Logging der Email-Details für Debugging
+    console.log(`[${InboxEmail}] Email details:`, {
+        from: senderEmailAddress,
+        to: toEmailAddress,
+        receivedBy: receivedBy,
+        subject: subject
+    });
 
-  // Handle database insertion errors
-  if (emailError) {
-    console.error(`[${InboxEmail}] Failed to insert email:`, emailError);
-    return;
-  }
-  console.log(`[${InboxEmail}] New Email processed and saved successfully with ID:`, email.id);
+    // Insert the email into the incoming-mails table with customer association
+    const { data: email, error: emailError } = await supabase.from('incoming-mails').insert([
+        {
+            send_at: date,                           // When the email was sent
+            client_id: clientId,                     // Which client this email belongs to
+            customer_id: customerId,                 // Which customer sent this email
+            subject: subject,                        // Email subject line
+            text_content: text,                      // Plain text version of email content
+            html_content: html,                      // HTML version of email content
+            email_address: senderEmailAddress,       // Sender's email address for quick reference
+            to_email_address: toEmailAddress,        // NEU: Empfänger-Email-Adresse
+            received_by: receivedBy                  // NEU: Welche unserer Emails hat die Nachricht empfangen
+        }
+    ]).select().single();
+
+    // Handle database insertion errors
+    if (emailError) {
+        console.error(`[${InboxEmail}] Failed to insert email:`, emailError);
+        return;
+    }
+
+    //saving attachments
+    if (attachments.length > 0) {
+        console.log(`[${InboxEmail}] Saving attachments`);
+        storeIncomingAttachmentInDB(attachments, clientId, email.id);
+    } else {
+        console.log(`[${InboxEmail}] Mail had no attachments, proceding`);
+    }
+
+    //sending confirmation email
+    if (confirmation[0].confirm_mail == null || confirmation[0].confirm_mail == '' || confirmation[0].confirmation_mail_subject == null || confirmation[0].confirmation_mail_subject == '') {
+        console.log('Client set no confirmation mail');
+    } else {
+        sendConfirmation(senderEmailAddress, confirmation[0]);
+    }
+
+    console.log(`[${InboxEmail}] New Email processed and saved successfully with ID:`, email.id);
 }
 
 /**
@@ -160,5 +205,54 @@ async function getCustomerIdByEmail(email) {
     return data && data.customer_id ? data.customer_id : null; // Return customer ID or null if not found
 }
 
+//getting the text send as confirmation
+async function getConfirmation(clientId) {
+    const {data, error} = await supabase
+      .from('clients')
+      .select('confirm_mail, confirmation_mail_subject')
+      .eq('id', clientId)
+      .limit(1)
+
+    if (error) {
+        console.log(`[${clientId}, Email Handler] Error getting clients confirm text`, error);
+        return null
+    }
+
+    return data;
+}
+
+//sending a confirmation mail
+async function sendConfirmation(customerEmail, confirmation) {
+  try {
+    const to  = customerEmail
+    const subject = confirmation.confirmation_mail_subject
+    const text = confirmation.confirm_mail
+    
+    // Create transporter
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT),
+      secure: false,
+      auth: {
+        user: process.env.IMAP_USER,
+        pass: process.env.IMAP_PASS,
+      },
+    });
+
+    // Send email
+    const info = await transporter.sendMail({
+      from: `"Service Desk" <${process.env.MAIL_USER}>`,
+      to,
+      subject,
+      text,
+    });
+
+    console.log('[EMAILS] Email sent:', info.messageId);
+
+  } catch (err) {
+    console.error('[EMAILS] Send error:', err);
+  }
+}
+
 // Export the main function for use by IMAP workers
-module.exports = { saveEmail };
+module.exports = { saveEmail, getConfirmation };

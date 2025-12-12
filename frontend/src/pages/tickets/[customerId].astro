@@ -1,112 +1,523 @@
 ---
+/**
+ * Customer Ticket Detail View
+ * 
+ * This page displays:
+ * - Email conversation thread with a customer
+ * - Customer information in the right sidebar
+ * - Shopify order history (if store is connected)
+ * - Macro search for quick responses
+ * - Reply functionality (RESIZABLE & COLLAPSIBLE)
+ * 
+ * Security: Authenticated users only
+ * Uses: Auth helper for DRY authentication/authorization
+ * 
+ * Performance: Tracks all major operations when ENABLE_PERFORMANCE_TRACKING=true
+ * 
+ * Architecture:
+ * - Server-side: Data loading and authentication (Astro)
+ * - Client-side: Interactive components (React with client:load)
+ * - Separation of concerns: Each major feature in its own component
+ */
+
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import { formatDate } from "../../utils/formatDate.js";
-//parameters
+import { createClient } from "../../lib/supabase.ts";
+import { getCompletePageContext } from "../../lib/auth-helpers.ts";
+import { createPageLogger, perf } from "../../utils/logger.ts";
+import AdminShell from "@/components/AdminShell";
+import { EmailThread } from "@/components/EmailThread";
+import { ReplyArea } from "@/components/ReplyArea";
+import { TicketSidebar } from "@/components/TicketSidebar";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import type { 
+  ThreadEmail, 
+  IncomingEmail, 
+  SentEmail,
+  BrowserTokens,
+  MacroContext
+} from "@/types/ticket.types";
+
+
+const log = createPageLogger('customer-ticket');
+log.info('Page accessed');
+
+// ============================================================================
+// PERFORMANCE TRACKING - START
+// ============================================================================
+const pageLoadTimer = perf.start('page-load', 'total');
+
+// ============================================================================
+// ROUTE PARAMETERS
+// ============================================================================
+
 const { params } = Astro;
 const customerId = params.customerId;
-//getting the customer
-const resultCustomer = await fetch(`http://localhost:3000/api/customers/getCustomerById?customerId=${customerId}`);
-const customerArray = await resultCustomer.json();
-const customer = customerArray[0];
-//getting all the emails from a customer
-const resultMails = await fetch(`http://localhost:3000/api/emails/getEmailsFromCustomer?customerId=${customerId}`);
-const emailArray = await resultMails.json()
-var lastMail = emailArray[emailArray.length - 1];
-if (lastMail['type'] != 'incoming'){
-  for (let mail of emailArray) {
-    if (mail.type == 'incoming') {
-      lastMail = mail;
-    };
+
+// Validate customerId format (positive integer)
+if (!customerId || !/^\d+$/.test(customerId) || parseInt(customerId) < 1) {
+  log.error('Invalid customer ID format:', customerId);
+  return new Response("Invalid customer ID", { status: 400 });
+}
+
+log.info('Customer ID: ', customerId);
+
+// ============================================================================
+// AUTHENTICATION & AUTHORIZATION
+// ============================================================================
+
+const authTimer = perf.start('page-load', 'authentication');
+
+// USE PRE-AUTHENTICATED USER FROM MIDDLEWARE
+const supabase = Astro.locals.supabase || createClient({ 
+  request: Astro.request, 
+  cookies: Astro.cookies 
+});
+
+const { data: { session } } = await supabase.auth.getSession();
+if (!session) {
+  log.error('No session found, redirecting to login');
+  return Astro.redirect("/");
+}
+
+log.info('Verifying authentication');
+// PASS PRE-AUTHENTICATED USER - NO DOUBLE AUTH!
+const pageContext = await getCompletePageContext(
+  supabase, 
+  Astro.cookies,
+  Astro.locals.user
+);
+
+perf.end(authTimer);
+
+if (!pageContext) {
+  log.error('Authentication failed, redirecting to login');
+  perf.end(pageLoadTimer, { result: 'auth-failed' });
+  perf.printReport('customer-ticket');
+  return Astro.redirect("/");
+}
+
+const { authContext, sidebarData } = pageContext;
+log.info('User authenticated', { userId: authContext.user.id, employeeId: authContext.employee.id, clientId: authContext.employee.client_id });
+
+const clientId = authContext.employee.client_id;
+
+// ============================================================================
+// DATA LOADING - OPTIMIZED WITH PARALLEL QUERIES
+// ============================================================================
+
+const dataFetchTimer = perf.start('page-load', 'data-fetching');
+log.info('Starting parallel data fetch');
+
+// Track individual query timings within the parallel execution
+const queryTimer = perf.start('database', 'parallel-queries');
+
+const [
+  { data: customer, error: customerError },
+  { data: incomingMails, error: incomingError },
+  { data: sentMails, error: sentError },
+  { data: macroArray, error: macroError },
+  { data: macroGroups, error: macroGroupsError },
+  { data: clientData, error: clientError },
+  { data: assignedEmployeeArray, error: assignedEmployeeErr},
+  { data: employeeArray, error: employeeErr},
+  { data: clientEmailConfig, error: clientEmailConfigError }
+] = await Promise.all([
+  supabase
+    .from("customers")
+    .select(`
+      id,
+      name,
+      client_id,
+      employee_id
+    `)
+    .eq("id", customerId)
+    .eq("client_id", clientId)
+    .single(),
+  
+  supabase
+    .from("incoming-mails")
+    .select(`
+      id,
+      send_at,
+      subject,
+      text_content,
+      html_content,
+      email_address,
+      read,
+      processing_status,
+      attachments
+    `)
+    .eq("customer_id", customerId)
+    .eq("client_id", clientId)
+    .order("send_at", { ascending: true }),
+  
+  supabase
+    .from("sent-mail")
+    .select(`
+      id,
+      send_at,
+      text_content,
+      employee_id,
+      attachments
+    `)
+    .eq("customer_id", customerId)
+    .order("send_at", { ascending: true }),
+  
+  supabase
+    .from("macros")
+    .select("*")
+    .eq("client_id", clientId)
+    .order("title", { ascending: true }),
+  
+  supabase
+    .from("macro_groups")
+    .select("*")
+    .eq("client_id", clientId),
+
+  supabase
+    .from("clients")
+    .select(`
+      id,
+      name,
+      email_signature,
+      shopify_store_url,
+      shopify_access_token,
+      shopify_connected,
+      shopify_scope
+    `)
+    .eq("id", clientId)
+    .single(),
+
+  supabase
+    .from("customers")
+    .select("employee_id")
+    .eq("id", customerId),
+  
+  supabase
+    .from("employees")
+    .select("id, name")
+    .eq("client_id", clientId)
+    .order("name"),
+  
+  supabase
+    .from('clients')
+    .select(`
+      email_sending_mode,
+      primary_email_id,
+      client-emails!primary_email_id (
+        id,
+        email_address
+      )
+    `)
+    .eq('id', clientId)
+    .single()
+]);
+
+perf.end(queryTimer, {
+  queries: 6,
+  customerFound: !!customer,
+  incomingMailsCount: incomingMails?.length || 0,
+  sentMailsCount: sentMails?.length || 0,
+  macrosCount: macroArray?.length || 0
+});
+
+perf.end(dataFetchTimer);
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+//Log any errors
+if (employeeErr) {
+  console.error("[customer-ticket] Failed to load assigned employee", {
+    error: employeeErr.message,
+    code: employeeErr.code
+  })
+} else {
+  console.log("[customer-ticket] Data Loaded")
+}
+
+if (clientEmailConfigError) {
+  console.error("[customer-ticket] Error fetching client email config:", clientEmailConfigError);
+}
+
+const errorCheckTimer = perf.start('page-load', 'error-handling');
+
+if (customerError) {
+  log.error('Error fetching customer:', customerError);
+  perf.end(errorCheckTimer, { result: 'customer-error' });
+  perf.end(pageLoadTimer, { result: 'customer-not-found' });
+  perf.printReport('customer-ticket');
+  return new Response("Customer not found", { status: 404 });
+}
+
+if (!customer) {
+  log.error('Customer not found or access denied');
+  perf.end(errorCheckTimer, { result: 'customer-not-found' });
+  perf.end(pageLoadTimer, { result: 'customer-not-found' });
+  perf.printReport('customer-ticket');
+  return new Response("Customer not found", { status: 404 });
+}
+
+log.info('Customer loaded:', customer.name);
+
+if (clientError) {
+  log.error('Error fetching client data:', clientError);
+  perf.end(errorCheckTimer, { result: 'client-error' });
+  perf.end(pageLoadTimer, { result: 'server-error' });
+  perf.printReport('customer-ticket');
+  return new Response("Internal server error", { status: 500 });
+}
+
+if (incomingError) {
+  log.error('Error fetching incoming mails:', incomingError);
+}
+
+if (sentError) {
+  log.error('Error fetching sent mails:', sentError);
+}
+
+if (macroError) {
+  log.error('Error fetching macros:', macroError);
+}
+
+if (macroGroupsError) {
+  log.error("Error fetching macro groups", macroGroupsError);
+}
+
+if (assignedEmployeeErr) {
+  log.error('Error fetching the assigned employee', assignedEmployeeErr)
+}
+
+perf.end(errorCheckTimer);
+
+// ============================================================================
+// DATA PROCESSING
+// ============================================================================
+
+const processingTimer = perf.start('page-load', 'data-processing');
+
+/**
+ * Combine and sort incoming and sent emails into a unified thread
+ * Type-safe email array with proper TypeScript interfaces
+ */
+const emailArray: ThreadEmail[] = [
+  ...(incomingMails || []).map((mail: any): IncomingEmail => ({
+    ...mail,
+    type: 'incoming',
+    email_address: mail.email_address,
+    has_attachments: mail.attachments?.length > 0,
+    attachments: mail.attachments || []
+  })),
+  ...(sentMails || []).map((mail: any): SentEmail => ({
+    ...mail,
+    type: 'sent',
+    employee_id: mail.employee_id,
+    has_attachments: mail.attachments?.length > 0,
+    attachments: mail.attachments || []
+  }))
+].sort((a, b) => new Date(a.send_at).getTime() - new Date(b.send_at).getTime());
+
+log.info("Emails loaded:", emailArray.length);
+log.info("EmailArray Content:", emailArray);
+
+let lastMail = incomingMails && incomingMails.length > 0 
+  ? incomingMails[incomingMails.length - 1] 
+  : null;
+
+if (!lastMail) {
+  log.error("No incoming emails found in thread");
+  perf.end(processingTimer, { result: 'no-emails' });
+  perf.end(pageLoadTimer, { result: 'no-emails' });
+  perf.printReport('customer-ticket');
+  return new Response("No emails found", { status: 404 });
+}
+
+const emailAddress = lastMail.email_address;
+const newSubject = `RE: ${lastMail.subject}`;
+
+let threadEmailAddress = null;
+
+// Thread-Based Mode: Verwende received_by (welche unserer Emails die Nachricht empfangen hat)
+if (clientEmailConfig?.email_sending_mode === 'thread-based') {
+  // Priorität 1: received_by Feld verwenden
+  if (lastMail.received_by) {
+    threadEmailAddress = lastMail.received_by;
+    log.info("Using thread-based email from received_by:", threadEmailAddress);
+  }
+  // Priorität 2: to_email_address Feld als Fallback
+  else if (lastMail.to_email_address) {
+    threadEmailAddress = lastMail.to_email_address;
+    log.info("Using thread-based email from to_email_address (fallback):", threadEmailAddress);
+  }
+  // Priorität 3: Erste verfügbare Email des Clients
+  else {
+    const { data: clientEmails, error: clientEmailsError } = await supabase
+      .from('client-emails')
+      .select('email_address')
+      .eq('client_id', clientId)
+      .eq('active', true)
+      .order('id', { ascending: true })
+      .limit(1);
+    
+    if (!clientEmailsError && clientEmails && clientEmails.length > 0) {
+      threadEmailAddress = clientEmails[0].email_address;
+      log.info("Using fallback thread email (first available):", threadEmailAddress);
+    } else {
+      log.error("No thread email address found for thread-based mode!");
+    }
+  }
+}
+
+// NEU: Sender Email basierend auf Client Configuration ermitteln
+let senderEmail = null;
+if (clientEmailConfig?.email_sending_mode === 'primary' && clientEmailConfig['client-emails']?.[0]) {
+  senderEmail = clientEmailConfig['client-emails'][0].email_address;
+  log.info("Using primary email:", senderEmail);
+} else if (clientEmailConfig?.email_sending_mode === 'thread-based' && threadEmailAddress) {
+  senderEmail = threadEmailAddress;
+  log.info("Using thread-based email:", senderEmail);
+}
+
+/**
+ * Email signature for replies
+ */
+const signature = clientData?.email_signature || "";
+
+log.info("Client email configuration:", {
+  mode: clientEmailConfig?.email_sending_mode,
+  primaryEmailId: clientEmailConfig?.primary_email_id,
+  senderEmail: senderEmail,
+  threadEmail: threadEmailAddress,
+  customerEmail: emailAddress,
+  lastMailReceivedBy: lastMail.received_by,
+  lastMailToEmail: lastMail.to_email_address
+});
+
+log.info("Client data loaded:", {
+  name: clientData?.name,
+  shopifyConnected: clientData?.shopify_connected,
+  hasSignature: !!signature
+});
+
+log.info("Macros loaded:", macroArray?.length || 0);
+
+/**
+ * Shopify configuration for sidebar
+ */
+const shopifyConfig = {
+  connected: clientData?.shopify_connected || false,
+  customerId: customerId as string
 };
+
+/**
+ * Get assigned employee name
+ */
+let assignedEmployeeName: string | null = null;
+if (assignedEmployeeArray && assignedEmployeeArray[0]?.employee_id != null) {
+  const assignedEmployeeId = assignedEmployeeArray[0].employee_id;
+  const assignedEmployee = employeeArray?.find((item: any) => item.id === assignedEmployeeId);
+  assignedEmployeeName = assignedEmployee?.name || null;
+}
+
+/**
+ * Transform employee array for Assign component
+ */
+const transformedEmployees = (employeeArray || []).map((employee: any) => ({
+  title: employee.name,
+  text: employee.id
+}));
+
+/**
+ * Context for macro text interpolation
+ */
+const macroContext: MacroContext = {
+  customerID: customerId as string,
+  employeeName: assignedEmployeeName,
+  customerFullName: customer.name,
+  customerFirstName: customer.name.split(" ")[0] || customer.name,
+  customerLastName: customer.name.split(" ")[1] || "",
+  shopifyLastOrderNumber: null, // TODO: Get from Shopify API
+  customerEmail: emailAddress
 };
-const emailAdress = lastMail.email_adress;
-const newSubject = `RE: ${lastMail.subject}`
+
+perf.end(processingTimer, {
+  emailCount: emailArray.length,
+  hasShopify: shopifyConfig.connected
+});
+
+// ============================================================================
+// PERFORMANCE TRACKING - END
+// ============================================================================
+
+perf.end(pageLoadTimer, { result: 'success' });
+
+// Print comprehensive performance report
+perf.printReport('customer-ticket');
+
+log.info("[customer-ticket] Page setup complete, rendering");
 ---
 
-<BaseLayout title={customer.name} overflowHidden>
-  <!-- the right side -->
-  <div class="fixed right-0 bg-gray-100 h-full w-1/5 outline outline-2 outline-gray-300 flex justify-center">
-    <ul>
-    <li>
-      Name: {customer.name}
-    </li>
-    <li>{emailAdress}</li>
-    </ul>
-    <button
-      data-email={emailAdress}
-      data-subject={newSubject}
-      data-customerid={customerId}
-      id="sendButton"
-      class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 absolute bottom-7 w-4/5">
-      Senden
-    </button>
-  </div>
-  
-  <!-- all the mails of the customer -->
-  <div class="relative w-4/5 h-screen">
-    <h1 class="text-6xl w-full h-[5%] m-4">{lastMail.subject}</h1>
-    <ul id='mailList' class="w-full h-[70%] overflow-y-auto mb-2">
-      {emailArray.map((mail: any) => {
-      if (mail.type == 'sent') return (      
-      <li class="outline outline-2 outline-gray-300 mb-2">
-        <p>{formatDate(mail.date)}</p>
-        <p>Employee</p> 
-        <p class="text-black">{mail.text}</p>
-      </li>);
-      return (
-      <li class="outline outline-2 outline-gray-300 mb-2">
-        <p>{formatDate(mail.date)}</p>
-        <p>Customer</p>
-        <p class="text-black">{mail.text}</p>
-      </li>
-    )})}
-    </ul>
-    <!-- Text field to write text for new mail -->
-    <textarea class="w-full h-[20%] absolut bottom-3 resize-none overflow-y-auto p-2 border border-gray-300" placeholder="Answer..." id="answer"></textarea>
-  </div>
+<BaseLayout title={`${customer?.name} - Ticket` || "Customer Ticket"}>
+  <AdminShell 
+    client:load
+    user={sidebarData.user}
+    firstTeam={sidebarData.team ?? undefined}
+    crumbParentLabel="Dashboard"
+    crumbParentHref="/dashboard"
+    crumbCurrent={`${customer?.name} - Ticket` || "Ticket"}
+    isAdmin={authContext.isAdmin}
+    currentPath={`/tickets/${customerId}`}
+  >
+    <div class="flex gap-6 h-[calc(100vh-5rem)] -mx-6 -mb-6 overflow-hidden">
+      <!-- Main Content Area -->
+      <main class="flex-1 flex flex-col min-w-0 overflow-hidden" role="main">
+        <!-- Page Header -->
+        <header class="px-6 mt-2 pt-0 py-2">
+          <h1 class="text-2xl font-bold tracking-tight">
+            Conversation with {customer?.name}
+          </h1>
+        </header>
 
-  <script>
-    //mail list standartmäßig nach unten gescrollt
-    document.addEventListener('DOMContentLoaded', () => {
-      const list = document.getElementById('mailList');
-      if (list) {
-        list.scrollTop = list.scrollHeight; // ganz nach unten springen
-      }
-    });
+        <!-- Email Thread Component -->
+        <ErrorBoundary client:load>
+          <EmailThread 
+            client:load
+            emails={emailArray}
+            customer={customer}
+          />
+        </ErrorBoundary>
 
-    //button functionalität
-    document.addEventListener('DOMContentLoaded', () => {
-      const button = document.getElementById('sendButton') as HTMLButtonElement;
-      const textarea = document.getElementById('answer') as HTMLTextAreaElement;
+        <!-- Reply Area Component -->
+        <ErrorBoundary client:load>
+          <ReplyArea 
+            client:load
+            emailAddress={emailAddress}
+            subject={newSubject}
+            customerId={customerId as string}
+            signature={signature}
+            threadEmailAddress={threadEmailAddress}
+          />
+        </ErrorBoundary>
+      </main>
 
-      //send button action
-      button?.addEventListener('click', async() => {
-        const emailAdress = button.dataset.email;
-        const newSubject = button.dataset.subject;
-        const customerId = button.dataset.customerid;
+      <!-- Sidebar Component -->
+      <ErrorBoundary client:load>
+        <TicketSidebar 
+          client:load
+          customer={customer}
+          emailAddress={emailAddress}
+          shopifyConfig={shopifyConfig}
+          clientData={clientData || {}}
+          macros={macroArray || []}
+          macroGroups={macroGroups || []}
+          employees={transformedEmployees}
+          assignedEmployeeName={assignedEmployeeName}
+          macroContext={macroContext}
+        />
+      </ErrorBoundary>
+    </div>
+  </AdminShell>
 
-        const body = textarea.value;
-        if(body.trim() != '') {
-          //sending mail
-          await fetch(`http://localhost:3000/api/emails/sendMail?customerId=${customerId}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              to: emailAdress,
-              subject: newSubject,
-              text: body,
-            }),
-          });
-        }
-        //making all mails read
-        var result = await fetch(`http://localhost:3000/api/emails/makeRead?customerId=${customerId}`, {
-          method: 'POST'
-        });
-        //change window to main screen
-        window.location.assign('/');
-      });
-    });
-  </script>
+
 </BaseLayout>

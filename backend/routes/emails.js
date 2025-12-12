@@ -1,148 +1,701 @@
+/**
+ * Email Routes - UPDATED WITH SECURITY
+ * Handles incoming and outgoing email operations
+ * 
+ * All routes now protected with authentication and authorization
+ */
+
 const express = require('express');
 const router = express.Router();
-const supabase = require("../config/supabase")
+const supabase = require("../config/supabase");
 const nodemailer = require('nodemailer');
+const { authenticate } = require('../middleware/auth');
+const { authorizeCustomerAccess } = require('../middleware/authorization');
+const { validateId, sanitizeText } = require('../middleware/validation');
+const multer = require('multer');
+const upload = multer();
+const { storeOutgoingAttachmentsInDB } = require('../services/attachments/outgoing');
 
-//getting mails from the mail table
-router.get('/getMails', async (req, res) => {
-  //getting params
-  const client_id = req.query.client_id;
-  //fetching from db
-  try {
-    const { data, error } = await supabase
-      .from('incoming-mails') 
-      .select('*')
-      .eq("client_id", client_id)
-      .eq('read', false)
-      .order('send_at', { ascending: true })
-      .limit(100); ;
+/**
+ * Get unread mails for authenticated user's client
+ * GET /api/emails/getMails
+ * 
+ * Authentication: Required
+ * Authorization: Automatically filtered by user's client_id
+ */
+router.get('/getMails', 
+  authenticate,
+  async (req, res) => {
+    try {
+      // Use client_id from authenticated user (secure - can't be spoofed)
+      const client_id = req.user.client_id;
+      
+      console.log('[EMAILS] Fetching mails for client:', client_id);
+      
+      //checking the users preference (showing assigned mails or not)
+      const { data: pref, error: preferror} = await supabase
+        .from('clients')
+        .select('show_assigned_mails_in_all_mails')
+        .eq('id', client_id)
+        .single();
+      
+      if (preferror) {
+        console.error('[EMAILS] Pref fetch error:', preferror.message);
+        return res.status(500).json({ error: 'Konnte Präferenzen nicht laden' });
+      }
 
-    if (error) {
-      console.log('Supabase error:', error.message);
-      return res.status(500).json({ error: 'Datenbankfehler' });
+      let mails = [];
+
+      //getting the mails based on customer preference
+      if (pref?.show_assigned_mails_in_all_mails) {
+        const { data, error } = await supabase
+          .from('incoming-mails')
+          .select('*')
+          .eq('client_id', client_id)
+          .eq('read', false)
+          .order('send_at', { ascending: true })
+          .limit(100);
+
+        if (error) {
+          console.error('[EMAILS] Supabase error:', error.message);
+          return res.status(500).json({ error: 'Datenbankfehler' });
+        }
+        mails = data ?? [];
+      } else {
+        const { data: unassignedCustomers, error: custErr } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('client_id', client_id)
+          .is('employee_id', null);
+
+        if (custErr) {
+          console.error('[EMAILS] Customers fetch error:', custErr.message);
+          return res.status(500).json({ error: 'Datenbankfehler' });
+        }
+
+        const ids = (unassignedCustomers ?? []).map(c => c.id);
+        if (ids.length === 0) {
+          return res.json([]);
+        }
+
+        const { data, error } = await supabase
+          .from('incoming-mails')
+          .select('*')
+          .eq('client_id', client_id)
+          .in('customer_id', ids)
+          .eq('read', false)
+          .order('send_at', { ascending: true })
+          .limit(100);
+
+        if (error) {
+          console.error('[EMAILS] Supabase error:', error.message);
+          return res.status(500).json({ error: 'Datenbankfehler' });
+        }
+        mails = data ?? [];
+      }
+
+      console.log('[EMAILS] Fetched', mails.length, 'unread mails');
+      res.json({success: true, data: mails});
+    } catch (err) {
+      console.error('[EMAILS] Server error:', err.message);
+      res.status(500).json({ error: 'Serverfehler' });
     }
-
-    res.json(data);
-  } catch (err) {
-    console.log('Server error:', err.message);
-    res.status(500).json({ error: 'Serverfehler' });
   }
-})
+);
 
-//gets all the mails from a customer using the customer id (send and incomming)
-router.get('/getEmailsFromCustomer', async (req, res) => {
-  const customerId = req.query.customerId;
-  try {
-    const { data: incomingMails, error: errorIncoming } = await supabase
-      .from('incoming-mails')
-      .select('*')
-      .eq('customer_id', customerId);
+/**
+ * Get all emails for a specific customer
+ * GET /api/emails/getEmailsFromCustomer?customerId=123
+ * 
+ * Authentication: Required
+ * Authorization: Customer must belong to user's client
+ */
+router.get('/getEmailsFromCustomer', 
+  authenticate,
+  validateId('customerId'),
+  authorizeCustomerAccess, // Verifies customer belongs to user's client
+  async (req, res) => {
+    try {
+      const customerId = req.sanitized.customerId;
+      
+      console.log('[EMAILS] Fetching emails for customer:', customerId);
 
-    const { data: sentMails, error: errorSent } = await supabase
-      .from('sent-mail')
-      .select('*')
-      .eq('customer_id', customerId);
-    
-    if (sentMails != null) {
-      var allMails = [
-        ...incomingMails.map(m => ({
+      // Fetch incoming mails
+      const { data: incomingMails, error: errorIncoming } = await supabase
+        .from('incoming-mails')
+        .select('*')
+        .eq('customer_id', customerId);
+
+      if (errorIncoming) {
+        console.error('[EMAILS] Error fetching incoming mails:', errorIncoming);
+        return res.status(500).json({ error: 'Datenbankfehler' });
+      }
+
+      // Fetch sent mails
+      const { data: sentMails, error: errorSent } = await supabase
+        .from('sent-mail')
+        .select('*')
+        .eq('customer_id', customerId);
+      
+      if (errorSent) {
+        console.error('[EMAILS] Error fetching sent mails:', errorSent);
+        return res.status(500).json({ error: 'Datenbankfehler' });
+      }
+
+      // Combine and sort by date
+      let allMails;
+      if (sentMails && sentMails.length > 0) {
+        allMails = [
+          ...incomingMails.map(m => ({
+            type: 'incoming',
+            sendBy: m.customer_id,
+            subject: m.subject,
+            text: m.text_content,
+            date: new Date(m.send_at),
+            email_address: m.email_address,
+          })),
+          ...sentMails.map(m => ({
+            type: 'sent',
+            sendBy: m.employee_id,
+            subject: 'None',
+            text: m.text_content,
+            date: new Date(m.send_at),
+          })),
+        ].sort((a, b) => a.date - b.date);
+      } else {
+        allMails = incomingMails.map(m => ({
           type: 'incoming',
           sendBy: m.customer_id,
           subject: m.subject,
           text: m.text_content,
           date: new Date(m.send_at),
-          email_adress: m.email_address,
-        })),
-        ...sentMails.map(m => ({
-          type: 'sent',
-          sendBy: m.employee_id,
-          subject: 'None',
-          text: m.text_content,
-          date: new Date(m.send_at),
-        })),
-        ].sort((a, b) => a.date - b.date);
-    } else {
-      var allMails = incomingMails;
-    }
+          email_address: m.email_address,
+        }));
+      }
 
-    
-    if (errorIncoming || errorSent) {
-      console.log('Supabase error:', errorIncoming || errorSent);
-      return res.status(500).json({ error: 'Datenbankfehler' });
+      console.log('[EMAILS] Fetched', allMails.length, 'total emails');
+      res.json({success: true, allMails});
+    } catch (err) {
+      console.error('[EMAILS] Server error:', err.message);
+      res.status(500).json({ error: 'Serverfehler' });
     }
-
-    res.json(allMails)
-  } catch (err) {
-    console.log('Server error:', err.message);
-    res.status(500).json({ error: 'Serverfehler' });
   }
-});
+);
 
-//sending mails and saving them to db
-router.post('/sendMail', async (req, res) => {
-  const customerId = req.query.customerId;
-  const { to, subject, text } = req.body;
+/**
+ * Send email to customer - USING CLIENT SMTP CONFIG FROM DATABASE
+ * POST /api/emails/sendMail?customerId=123
+ * Body: { to, subject, text }
+ * 
+ * Authentication: Required
+ * Authorization: Customer must belong to user's client
+ */
+router.post('/sendMail', 
+  authenticate,
+  validateId('customerId'),
+  authorizeCustomerAccess,
+  upload.array('attachments'),
+  sanitizeText('text', { required: true, maxLength: 50000 }),
+  sanitizeText('subject', { required: true, maxLength: 500 }),
+  async (req, res) => {
+    try {
+      const customerId = req.sanitized.customerId;
+      const { to, threadEmailAddress } = req.body;
+      const subject = req.sanitized.subject;
+      const text = req.sanitized.text;
+      const client_id = req.user.client_id;
+      const employee_id = req.user.employee_id;
 
-  //creating transporter
-  const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT),
-  secure: false,
-  auth: {
-    user: process.env.IMAP_USER,
-    pass: process.env.IMAP_PASS,
-  },
-  });
+      const attachments = req.files || [];
 
-  //sending mail
+      console.log('[EMAILS] Sending mail with thread context:', { 
+        customerId, 
+        threadEmailAddress,
+        attachmentCount: attachments.length,
+        files: attachments.map(f => f.originalname)
+      });
+
+      console.log('[EMAILS] Sending mail to customer:', customerId, 'using client SMTP:', client_id);
+
+      // Validate recipient email
+      if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Ungültige Empfänger-Email-Adresse' 
+        });
+      }
+
+      const {data: settings, error: settingsFetchError} = await supabase
+        .from('clients')
+        .select('auto_assign_employee_on_send')
+        .eq('id', client_id)
+        .single();
+      
+      if (settingsFetchError) {
+        console.error('[Emails] Error fetching the clients send settings, employee will not be assigned');
+      }
+
+      const autoAssign = settings.auto_assign_employee_on_send;
+      console.log('[Emails] Auto assign employee:', autoAssign);
+
+      if(autoAssign) {
+        // Verify employee belongs to user's client
+        const { data: employee, error: employeeError } = await supabase
+          .from('employees')
+          .select('client_id')
+          .eq('id', employee_id)
+          .single();
+
+        if (employeeError || !employee) {
+          console.error('[Emails] Employee not found:', employee_id);
+          return res.status(404).json({ error: 'Employee not found' });
+        }
+
+        if (employee.client_id !== client_id) {
+          console.warn('[Emails] Unauthorized employee access attempt:', {
+            employee_id,
+            employee_client_id: employee.client_id,
+            user_client_id: client_id
+          });
+          return res.status(403).json({ error: 'Employee does not belong to your client' });
+        }
+
+        // Verify customer belongs to user's client
+        const { data: customer, error: customerError } = await supabase
+          .from('customers')
+          .select('client_id, employee_id')
+          .eq('id', customerId)
+          .single();
+
+        if (customerError || !customer) {
+          console.error('[Emails] Customer not found:', customerId);
+          return res.status(404).json({ error: 'Customer not found' });
+        }
+
+        if (customer.client_id !== client_id) {
+          console.warn('[Emails] Unauthorized customer access attempt:', {
+            customerId,
+            customer_client_id: customer.client_id,
+            user_client_id: client_id
+          });
+          return res.status(403).json({ error: 'Customer does not belong to your client' });
+        }
+
+        if (customer.employee_id != employee_id) {
+          // Both verified - proceed with assignment
+          const { data, error } = await supabase
+            .from('customers')
+            .update({ employee_id: employee_id })
+            .eq('id', customerId);
+
+          if (error) {
+            console.error('[Emails] Assignment update failed:', error.message);
+            return res.status(500).json({ error: 'Datenbankfehler' });
+          }
+
+          console.log('[Emails] Successfully assigned employee', employee_id, 'to customer', customerId);
+        } else {
+          console.log('[Emails] Employee was already assigned')
+        }
+      }
+      
+      // 1. SMTP Konfiguration aus Datenbank holen (mit Provider JOIN)
+      const smtpConfig = await getClientSmtpConfig(client_id, threadEmailAddress);
+      
+      if (!smtpConfig) {
+        return res.status(500).json({ 
+          success: false, 
+          error: 'Keine SMTP Konfiguration für diesen Client gefunden. Bitte kontaktieren Sie den Administrator.' 
+        });
+      }
+
+      console.log('[EMAILS] Using SMTP config:', {
+        provider: smtpConfig.provider,
+        host: smtpConfig.host,
+        port: smtpConfig.port,
+        from: smtpConfig.auth.user
+      });
+
+      // 2. Create transporter mit Datenbank-Konfiguration
+      const transporter = nodemailer.createTransport(smtpConfig);
+
+      // 3. Verify SMTP connection (optional aber empfohlen)
+      try {
+        await transporter.verify();
+        console.log('[EMAILS] SMTP connection verified for provider:', smtpConfig.provider);
+      } catch (verifyError) {
+        console.error('[EMAILS] SMTP verification failed for provider:', smtpConfig.provider, verifyError);
+        return res.status(500).json({ 
+          success: false, 
+          error: `SMTP Verbindung zu ${smtpConfig.provider} fehlgeschlagen: ${verifyError.message}` 
+        });
+      }
+
+      // 4. Send email
+      const info = await transporter.sendMail({
+        from: `"Service Desk" <${smtpConfig.auth.user}>`,
+        to,
+        subject,
+        text,
+        attachments: attachments.map(file => ({
+          filename: file.originalname,
+          content: file.buffer,
+          contentType: file.mimetype
+        }))
+      });
+
+      console.log('[EMAILS] Email sent via', smtpConfig.provider, ':', info.messageId);
+
+      // 5. Store in database with authenticated employee_id
+      const { data, error } = await supabase
+        .from('sent-mail')
+        .insert([{
+          employee_id: employee_id,
+          text_content: text,
+          customer_id: customerId,
+          sent_via: smtpConfig.auth.user, // Welche Email verwendet wurde
+          provider_name: smtpConfig.provider // Welcher Provider verwendet wurde
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[EMAILS] Database insert error:', error);
+        // Email wurde gesendet, aber DB-Speicherung fehlgeschlagen
+        return res.status(500).json({ 
+          success: false, 
+          error: 'Email gesendet, aber Speicherung fehlgeschlagen',
+          messageId: info.messageId,
+          sentVia: smtpConfig.auth.user
+        });
+      }
+      
+      if (attachments.length > 0) {
+        storeOutgoingAttachmentsInDB(attachments, client_id, data.id);
+      } else {
+        console.log('[Email] No attachments, procceding');
+      }
+      
+
+      res.json({
+        success: true,
+        messageId: info.messageId,
+        sentVia: smtpConfig.auth.user,
+        provider: smtpConfig.provider,
+        insertedData: data
+      });
+    } catch (err) {
+      console.error('[EMAILS] Send error:', err);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Email konnte nicht gesendet werden: ' + err.message 
+      });
+    }
+  }
+);
+
+/**
+ * Mark all emails from a customer as read
+ * POST /api/emails/makeRead?customerId=123
+ * 
+ * Authentication: Required
+ * Authorization: Customer must belong to user's client
+ */
+router.post('/makeRead', 
+  authenticate,
+  validateId('customerId'),
+  authorizeCustomerAccess,
+  async (req, res) => {
+    try {
+      const customerId = req.sanitized.customerId;
+
+      console.log('[EMAILS] Marking emails as read for customer:', customerId);
+
+      const { data, error } = await supabase
+        .from('incoming-mails')
+        .update({ read: true })
+        .eq('customer_id', customerId);
+
+      if (error) {
+        console.error('[EMAILS] Supabase error:', error.message);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+
+      console.log('[EMAILS] Emails marked as read');
+      res.json({ success: true });
+    } catch (err) {
+      console.error('[EMAILS] Server error:', err.message);
+      res.status(500).json({ success: false, error: 'Servererror' });
+    } 
+  }
+);
+
+/**
+ * Get mails for multiple customers
+ * GET /api/emails/getMailsbyCustomerIds?ids=1,2,3
+ * 
+ * Authentication: Required
+ * Authorization: All customers must belong to user's client
+ */
+router.get('/getMailsbyCustomerIds', 
+  authenticate,
+  async (req, res) => {
+    try {
+      const client_id = req.user.client_id;
+      
+      // Parse customer IDs from query parameter
+      const ids = ([]).concat(req.query.ids ?? []).map(Number).filter(id => !isNaN(id));
+      
+      if (ids.length === 0) {
+        return res.status(400).json({ error: 'No valid customer IDs provided' });
+      }
+
+      console.log('[EMAILS] Fetching mails for customers:', ids);
+
+      // Verify all customers belong to user's client (security check)
+      const { data: customers, error: customerError } = await supabase
+        .from('customers')
+        .select('id, client_id')
+        .in('id', ids);
+
+      if (customerError) {
+        console.error('[EMAILS] Customer verification error:', customerError);
+        return res.status(500).json({ error: 'Datenbankfehler' });
+      }
+
+      // Check if any customer doesn't belong to user's client
+      const unauthorizedCustomer = customers.find(c => c.client_id !== client_id);
+      if (unauthorizedCustomer) {
+        console.warn('[EMAILS] Unauthorized access attempt for customer:', unauthorizedCustomer.id);
+        return res.status(403).json({ error: 'Access denied to one or more customers' });
+      }
+
+      // Fetch mails only for authorized customers
+      const authorizedIds = customers.map(c => c.id);
+      
+      const { data, error } = await supabase
+        .from('incoming-mails') 
+        .select('*')
+        .in('customer_id', authorizedIds)
+        .eq('read', false)
+        .order('send_at', { ascending: true })
+        .limit(100);
+
+      if (error) {
+        console.error('[EMAILS] Supabase error:', error.message);
+        return res.status(500).json({ error: 'Datenbankfehler' });
+      }
+
+      console.log('[EMAILS] Fetched', data.length, 'mails for', authorizedIds.length, 'customers');
+      res.json({success: true, data});    
+    } catch (err) {
+      console.error('[EMAILS] Server error:', err.message);
+      res.status(500).json({ success: false, error: 'Servererror' });
+    }
+  }
+);
+
+async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
   try {
-    const info = await transporter.sendMail({
-      from: `"Service Desk" <${process.env.MAIL_USER}>`,
-      to,
-      subject,
-      text,
-    });
+    console.log('[EMAILS] Fetching SMTP config for client:', client_id, 'thread email:', threadEmailAddress);
 
-    const { data, error } = await supabase
-      .from('sent-mail')
-      .insert([{employee_id: 1, text_content: text, customer_id: parseInt(customerId)}]);
+    // 1. Hole Client-Einstellungen (Modus & primäre Email)
+    const { data: clientSettings, error: clientError } = await supabase
+      .from('clients')
+      .select('email_sending_mode, primary_email_id')
+      .eq('id', client_id)
+      .single();
 
-    if (error) {
-      return res.status(500).json({ error: error.message });
+    if (clientError || !clientSettings) {
+      console.error('[EMAILS] Client settings error:', clientError);
+      return null;
     }
 
-    res.json({
-      success: true,
-      messageId: info.messageId,
-      insertedData: data
-    });
+    const { email_sending_mode, primary_email_id } = clientSettings;
+
+    // 2. Thread-Based Mode: Verwende die Email, von der die ursprüngliche Nachricht kam
+    if (email_sending_mode === 'thread-based' && threadEmailAddress) {
+      console.log('[EMAILS] Thread-based mode, looking for email:', threadEmailAddress);
+      
+      const { data: threadEmail, error: threadError } = await supabase
+        .from('client-emails')
+        .select(`
+          id,
+          email_address, 
+          password,
+          email-provider (
+            smtp,
+            smtp_port
+          )
+        `)
+        .eq('client_id', client_id)
+        .eq('email_address', threadEmailAddress)
+        .eq('active', true)
+        .single();
+
+      if (!threadError && threadEmail && threadEmail['email-provider']) {
+        const provider = threadEmail['email-provider'];
+        console.log('[EMAILS] Using thread-based email:', threadEmail.email_address);
+        
+        return {
+          host: provider.smtp,
+          port: parseInt(provider.smtp_port),
+          secure: parseInt(provider.smtp_port) === 465,
+          auth: {
+            user: threadEmail.email_address,
+            pass: threadEmail.password
+          },
+          provider: 'Thread-Based: ' + threadEmail.email_address
+        };
+      } else {
+        console.warn('[EMAILS] Thread email not found, falling back to primary mode');
+      }
+    }
+
+    // 3. Primary Mode: Verwende die konfigurierte primäre Email
+    if (email_sending_mode === 'primary' && primary_email_id) {
+      console.log('[EMAILS] Primary mode, using primary email ID:', primary_email_id);
+      
+      const { data: primaryEmail, error: primaryError } = await supabase
+        .from('client-emails')
+        .select(`
+          id,
+          email_address, 
+          password,
+          email-provider (
+            smtp,
+            smtp_port
+          )
+        `)
+        .eq('id', primary_email_id)
+        .eq('client_id', client_id)
+        .eq('active', true)
+        .single();
+
+      if (!primaryError && primaryEmail && primaryEmail['email-provider']) {
+        const provider = primaryEmail['email-provider'];
+        console.log('[EMAILS] Using primary email:', primaryEmail.email_address);
+        
+        return {
+          host: provider.smtp,
+          port: parseInt(provider.smtp_port),
+          secure: parseInt(provider.smtp_port) === 465,
+          auth: {
+            user: primaryEmail.email_address,
+            pass: primaryEmail.password
+          },
+          provider: 'Primary: ' + primaryEmail.email_address
+        };
+      }
+    }
+
+    // 4. Fallback: Erste verfügbare Email
+    console.warn('[EMAILS] Using fallback - first available email');
+    const { data: fallbackEmails, error: fallbackError } = await supabase
+      .from('client-emails')
+      .select(`
+        email_address, 
+        password,
+        email-provider (
+          smtp,
+          smtp_port
+        )
+      `)
+      .eq('client_id', client_id)
+      .eq('active', true)
+      .order('id', { ascending: true })
+      .limit(1);
+
+    if (!fallbackError && fallbackEmails && fallbackEmails.length > 0) {
+      const fallbackEmail = fallbackEmails[0];
+      const provider = fallbackEmail['email-provider'];
+      
+      if (provider && provider.smtp) {
+        return {
+          host: provider.smtp,
+          port: parseInt(provider.smtp_port),
+          secure: parseInt(provider.smtp_port) === 465,
+          auth: {
+            user: fallbackEmail.email_address,
+            pass: fallbackEmail.password
+          },
+          provider: 'Fallback: ' + fallbackEmail.email_address
+        };
+      }
+    }
+    console.error('[EMAILS] No valid SMTP configuration found for client:', client_id);
+    return null;
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, error: err.message });
+    console.error('[EMAILS] SMTP config error:', err);
+    return null;
   }
-});
+}
 
-//making mails read by customerid
-router.post('/makeRead', async (req, res) => {
-  const customerId = req.query.customerId;
+// In emails.js - Temporäre Debug-Route
+router.get('/debug-client-emails', 
+  authenticate,
+  async (req, res) => {
+    try {
+      const client_id = req.user.client_id;
+      
+      const { data, error } = await supabase
+        .from('client-emails')
+        .select(`
+          id,
+          email_address,
+          client_id,
+          active,
+          provider_id,
+          "email-provider" (
+            name,
+            smtp,
+            smtp_port
+          )
+        `)
+        .eq('client_id', client_id)
+        .eq('active', true);
 
-  try {
-  const { data, error } = await supabase
-  .from('incoming-mails')
-  .update({ read: true })
-  .eq('customer_id', customerId);
+      console.log('[DEBUG] Client emails for client_id:', client_id, data);
 
-  if (error) {
-  console.error('Supabase error:', error.message);
-  return res.status(500).json({ success: false, error: error.message });
+      res.json({
+        success: true,
+        client_id,
+        emails: data,
+        count: data?.length || 0
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   }
+);
 
-  res.json({ success: true});
-  } catch (err){
-    console.error('Server error:', err.message);
-    res.status(500).json({ success: false, error: 'Servererror' });
-  } 
-})
+//getting a signed url for an attachment
+router.post('/getSignedUrl',
+  authenticate,
+  async (req, res) => {
+    const location = req.body.location;
+    const path = req.body.path;
 
-//exporting
+    console.log('[EMAILS] creating signed url for', {
+      path: path,
+      location: location
+    })
+
+    try {
+      const { data, error } = await supabase
+        .storage
+        .from(location)
+        .createSignedUrl(path, 60 * 5);
+
+      if (error) {
+        return res.status(500).json({error: error.message});
+      }
+      const signedUrl = data.signedUrl
+
+      return res.json({success: true, signedUrl});
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+);
 module.exports = router;

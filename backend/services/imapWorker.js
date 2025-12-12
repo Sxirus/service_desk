@@ -1,106 +1,271 @@
 // --- imapWorker.js ---
-// IMAP Worker module for monitoring individual email accounts
-// This module creates dedicated IMAP connections for each client's email account
+// Polling-based IMAP Worker with time-cutoff strategy
+// Fetches only emails since the last successfully processed email for each inbox
+// This avoids duplicates and minimizes data transfer
 
-// Import required modules for IMAP email processing
-const Imap = require('imap');                    // IMAP client library for email server connections
-const { simpleParser } = require('mailparser');  // Email parser for extracting structured data from raw emails
-const { saveEmail } = require('./emailHandler'); // Email handler service for database operations
+const Imap = require('imap');
+const { simpleParser } = require('mailparser');
+const { saveEmail, getConfirmation } = require('./emailHandler');
+const supabase = require('../config/supabase');
 
-// Enable IMAP debug logging to console for troubleshooting connection issues
-Imap.prototype._debug = console.log;
+// Track polling intervals per email account
+const pollingIntervals = new Map();
 
 /**
- * Start an IMAP worker for a specific client's email account
- * Creates a dedicated IMAP connection to monitor incoming emails for a single client
- * 
- * @param {Object} config - Configuration object for the email account
- * @param {string} config.email - Email address to connect to
- * @param {string} config.password - Password or app-specific password for the email account
- * @param {string} config.imapHost - IMAP server hostname (e.g., imap.gmail.com)
- * @param {number} config.imapPort - IMAP server port (usually 993 for SSL/TLS)
- * @param {string} config.clientId - Unique identifier for the client this email account belongs to
+ * Start polling-based IMAP worker with time-cutoff strategy
+ * @param {Object} config - Email account configuration
  */
-function startImapWorker({ email, password, imapHost, imapPort, clientId }) {
-    // Create IMAP connection instance with client-specific credentials
+async function startImapWorker({ email, password, imapHost, imapPort, clientId }) {
+    console.log(`[${email}] Starting time-cutoff polling worker (120s interval)`);
+    
+    const confirmation = await getConfirmation(clientId);
+    
+    // Execute first poll immediately
+    await pollNewEmailsSinceLast({ email, password, imapHost, imapPort, clientId }, confirmation);
+    
+    // Set up polling interval (120 seconds = 2 minutes)
+    const interval = setInterval(async () => {
+        await pollNewEmailsSinceLast({ email, password, imapHost, imapPort, clientId }, confirmation);
+    }, 120000);
+    
+    pollingIntervals.set(email, interval);
+}
+
+/**
+ * Get the timestamp of the last successfully processed email for this inbox
+ * This serves as our cutoff point - we only fetch emails newer than this
+ */
+async function getLastEmailTime(email) {
+    try {
+        const { data, error } = await supabase
+            .from('incoming-mails')
+            .select('send_at')
+            .eq('received_by', email)
+            .order('send_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') {
+                // No emails found for this inbox - first time setup
+                console.log(`[${email}] No previous emails found. Using 24-hour cutoff for first run.`);
+                return getDefaultCutoffTime();
+            }
+            throw error;
+        }
+
+        console.log(`[${email}] Last email time: ${data.send_at}`);
+        return new Date(data.send_at);
+        
+    } catch (error) {
+        console.error(`[${email}] Error fetching last email time:`, error.message);
+        // Fallback to default cutoff on error
+        return getDefaultCutoffTime();
+    }
+}
+
+/**
+ * Default cutoff time when no previous emails exist
+ * Returns a date 24 hours ago to avoid fetching entire inbox on first run
+ */
+function getDefaultCutoffTime() {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    console.log(`Using default cutoff time: ${twentyFourHoursAgo.toISOString()}`);
+    return twentyFourHoursAgo;
+}
+
+/**
+ * Format date for IMAP SEARCH SINCE command
+ * IMAP expects dates in format "DD-MMM-YYYY" (e.g., "15-Jan-2024")
+ */
+function formatDateForImap(date) {
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = date.toLocaleString('en', { month: 'short' });
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
+}
+
+/**
+ * Main polling function - fetches only emails since last processed email
+ */
+async function pollNewEmailsSinceLast(config, confirmation) {
+    const { email, password, imapHost, imapPort, clientId } = config;
+    
+    console.log(`[${email}] Checking for new emails...`);
+    
+    // Get cutoff time - we only want emails newer than this
+    const cutoffTime = await getLastEmailTime(email);
+    const imapDate = formatDateForImap(cutoffTime);
+    
+    console.log(`[${email}] Fetching emails since ${imapDate} (cutoff: ${cutoffTime.toISOString()})`);
+    
     const imap = new Imap({
-        user: email,                             // Email username/address
-        password,                                // Email password or app-specific password
-        host: imapHost,                         // IMAP server hostname
-        port: imapPort,                         // IMAP server port
-        tls: true,                               // Enable TLS encryption for secure connection
+        user: email,
+        password,
+        host: imapHost,
+        port: imapPort,
+        tls: true,
+        authTimeout: 15000,
+        connTimeout: 30000,
         tlsOptions: {
-            rejectUnauthorized: false,           // unsersicher in production ändern
+            rejectUnauthorized: false,
         }
     });
 
-    /**
-     * Open the INBOX folder for monitoring
-     * Opens in read-write mode to allow message processing and marking
-     * 
-     * @param {Function} cb - Callback function to handle opening result
-     */
-    function openInbox(cb) {
-        imap.openBox('INBOX', false, cb);       // false = read-write mode
-        console.log(`[${email}] INBOX opened`);
-    }
+    try {
+        await new Promise((resolve, reject) => {
+            imap.once('ready', () => {
+                console.log(`[${email}] IMAP connected`);
+                resolve();
+            });
 
-    // Handle successful IMAP connection establishment
-    imap.once('ready', () => {
-        console.log(`[${email}] Connection ready`);
-        
-        // Open the inbox once the connection is established
-        openInbox((err) => {
-            if (err) return console.error(`[${email}] Error opening inbox:`, err);
-            console.log(`[${email}] Listening for new emails...`);
+            imap.once('error', (err) => {
+                console.error(`[${email}] IMAP connection error:`, err.message);
+                reject(err);
+            });
 
-            // Set up listener for new incoming emails
-            // This event fires whenever new mail arrives in the inbox
-            imap.on('mail', (numNewMsgs) => {
-                console.log(`[${email}] mail event triggered: ${numNewMsgs} new messages`);
-                
-                // Fetch the latest message(s) using '*' to get the most recent
-                // This approach ensures we capture new emails as they arrive
-                const fetch = imap.seq.fetch('*', { 
-                    bodies: '',                  // Fetch full email body content
-                    struct: true                 // Include email structure information
-                });
+            imap.connect();
+        });
 
-                // Process each individual email message
-                fetch.on('message', (msg) => {
-                    // Handle the email body content stream
-                    msg.on('body', async (stream) => {
-                        try {
-                            // Parse the raw email stream into structured data
-                            const parsed = await simpleParser(stream);
-                            
-                            // Save the parsed email to the database with client association
-                            await saveEmail(parsed, clientId, email);
-                        } catch (e) {
-                            console.error(`[${email}] Error parsing message:`, e);
-                        }
-                    });
-                });
+        // Open INBOX in read-only mode (don't modify emails)
+        await new Promise((resolve, reject) => {
+            imap.openBox('INBOX', true, (err) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    console.log(`[${email}] INBOX opened`);
+                    resolve();
+                }
             });
         });
-    });
 
-    // Handle IMAP connection errors
-    // Log errors with email identifier for multi-client debugging
-    imap.once('error', (err) => console.error(`[${email}] IMAP error:`, err));
-    
-    // Handle IMAP connection termination
-    // Log when connection is closed for monitoring purposes and attempt to reconnect
-    imap.once('end', () => {
-      console.warn(`[${email}] Connection closed. Reconnecting in 3 seconds...`);
-      setTimeout(() => imap.connect(), 3000);
-      console.log(`[${email}] Connecting...`);
-    });
-    
-    // Initiate the IMAP connection to the email server
-    imap.connect();
-    console.log(`[${email}] Connecting...`);
+        // Search for emails since our cutoff date
+        // Note: IMAP SINCE is inclusive and uses local date without time
+        // We'll do additional time filtering after fetching
+        const results = await new Promise((resolve, reject) => {
+            imap.search([['SINCE', imapDate]], (err, results) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    console.log(`[${email}] IMAP found ${results.length} emails since ${imapDate}`);
+                    resolve(results);
+                }
+            });
+        });
+
+        if (results.length > 0) {
+            await fetchAndProcessEmails(imap, results, email, clientId, confirmation, cutoffTime);
+        } else {
+            console.log(`[${email}] No new emails found since cutoff`);
+        }
+
+    } catch (error) {
+        console.error(`[${email}] Polling failed:`, error.message);
+    } finally {
+        // Always close connection to avoid resource leaks
+        imap.end();
+        console.log(`[${email}] IMAP connection closed`);
+    }
 }
 
-// Export the worker function for use by the worker manager
-module.exports = { startImapWorker };
+/**
+ * Fetch and process emails with additional time filtering
+ * Since IMAP SINCE only uses date (not time), we need to filter by exact time
+ */
+async function fetchAndProcessEmails(imap, seqNumbers, email, clientId, confirmation, cutoffTime) {
+    return new Promise((resolve, reject) => {
+        const fetch = imap.fetch(seqNumbers, {
+            bodies: '',
+            struct: true
+            // Important: No markSeen - don't modify user's emails
+        });
+
+        let processed = 0;
+        let saved = 0;
+        let filtered = 0;
+
+        fetch.on('message', (msg) => {
+            let emailBuffer = '';
+            
+            // Collect email data
+            msg.on('body', (stream) => {
+                stream.on('data', (chunk) => {
+                    emailBuffer += chunk.toString('utf8');
+                });
+            });
+
+            msg.on('end', async () => {
+                try {
+                    const parsed = await simpleParser(emailBuffer);
+                    
+                    // Additional time filtering since IMAP SINCE is date-only
+                    const emailDate = new Date(parsed.date);
+                    
+                    if (emailDate > cutoffTime) {
+                        // This email is newer than our cutoff - process it
+                        await saveEmail(parsed, clientId, email, confirmation);
+                        saved++;
+                        console.log(`[${email}] Saved: "${parsed.subject}" (${emailDate.toISOString()})`);
+                    } else {
+                        // Email is older than cutoff (can happen with IMAP date resolution)
+                        filtered++;
+                        console.log(`[${email}] Filtered (older than cutoff): "${parsed.subject}"`);
+                    }
+                    
+                    processed++;
+                    
+                    // Show progress every 10 emails or at the end
+                    if (processed % 10 === 0 || processed === seqNumbers.length) {
+                        console.log(`[${email}] Progress: ${processed}/${seqNumbers.length} (${saved} saved, ${filtered} filtered)`);
+                    }
+                    
+                } catch (e) {
+                    console.error(`[${email}] Error processing email:`, e.message);
+                    processed++;
+                }
+
+                // Resolve when all emails are processed
+                if (processed === seqNumbers.length) {
+                    console.log(`[${email}] Finished: ${saved} new emails saved, ${filtered} filtered by time`);
+                    resolve();
+                }
+            });
+        });
+
+        fetch.on('error', (err) => {
+            console.error(`[${email}] Fetch error:`, err);
+            reject(err);
+        });
+
+        fetch.on('end', () => {
+            // This fires when fetch operation ends, but we wait for all message events
+            console.log(`[${email}] Fetch operation completed`);
+        });
+    });
+}
+
+/**
+ * Stop individual worker
+ */
+function stopImapWorker(email) {
+    if (pollingIntervals.has(email)) {
+        clearInterval(pollingIntervals.get(email));
+        pollingIntervals.delete(email);
+        console.log(`[${email}] Polling worker stopped`);
+    }
+}
+
+/**
+ * Stop all workers (for graceful shutdown)
+ */
+function stopAllWorkers() {
+    console.log('Stopping all polling workers...');
+    for (const [email, interval] of pollingIntervals.entries()) {
+        clearInterval(interval);
+        console.log(`[${email}] Worker stopped`);
+    }
+    pollingIntervals.clear();
+    console.log('All workers stopped');
+}
+
+module.exports = { startImapWorker, stopImapWorker, stopAllWorkers };

@@ -1,23 +1,56 @@
 ---
-//props
-const { title, overflowHidden = false } = Astro.props;
+// src/layouts/BaseLayout.astro
+
+/**
+ * Base Layout Component
+ * Provides the HTML structure for all pages in the application
+ * 
+ * Props:
+ * @param {string} title - Page title for <title> tag (default: "App")
+ * @param {boolean} overflowHidden - Whether to hide body overflow (default: false)
+ */
+
+interface Props {
+  title?: string;
+  overflowHidden?: boolean;
+}
+
+const { 
+  title = "App", 
+  overflowHidden = false 
+} = Astro.props;
+
+import { Toaster } from "sonner";
+import { MobileWarning } from "../components/mobile-warning";
 import '../styles/global.css';
 ---
-<!-- Base layout of every page -->
+
+<!DOCTYPE html>
 <html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>{title}</title>
-		<script
-			src="https://challenges.cloudflare.com/turnstile/v0/api.js"
-			async
-			defer>
-		</script>
-	</head>
-  	<body class:list={["h-screen", overflowHidden && "overflow-hidden"]}>
-        <slot />
-    </body>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{title}</title>
+    
+    <!-- Cloudflare Turnstile for CAPTCHA -->
+    <script
+      src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+      async
+      defer
+    ></script>
+  </head>
+  
+  <body class:list={[
+    "min-h-screen", 
+    overflowHidden && "overflow-hidden"
+  ]}>
+    <!-- Page content -->
+    <slot />
+	<!-- Mobile Usage Warning -->
+    <MobileWarning client:load />
+    <!-- Toast notifications -->
+    <Toaster client:load />
+  </body>
 </html>

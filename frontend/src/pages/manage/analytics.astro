@@ -1,0 +1,403 @@
+---
+/**
+ * Analytics Dashboard Page
+ * 
+ * Displays email statistics and metrics for the last 30 days.
+ * Only accessible to admin users.
+ * 
+ * Features:
+ * - Total emails received
+ * - Total emails sent
+ * - Daily breakdown chart
+ * - Average response time (placeholder for future)
+ * 
+ * Security: Admin role required
+ */
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { createClient } from "../../lib/supabase.ts";
+import { getCompletePageContext } from "../../lib/auth-helpers.ts";
+import { createPageLogger, perf } from "../../utils/logger.ts";
+import AdminShell from "@/components/AdminShell";
+import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
+
+const log = createPageLogger('analytics');
+log.info('Analytics page accessed');
+
+const pageLoadTimer = perf.start('page-load', 'total');
+
+// ============================================================================
+// AUTHENTICATION & AUTHORIZATION
+// ============================================================================
+
+const supabase = Astro.locals.supabase || createClient({ 
+  request: Astro.request, 
+  cookies: Astro.cookies 
+});
+
+const { data: { session } } = await supabase.auth.getSession();
+if (!session) {
+  log.error('No session found, redirecting to login');
+  return Astro.redirect("/");
+}
+
+const pageContext = await getCompletePageContext(
+  supabase, 
+  Astro.cookies,
+  Astro.locals.user
+);
+
+if (!pageContext) {
+  log.error('Authentication failed, redirecting to login');
+  return Astro.redirect("/");
+}
+
+const { authContext, sidebarData } = pageContext;
+
+// Check admin role - analytics is admin-only
+if (!authContext.isAdmin) {
+  log.error('Non-admin user attempted to access analytics');
+  return new Response("Forbidden - Admin access required", { status: 403 });
+}
+
+log.info('Admin user authenticated', { 
+  userId: authContext.user.id, 
+  clientId: authContext.employee.client_id 
+});
+
+const clientId = authContext.employee.client_id;
+
+// ============================================================================
+// DATA LOADING - EMAIL STATISTICS
+// ============================================================================
+
+const dataFetchTimer = perf.start('page-load', 'data-fetching');
+
+// Calculate date range (last 30 days)
+const endDate = new Date();
+const startDate = new Date();
+startDate.setDate(startDate.getDate() - 30);
+
+const startDateISO = startDate.toISOString();
+const endDateISO = endDate.toISOString();
+
+log.info('Fetching analytics data', { startDate: startDateISO, endDate: endDateISO });
+
+// First, get all customer IDs for this client
+const { data: clientCustomers, error: customersError } = await supabase
+  .from("customers")
+  .select("id")
+  .eq("client_id", clientId);
+
+if (customersError) {
+  log.error('Error fetching customer IDs:', customersError);
+  return new Response("Failed to load analytics data", { status: 500 });
+}
+
+const customerIds = (clientCustomers || []).map((c: any) => c.id);
+
+log.info('Found customer IDs', { count: customerIds.length });
+
+// If no customers, return early with zero stats
+if (customerIds.length === 0) {
+  log.warn('No customers found for this client');
+}
+
+// Fetch email counts and employee data in parallel
+const [
+  { data: incomingEmailsData, error: incomingError },
+  { data: sentEmailsData, error: sentError },
+  { data: dailyIncomingData, error: dailyIncomingError },
+  { data: dailySentData, error: dailySentError },
+  { data: employeesData, error: employeesError }
+] = await Promise.all([
+  // Total incoming emails count
+  supabase
+    .from("incoming-mails")
+    .select("id")
+    .eq("client_id", clientId)
+    .gte("send_at", startDateISO)
+    .lte("send_at", endDateISO),
+  
+  // Total sent emails count (filter by customer_id array)
+  customerIds.length > 0
+    ? supabase
+        .from("sent-mail")
+        .select("id")
+        .in("customer_id", customerIds)
+        .gte("send_at", startDateISO)
+        .lte("send_at", endDateISO)
+    : Promise.resolve({ data: [], error: null }),
+  
+  // Daily incoming emails for chart
+  supabase
+    .from("incoming-mails")
+    .select("send_at")
+    .eq("client_id", clientId)
+    .gte("send_at", startDateISO)
+    .lte("send_at", endDateISO)
+    .order("send_at", { ascending: true }),
+  
+  // Daily sent emails for chart
+  customerIds.length > 0
+    ? supabase
+        .from("sent-mail")
+        .select("send_at, customer_id")
+        .in("customer_id", customerIds)
+        .gte("send_at", startDateISO)
+        .lte("send_at", endDateISO)
+        .order("send_at", { ascending: true })
+    : Promise.resolve({ data: [], error: null }),
+  
+  // Employee data
+  supabase
+    .from("employees")
+    .select("id, name")
+    .eq("client_id", clientId)
+]);
+
+perf.end(dataFetchTimer);
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+if (incomingError) {
+  log.error('Error fetching incoming emails:', incomingError);
+}
+
+if (sentError) {
+  log.error('Error fetching sent emails:', sentError);
+}
+
+if (dailyIncomingError) {
+  log.error('Error fetching daily incoming data:', dailyIncomingError);
+}
+
+if (dailySentError) {
+  log.error('Error fetching daily sent data:', dailySentError);
+}
+
+if (employeesError) {
+  log.error('Error fetching employees:', employeesError);
+}
+
+// ============================================================================
+// DATA PROCESSING
+// ============================================================================
+
+const processingTimer = perf.start('page-load', 'data-processing');
+
+// Get counts (null-safe)
+const totalIncoming = incomingEmailsData?.length ?? 0;
+const totalSent = sentEmailsData?.length ?? 0;
+
+log.info('Email statistics', { 
+  totalIncoming, 
+  totalSent,
+  dateRange: `${startDateISO} to ${endDateISO}`
+});
+
+// Process daily data for chart
+interface DailyStats {
+  date: string;
+  incoming: number;
+  sent: number;
+}
+
+// Create a map of dates with counts
+const dailyStatsMap = new Map<string, DailyStats>();
+
+// Initialize all dates in range with zero counts
+for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+  const dateKey = d.toISOString().split('T')[0];
+  dailyStatsMap.set(dateKey, {
+    date: dateKey,
+    incoming: 0,
+    sent: 0
+  });
+}
+
+// Count incoming emails by day
+if (dailyIncomingData) {
+  for (const email of dailyIncomingData) {
+    const dateKey = email.send_at.split('T')[0];
+    const stats = dailyStatsMap.get(dateKey);
+    if (stats) {
+      stats.incoming++;
+    }
+  }
+}
+
+// Count sent emails by day (already filtered by customer_id in the query)
+if (dailySentData) {
+  for (const email of dailySentData) {
+    const dateKey = email.send_at.split('T')[0];
+    const stats = dailyStatsMap.get(dateKey);
+    if (stats) {
+      stats.sent++;
+    }
+  }
+}
+
+// Convert map to sorted array
+const dailyStats = Array.from(dailyStatsMap.values()).sort(
+  (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+);
+
+// Calculate additional metrics
+const dayCount = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+const averageIncomingPerDay = dayCount > 0 ? Math.round(totalIncoming / dayCount) : 0;
+
+// Calculate average response time (placeholder calculation)
+// TODO: Implement proper response time tracking based on ticket creation/first response
+const averageResponseTime = totalSent > 0 ? Math.round(24 / (totalSent / totalIncoming + 1)) : 0;
+
+// Prepare stats for client component
+const initialStats = {
+  totalIncoming,
+  totalSent,
+  averageIncomingPerDay,
+  averageResponseTime,
+  dailyStats
+};
+
+// ============================================================================
+// EMPLOYEE STATISTICS
+// ============================================================================
+
+interface EmployeeStats {
+  employee_id: number;
+  employee_name: string;
+  email_count: number;
+}
+
+interface DailyEmployeeStats {
+  date: string;
+  employee_id: number;
+  employee_name: string;
+  count: number;
+}
+
+// Build employee map
+const employeeMap = new Map<number, string>();
+if (employeesData) {
+  for (const emp of employeesData) {
+    employeeMap.set(emp.id, emp.name || 'Unknown');
+  }
+}
+
+// Count emails per employee for summary
+const employeeStatsMap = new Map<number, EmployeeStats>();
+
+// Initialize all employees with zero count
+if (employeesData) {
+  for (const emp of employeesData) {
+    employeeStatsMap.set(emp.id, {
+      employee_id: emp.id,
+      employee_name: emp.name || 'Unknown',
+      email_count: 0
+    });
+  }
+}
+
+// Build daily stats per employee
+const dailyEmployeeMap = new Map<string, DailyEmployeeStats>();
+
+// Initialize all dates for all employees
+for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+  const dateKey = d.toISOString().split('T')[0];
+  if (employeesData) {
+    for (const emp of employeesData) {
+      const key = `${dateKey}-${emp.id}`;
+      dailyEmployeeMap.set(key, {
+        date: dateKey,
+        employee_id: emp.id,
+        employee_name: emp.name || 'Unknown',
+        count: 0
+      });
+    }
+  }
+}
+
+// Count sent emails by employee
+if (dailySentData) {
+  // Need to fetch employee_id from sent-mail
+  const { data: sentEmailsWithEmployee } = await supabase
+    .from("sent-mail")
+    .select("employee_id, send_at")
+    .in("customer_id", customerIds)
+    .gte("send_at", startDateISO)
+    .lte("send_at", endDateISO);
+  
+  if (sentEmailsWithEmployee) {
+    for (const email of sentEmailsWithEmployee) {
+      if (email.employee_id) {
+        // Update summary
+        const stats = employeeStatsMap.get(email.employee_id);
+        if (stats) {
+          stats.email_count++;
+        }
+
+        // Update daily
+        const dateKey = email.send_at.split('T')[0];
+        const key = `${dateKey}-${email.employee_id}`;
+        const dailyStats = dailyEmployeeMap.get(key);
+        if (dailyStats) {
+          dailyStats.count++;
+        }
+      }
+    }
+  }
+}
+
+// Convert to sorted arrays
+const initialEmployeeStats = Array.from(employeeStatsMap.values())
+  .sort((a, b) => b.email_count - a.email_count);
+
+const initialEmployeeDaily = Array.from(dailyEmployeeMap.values())
+  .sort((a, b) => {
+    const dateCompare = new Date(a.date).getTime() - new Date(b.date).getTime();
+    if (dateCompare !== 0) return dateCompare;
+    return a.employee_id - b.employee_id;
+  });
+
+log.info('Employee statistics', { 
+  employeeCount: initialEmployeeStats.length,
+  dailyRecords: initialEmployeeDaily.length 
+});
+
+perf.end(processingTimer, {
+  dailyStatsCount: dailyStats.length,
+  avgIncoming: averageIncomingPerDay,
+  avgResponseTime: averageResponseTime,
+  employeeCount: initialEmployeeStats.length
+});
+
+perf.end(pageLoadTimer, { result: 'success' });
+perf.printReport('analytics');
+
+log.info('Analytics page setup complete');
+---
+
+<BaseLayout title="Analytics - Service Desk">
+  <AdminShell 
+    client:load
+    user={sidebarData.user}
+    firstTeam={sidebarData.team ?? undefined}
+    crumbParentLabel="Administration"
+    crumbParentHref="/manage/settings"
+    crumbCurrent="Analytics"
+    isAdmin={authContext.isAdmin}
+    currentPath="/manage/analytics"
+  >
+    <AnalyticsDashboard 
+      client:load
+      initialStats={initialStats}
+      initialEmployeeStats={initialEmployeeStats}
+      initialEmployeeDaily={initialEmployeeDaily}
+      initialFrom={startDate}
+      initialTo={endDate}
+    />
+  </AdminShell>
+</BaseLayout>

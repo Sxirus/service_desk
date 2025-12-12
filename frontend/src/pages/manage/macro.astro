@@ -1,0 +1,823 @@
+---
+import { getCompletePageContext } from "@/lib/auth-helpers";
+import { createClient } from "../../lib/supabase.ts";
+import Layout from "../../layouts/BaseLayout.astro";
+import AdminShell from "@/components/AdminShell";
+
+// Initialize Supabase client with request context
+const supabase = createClient({
+  request: Astro.request, 
+  cookies: Astro.cookies 
+});
+
+const pageContext = await getCompletePageContext(supabase, Astro.cookies);
+
+if (!pageContext) {
+  console.error("[general-settings] Authentication failed, redirecting to login");
+  return Astro.redirect("/");
+}
+
+const { authContext, sidebarData } = pageContext;
+const clientId = authContext.employee.client_id;
+
+//data fetching
+const [
+  { data: macros, error: macroError },
+  { data: groups, error: groupError}
+] = await Promise.all([
+  supabase
+    .from('macros')
+    .select('*')
+    .eq('client_id', clientId),
+
+  supabase
+    .from('macro_groups')
+    .select('*')
+    .eq('client_id', clientId)
+])
+
+//error handling
+if (macroError) {
+  console.log('Error loading macros', macroError);
+}
+
+if (groupError) {
+  console.log('Error loading macro groups', groupError);
+}
+
+//data processing
+const macroArray = [
+  ...(groups || []).map((group : any ) => ({
+    ...group,
+    title: group.name,
+    isMacro: false
+  })),
+  ...(macros || []).map((macro : any) => ({
+    ...macro,
+    isMacro: true
+  }))
+]
+
+const initialMacroArray = macroArray.filter(item => item.group_id == null);
+
+var first = true
+
+---
+<Layout title="Macro Editor">
+    <AdminShell 
+    client:load
+    user={sidebarData.user}
+    firstTeam={sidebarData.team ?? undefined}
+    crumbParentLabel="Administration"
+    crumbParentHref="/manage/settings"
+    crumbCurrent="General Settings"
+    isAdmin={authContext.isAdmin}
+    currentPath="/manage/settings"
+  >
+    <!-- Page Header -->
+    <div class="space-y-6">
+      <div>
+        <h1 class="text-3xl font-bold tracking-tight">Macro Editor</h1>
+        <p class="text-muted-foreground">
+          Edit and add macros
+        </p>
+      </div>
+
+      <div>
+        <div class="relative inline-block mb-4">
+          <button id="addButton" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">+ Add New</button>
+
+          <!--Dropdown -->
+          <div id="addDropdown" class="absolute left-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 hidden">
+            <button id="addMacroBtn" class="w-full text-left px-4 py-3 hover:bg-gray-100 flex items-center gap-2 rounded-t-lg">
+              <span>📄</span>
+              <span>Add Macro</span>
+            </button>
+            <button id="addGroupBtn" class="w-full text-left px-4 py-3 hover:bg-gray-100 flex items-center gap-2 rounded-b-lg border-t border-gray-100">
+              <span>📁</span>
+              <span>Add Group</span>
+            </button>
+          </div>
+        </div>
+        <div id="main-section">
+          <div id="macro-section" class="rounded-lg border-black border-2 bg-card text-card-foreground shadow-sm" data-macro-array={JSON.stringify(macroArray)}>
+            {initialMacroArray.map((macro) => {
+              const wasFirst = first;
+              first = false
+              return (
+              <div class="relative group">
+                <button class={`macro-item hover:cursor-pointer p-3 flex w-full min-h-10 border-black ${wasFirst ? 'border-t-0' : 'border-t-2'}`} 
+                  data-macro-id={macro.id} 
+                  data-is-macro={macro.isMacro} 
+                  data-macro-title={macro.title}
+                  data-macro-text={macro.text}
+                  >
+                  <p class="justify-start">
+                    {macro.isMacro ? "📄 "   : "📁 "}
+                    {macro.title}
+                  </p>
+                  {/* Delete Button - nur beim Hover sichtbar */}
+                  <button 
+                    class="delete-btn absolute right-2 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 text-white w-6 h-6 rounded text-xs hover:cursor-pointer"
+                    data-macro-id={macro.id}
+                    data-is-macro={macro.isMacro}
+                  >
+                    ×
+                  </button>
+                </button>
+              </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  </AdminShell>
+  <script>
+    import  { apiClient } from '../../utils/api.ts';
+    import { toast } from "sonner";
+
+    var filteredMacroArray: any[] = [];
+    const macroArray = JSON.parse(document.getElementById('macro-section')?.dataset.macroArray || '[]') as any[];
+    const navigationStack = [{ id: null, title: "Root" }]; // Stack für Navigation
+
+    const macroVariables = [
+      {name: "Customer ID", text: "{customerID}", shopify: false},
+      {name: "Employee Name", text: "{employeeName}", shopify: false},
+      {name: "Full Customer Name", text: "{customerFullName}", shopify: false},
+      {name: "Customer First Name", text: "{customerFirstName}", shopify: false},
+      {name: "Customer Last Name", text: "{customerLastName}", shopify: false},
+      {name: "Customer Email Adress", text: "{customerEmail}", shopify: false},
+      {name: "Last Order Number (Shopify)", text: "{shopifyLastOrderNumber}", shopify: true},
+    ]
+
+    const addButton = document.getElementById('addButton');
+    const addDropdown = document.getElementById('addDropdown');
+    const addMacroBtn = document.getElementById('addMacroBtn');
+    const addGroupBtn = document.getElementById('addGroupBtn');
+
+    if (addButton && addDropdown) {
+      //toggle dropdown on button click
+      addButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        addDropdown.classList.toggle('hidden');
+      });
+
+      //close dropdown when outside click
+      document.addEventListener('click', (e) => {
+        const clickedNode = e.target as Node | null;
+        if (!addDropdown.contains(clickedNode) && !addButton.contains(clickedNode)) {
+          addDropdown.classList.add('hidden');
+        }
+      });
+    }
+
+    //add Macro
+    if (addMacroBtn) {
+      addMacroBtn.addEventListener('click', () => {
+        addDropdown?.classList.add('hidden');
+        addMacro()
+      })
+    }
+
+    //add group
+    if (addGroupBtn) {
+      addGroupBtn.addEventListener('click', () => {
+        addDropdown?.classList.add('hidden');
+        addGroup();
+      })
+    }
+
+    function addMacro() {
+      const mainSection = document.getElementById('main-section');
+      if (mainSection) {
+        if (navigationStack[navigationStack.length - 1].title !== "Editor") {
+          navigationStack.push({ id: null, title: 'Editor'})
+        }
+        mainSection.innerHTML = `
+        <button onclick="goBack()" class="mb-4 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
+          ← Zurück zu ${navigationStack[navigationStack.length - 2].title}
+        </button>
+        <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+          <div class="p-6 space-y-4">
+            <div class="space-y-1">
+              <h3 class="text-lg font-semibold leading-none tracking-tight">
+                Add New Macro
+              </h3>
+            </div>
+
+            <!-- Title Editor -->
+            <div class="space-y-2">
+              <label 
+                for="new-macro-title" 
+                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Title
+              </label>
+              <textarea
+                id="new-macro-title"
+                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                placeholder="Enter your title here..."
+                rows="6"
+              ></textarea>
+              <p class="text-xs text-muted-foreground">
+                This is the title of the macro.
+              </p>
+            </div>
+
+            <!-- Macro Text Editor -->
+            <div class="space-y-2">
+              <label 
+                for="new-macro-text" 
+                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Macro Text
+              </label>
+              <textarea
+                id="new-macro-text"
+                class="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                placeholder="Enter your macro text here..."
+                rows="6"
+              ></textarea>
+              <p class="text-xs text-muted-foreground">
+                This is the text of the macro.
+              </p>
+            </div>
+
+            <!-- Action Button -->
+            <div class="flex items-center justify-end pt-2">
+              <button
+                id="save-new-macro-btn"
+                type="button"
+                class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+              >
+                <svg
+                  class="mr-2 h-4 w-4"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"j
+                  />
+                </svg>
+                Save Macro
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="rounded-lg border bg-card text-card-foreground shadow-sm mt-4">
+          <div class="p-6 space-y-4">
+            <div class="space-y-1">
+              <h3 class="text-lg font-semibold leading-none tracking-tight">
+                Variables
+              </h3>
+            </div>
+            ${macroVariables.map((variable) => {
+              return `
+              <p>${variable.name} : ${variable.text}</p>
+              `
+            }).join('')}
+          </div>
+        </div>
+        `;
+        
+        //save button
+        const saveNewMacroBtn = document.getElementById('save-new-macro-btn');
+        const newMacroTitleTextarea = document.getElementById('new-macro-title') as HTMLTextAreaElement;
+        const newMacroTextTextarea = document.getElementById('new-macro-text') as HTMLTextAreaElement;
+        if (saveNewMacroBtn && newMacroTitleTextarea && newMacroTextTextarea) {
+          saveNewMacroBtn.addEventListener('click', async () => {
+            const groupId = navigationStack[navigationStack.length - 1].id;
+            const title = newMacroTitleTextarea.value || "";
+            const text = newMacroTextTextarea.value || "";
+
+            console.log("[Macro Editor] Saving Macro", {
+              title: title,
+              text: text,
+              group: groupId
+            });
+
+            // Disable button during save
+            saveNewMacroBtn.setAttribute("disabled", "true");
+            saveNewMacroBtn.innerHTML = `
+              <svg class="mr-2 h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Saving...
+            `;
+
+            try {
+              const response = await apiClient.post('/macros/createMacro', {
+                title: title,
+                text: text,
+                groupId: groupId
+              });
+
+              if (!response.success) {
+                throw new Error(response.error || "Failed to save macro");
+              }
+
+              console.log('[Macro Editor] Created macro successfully')
+
+              toast.success("Macro created", {
+                description: "The Macro has been saved.",
+              });
+
+              const data = response.data;
+
+              macroArray.push({id: data.id, client_id: data.client_id, title: data.title, text: data.text, group_id: data.group_id, isMacro: true})
+            } catch (error) {
+              console.error("[Macro Editor] Failed to save macro:", error);
+              
+              toast.error("Failed to save", {
+                description: error instanceof Error ? error.message : "An unexpected error occurred.",
+              });
+            } finally {
+              clearStackAnGoToRoot();
+            }
+          })
+        } else {
+          console.log("[Macro Editor] Something went wrong in the Macro editor (Textarea or buttons not found)");
+        }
+      }
+    }
+
+    function addGroup() {
+      const mainSection = document.getElementById('main-section');
+      if (mainSection) {
+        if (navigationStack[navigationStack.length - 1].title !== "Editor") {
+          navigationStack.push({ id: null, title: 'Editor'})
+        }
+        mainSection.innerHTML = `
+        <button onclick="goBack()" class="mb-4 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
+          ← Zurück zu ${navigationStack[navigationStack.length - 2].title}
+        </button>
+        <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+          <div class="p-6 space-y-4">
+            <div class="space-y-1">
+              <h3 class="text-lg font-semibold leading-none tracking-tight">
+                Add New Group
+              </h3>
+            </div>
+            
+            <!-- Title Editor -->
+            <div class="space-y-2">
+              <label 
+                for="new-group-name" 
+                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Name
+              </label>
+              <textarea
+                id="new-group-name"
+                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                placeholder="Enter your group name here..."
+                rows="6"
+              ></textarea>
+              <p class="text-xs text-muted-foreground">
+                This is the name of the group.
+              </p>
+            </div>
+
+            <!-- Action Button -->
+            <div class="flex items-center justify-end pt-2">
+              <button
+                id="save-new-group-btn"
+                type="button"
+                class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+              >
+                <svg
+                  class="mr-2 h-4 w-4"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"j
+                  />
+                </svg>
+                Save Group
+              </button>
+            </div>
+          </div>
+        </div>  
+        `;
+
+        //save button
+        const saveNewGroupBtn = document.getElementById("save-new-group-btn");
+        const newGroupNameTextarea = document.getElementById('new-group-name') as HTMLTextAreaElement;
+
+        if (saveNewGroupBtn && newGroupNameTextarea) {
+          saveNewGroupBtn.addEventListener('click', async () => {
+            const groupId = navigationStack[navigationStack.length - 1].id;
+            const groupName = newGroupNameTextarea.value || "";
+
+            console.log('[Macro Editor] Creating group',{
+              name: groupName,
+              group: groupId
+            });
+
+            // Disable button during save
+            saveNewGroupBtn.setAttribute("disabled", "true");
+            saveNewGroupBtn.innerHTML = `
+              <svg class="mr-2 h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Saving...
+            `;
+
+            try {
+              const response = await apiClient.post('/macros/createGroup', {
+                name: groupName,
+                groupId: groupId
+              });
+
+              if(!response.success) {
+                throw new Error(response.error || "Failed to save group");
+              }
+              console.log('[Macro Editor] Created group successfully')
+
+              toast.success("Group created", {
+                description: "The Group has been saved.",
+              });
+
+              const data = response.data;
+
+              macroArray.push({id: data.id, name: data.name, title: data.name, group_id: data.group_id, isMacro: false})
+              macroArray.sort((a, b) => Number(a.isMacro) - Number(b.isMacro));
+            } catch (error) {
+              console.error("[Macro Editor] Failed to save group:", error);
+              
+              toast.error("Failed to save", {
+                description: error instanceof Error ? error.message : "An unexpected error occurred.",
+              });
+            } finally {
+              clearStackAnGoToRoot();
+            }
+          });
+        } else {
+          console.log("[Macro Editor] Something went wrong in the group editor (Textarea or buttons not found)");
+        }
+      }
+    }
+
+    // Event Delegation auf main-section
+    document.getElementById('main-section')?.addEventListener('click', (event) => {
+      //do nothing if dropdown is open
+      if (!addDropdown?.classList.contains('hidden')) {
+        return;
+      }
+
+      const target = event.target;
+      if (!target || !(target instanceof Element)) return;
+
+      const macroButton = target.closest('.macro-item') as HTMLButtonElement;
+      const deleteButton = target.closest('.delete-btn') as HTMLButtonElement;
+
+      if (deleteButton) {
+        event.stopPropagation();
+        const macroId = deleteButton.dataset.macroId;
+        const isMacro = deleteButton.dataset.isMacro === "true";
+        if (isMacro) {
+          console.log("[Macro Editor] Deleting macro:", macroId);
+          deleteMacro(macroId);
+        } else {
+          console.log("[Macro Editor] Deleting group", macroId);
+          deleteGroup(macroId);
+        }
+        return;
+      }
+
+      if (macroButton) {
+        const macroId = macroButton.dataset.macroId;
+        const isMacro = macroButton.dataset.isMacro === "true";
+        const macroTitle = macroButton.dataset.macroTitle;
+        
+        if (isMacro) {
+          const macroText = macroButton.dataset.macroText;
+          editMacro(macroId, macroTitle, macroText);
+        } else {
+          // Zur Gruppe navigieren
+          navigateToGroup(macroId, macroTitle);
+        }
+      }
+    });
+
+    async function editMacro(macroId : any, macroTitle : any, macroText : any) {
+      console.log("[Macro Editor] Starting Macro editor for:", { id: macroId, title: macroTitle, text: macroText });
+      const mainSection = document.getElementById('main-section');
+      if (mainSection) {
+        if (navigationStack[navigationStack.length - 1].title !== "Editor") {
+          navigationStack.push({ id: null, title: 'Editor'})
+        }
+        mainSection.innerHTML = `
+        <button onclick="goBack()" class="mb-4 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
+          ← Zurück zu ${navigationStack[navigationStack.length - 2].title}
+        </button>
+        <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+          <div class="p-6 space-y-4">
+            <div class="space-y-1">
+              <h3 class="text-lg font-semibold leading-none tracking-tight">
+                Edit Macro
+              </h3>
+            </div>
+
+            <!-- Title Editor -->
+            <div class="space-y-2">
+              <label 
+                for="macro-title" 
+                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Title
+              </label>
+              <textarea
+                id="macro-title"
+                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                placeholder="Enter your title here..."
+                rows="6"
+              >${macroTitle}</textarea>
+              <p class="text-xs text-muted-foreground">
+                This is the title of the macro.
+              </p>
+            </div>
+
+            <!-- Macro Text Editor -->
+            <div class="space-y-2">
+              <label 
+                for="macro-text" 
+                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Macro Text
+              </label>
+              <textarea
+                id="macro-text"
+                class="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                placeholder="Enter your macro text here..."
+                rows="6"
+              >${macroText}</textarea>
+              <p class="text-xs text-muted-foreground">
+                This is the text of the macro.
+              </p>
+            </div>
+
+            <!-- Action Button -->
+            <div class="flex items-center justify-end pt-2">
+              <button
+                id="save-macro-btn"
+                type="button"
+                class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+              >
+                <svg
+                  class="mr-2 h-4 w-4"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"j
+                  />
+                </svg>
+                Save Macro
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="rounded-lg border bg-card text-card-foreground shadow-sm mt-4">
+          <div class="p-6 space-y-4">
+            <div class="space-y-1">
+              <h3 class="text-lg font-semibold leading-none tracking-tight">
+                Variables
+              </h3>
+            </div>
+            ${macroVariables.map((variable) => {
+              return `
+              <p>${variable.name} : ${variable.text}</p>
+              `
+            }).join('')}
+          </div>
+        </div>
+        `;
+
+        //save button
+        const saveMacroBtn = document.getElementById('save-macro-btn');
+        const macroTitleTextarea = document.getElementById('macro-title') as HTMLTextAreaElement;
+        const macroTextTextarea = document.getElementById('macro-text') as HTMLTextAreaElement;
+        if (saveMacroBtn && macroTitleTextarea && macroTextTextarea) {
+          saveMacroBtn.addEventListener('click', async () => {
+            const title = macroTitleTextarea.value || "";
+            const text = macroTextTextarea.value || "";
+
+            console.log("[Macro Editor] Saving Macro", {
+              title: title,
+              text: text,
+            });
+
+            // Disable button during save
+            saveMacroBtn.setAttribute("disabled", "true");
+            saveMacroBtn.innerHTML = `
+              <svg class="mr-2 h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Saving...
+            `;
+
+            try {
+              const response = await apiClient.put('/macros/updateMacro', {
+                macroId: macroId,
+                title: title,
+                text: text,
+              });
+
+              if (!response.success) {
+                throw new Error(response.error || "Failed to save macro");
+              }
+
+              console.log('[Macro Editor] Updated macro successfully')
+
+              toast.success("Macro updated", {
+                description: "The Macro has been saved.",
+              });
+
+              const data = response.data;
+
+              const index = macroArray.findIndex(item => item.id == macroId && item.isMacro == true);
+              console.log(index);
+              if (index !== -1) {
+                macroArray[index].title = data.title;
+                macroArray[index].text = data.text;
+              }
+            } catch (error) {
+              console.error("[Macro Editor] Failed to save macro:", error);
+              
+              toast.error("Failed to save", {
+                description: error instanceof Error ? error.message : "An unexpected error occurred.",
+              });
+            } finally {
+              clearStackAnGoToRoot();
+            }
+          })
+        } else {
+          console.log("[Macro Editor] Something went wrong in the Macro editor (Textarea or buttons not found)");
+        }
+      }
+    }
+
+    function navigateToGroup(groupId : any, groupTitle : any) {
+      console.log("[Macro Editor] Switching to Group:", groupId);
+      
+      // Zur Navigation History hinzufügen
+      navigationStack.push({ id: groupId, title: groupTitle });
+      
+      // Gruppe anzeigen
+      filteredMacroArray = macroArray.filter((item: any) => item.group_id == groupId);
+      renderMacroList(filteredMacroArray);
+    }
+
+    function goBack() {
+      if (navigationStack.length > 1) {
+        navigationStack.pop(); // Aktuelle Gruppe entfernen
+        const previousGroup = navigationStack[navigationStack.length - 1];
+        
+        if (previousGroup.id === null) {
+          // Zurück zur Root-Ansicht
+          filteredMacroArray = macroArray.filter(item => item.group_id == null);
+        } else {
+          // Zurück zur übergeordneten Gruppe
+          filteredMacroArray = macroArray.filter((item: any) => item.group_id == previousGroup.id);
+        }
+        
+        renderMacroList(filteredMacroArray);
+        console.log("[Macro Editor] Zurück zu:", previousGroup.title);
+      }
+    }
+
+    function renderMacroList(macrosToRender : any) {
+      const mainSection = document.getElementById('main-section');
+      if (mainSection) {
+        mainSection.innerHTML = `
+          ${navigationStack.length > 1 ? `
+            <button onclick="goBack()" class="mb-4 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
+              ← Zurück zu ${navigationStack[navigationStack.length - 2].title}
+            </button>
+          ` : ''}
+          <div id="macro-section" class="rounded-lg border-black border-2 bg-card text-card-foreground shadow-sm" data-macro-array="${JSON.stringify(macroArray).replace(/"/g, '&quot;')}">
+            ${macrosToRender.map((macro : any, index : any) => {
+              const wasFirst = index === 0;
+              return `
+                <div class="relative group">
+                  <button class="macro-item hover:cursor-pointer p-3 flex w-full min-h-10 border-black ${wasFirst ? 'border-t-0' : 'border-t-2'} pr-12" 
+                    data-macro-id="${macro.id}" 
+                    data-is-macro="${macro.isMacro}" 
+                    data-macro-title="${macro.title}"
+                    data-macro-text="${macro.text}">
+                    <p class="justify-start">
+                      ${macro.isMacro ? "📄 " : "📁 "}
+                      ${macro.title}
+                    </p>
+                  </button>
+                  <button 
+                    class="delete-btn absolute right-2 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 text-white w-6 h-6 rounded text-xs hover:cursor-pointer"
+                    data-macro-id="${macro.id}"
+                    data-is-macro="${macro.isMacro}"
+                  >
+                    ×
+                  </button>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+    }
+
+    async function deleteGroup(groupId: any ) {
+      const index = macroArray.findIndex(item => item.id == groupId && item.isMacro == false);
+      if (index !== -1) {
+        try {
+          const response = await apiClient.delete('/macros/deleteMacroGroup', {
+            groupId: groupId
+          })
+
+          if (!response.success) {
+            throw new Error(response.error || "Failed to delete group");
+          }
+
+          macroArray.splice(index, 1);
+          console.log("[Macro Editor] Deleted group", groupId);
+
+          toast.success("Group deleted.", {
+            description: "Group deleted sucessfully."
+          })
+
+          //Change UI
+          const currentGroup = navigationStack[navigationStack.length - 1];
+          filteredMacroArray = macroArray.filter((item : any) => item.group_id == currentGroup.id);
+          renderMacroList(filteredMacroArray);
+        } catch (error) {
+          console.error('[Macro Editor] An error occured, while deleting the macro', error);
+        }
+
+      } else {
+        console.log("[Macro Editor] Group ID not found:", groupId);
+      }
+    }
+
+    async function deleteMacro(macroId: any) {
+      const index = macroArray.findIndex(item => item.id == macroId && item.isMacro == true);
+      if (index !== -1){
+        try {
+          const response = await apiClient.delete('/macros/deleteMacro', {
+            macroId: macroId,
+          });
+
+          if (!response.success) {
+            throw new Error(response.error || "Failed to delete macro");
+          }
+            macroArray.splice(index, 1);
+            console.log("[Macro Editor] Deleted macro", macroId);
+
+            toast.success("Macro deleted", {
+              description: "Macro deleted sucessfully."
+            });
+
+            //change UI
+            const currentGroup = navigationStack[navigationStack.length - 1];
+            filteredMacroArray = macroArray.filter((item : any) => item.group_id == currentGroup.id);
+
+            renderMacroList(filteredMacroArray);
+
+        } catch (error) {
+          console.error("[Macro Editor] An error occured, while deleting the macro", error)
+        }
+      } else {
+        console.log('[Macro Editor] Macro ID not found:', macroId);
+      }
+    }
+
+    function clearStackAnGoToRoot(){
+      navigationStack.length = 0;
+      navigationStack.push({ id: null, title: "Root" });
+      filteredMacroArray = macroArray.filter(item => item.group_id == null);
+      renderMacroList(filteredMacroArray);
+    }
+
+    // Global
+    (window as any).goBack = goBack;
+  </script>
+</Layout>

@@ -1,99 +1,131 @@
 ---
+// src/pages/manage/client.astro
+
+/**
+ * Company Settings Page
+ * Allows admin users to manage company information and settings
+ * 
+ * Security: Admin-only access (role_id = 1)
+ * Uses: Auth helper for DRY authentication/authorization
+ */
+
 import Layout from "../../layouts/BaseLayout.astro";
 import { createClient } from "../../lib/supabase.ts";
+import { getCompletePageContext } from "../../lib/auth-helpers.ts";
+import { ROLE_IDS } from "../../types/database.ts";
+import type { Client } from "../../types/database.ts";
 
-// Company Form Component
+// Components
 import CompanyManagementForm from "@/components/CompanyManagementForm";
-
-// Sidebar Shell
 import AdminShell from "@/components/AdminShell";
 
-const supabase = createClient({ request: Astro.request, cookies: Astro.cookies });
+// Initialize Supabase client with request context
+const supabase = createClient({ 
+  request: Astro.request, 
+  cookies: Astro.cookies 
+});
 
-console.log("[admin-panel] accessed");
+console.log("[client-settings] Page accessed");
 
-// Verifizierter User
-const { data: { user }, error: userErr } = await supabase.auth.getUser();
-if (userErr || !user) return Astro.redirect("/");
+// ============================================================================
+// AUTHENTICATION & AUTHORIZATION
+// ============================================================================
 
-// "me" ermitteln. Erst RPC, sonst Fallback
-let me: { id: number; client_id: number } | null = null;
+console.log("[client-settings] Verifying authentication");
+const pageContext = await getCompletePageContext(supabase, Astro.cookies);
 
-try {
-  const rpc = await supabase.rpc("get_my_employee").single();
-  if (!rpc.error) me = rpc.data as any;
-} catch {}
-
-if (!me) {
-  const res = await supabase
-    .from("employees")
-    .select("id, client_id")
-    .eq("user_id", user.id)
-    .single();
-  me = res.data as any;
-  if (res.error) {
-    console.error("[admin-panel] employees lookup:", res.error.message);
-  }
+if (!pageContext) {
+  console.error("[client-settings] Authentication failed, redirecting to login");
+  return Astro.redirect("/");
 }
 
-if (!me) return Astro.redirect("/");
+const { authContext, sidebarData } = pageContext;
 
-// Admin Rolle prüfen. Rolle 1 = admin
-const { data: myRoles, error: rolesErr } = await supabase
-  .from("roles-employees")
-  .select("role_id")
-  .eq("employee_id", me.id);
+console.log("[client-settings] User authenticated:", {
+  userId: authContext.user.id,
+  employeeId: authContext.employee.id,
+  clientId: authContext.employee.client_id,
+  isAdmin: authContext.isAdmin
+});
 
-if (rolesErr) {
-  console.error("[admin-panel] roles lookup:", rolesErr.message);
-  return new Response("Forbidden", { status: 403 });
+// Verify admin role using ROLE_IDS constant
+if (!authContext.isAdmin) {
+  console.warn("[client-settings] Access denied - user is not admin:", {
+    userId: authContext.user.id,
+    employeeId: authContext.employee.id
+  });
+  return new Response("Forbidden: Admin access required", { status: 403 });
 }
 
-const isAdmin = !!myRoles?.some((r) => r.role_id === 1);
-if (!isAdmin) return new Response("Forbidden", { status: 403 });
+console.log("[client-settings] Admin access verified");
 
-// Company-Daten laden – jetzt mit allen Feldern
+// ============================================================================
+// DATA LOADING
+// ============================================================================
+
+// Load company data with all relevant fields
+console.log("[client-settings] Loading company data for client_id:", authContext.employee.client_id);
+
 const { data: companyData, error: companyErr } = await supabase
   .from("clients")
-  .select("id, name, address_street, address_city, address_zip, address_country, vat, website, isActive")
-  .eq("id", me.client_id)
+  .select(`
+    id, 
+    name, 
+    address_street, 
+    address_city, 
+    address_zip, 
+    address_country, 
+    vat,
+    website
+  `)
+  .eq("id", authContext.employee.client_id)
   .single();
 
 if (companyErr) {
-  console.error("[admin-panel] company lookup:", companyErr.message);
+  console.error("[client-settings] Failed to load company data:", {
+    error: companyErr.message,
+    code: companyErr.code,
+    clientId: authContext.employee.client_id
+  });
+} else {
+  console.log("[client-settings] Company data loaded successfully:", {
+    companyId: companyData?.id,
+    companyName: companyData?.name
+  });
 }
 
-// Sidebar Infos
-const { data: employees } = await supabase
-  .from("employees")
-  .select("id, name")
-  .eq("client_id", me.client_id)
-  .order("name");
+console.log("[client-settings] Page setup complete, rendering");
 
-const meName = employees?.find((e) => e.id === me?.id)?.name ?? user?.email ?? "Nutzer";
-const sidebarUser = {
-  name: meName,
-  email: user?.email ?? null,
-  avatarUrl: null,
+// ============================================================================
+// PREPARE FORM DATA
+// ============================================================================
+
+// Prepare initial form data with fallbacks for missing fields
+const initialFormData = {
+  id: companyData?.id ?? authContext.employee.client_id,
+  name: companyData?.name ?? "",
+  address: companyData?.address_street ?? "",
+  city: companyData?.address_city ?? "",
+  postalCode: companyData?.address_zip ?? "",
+  country: companyData?.address_country ?? "",
+  vat: companyData?.vat ?? "",
+  website: companyData?.website ?? ""
 };
-
-// Team Eintrag
-const firstTeam = companyData?.name 
-  ? { name: companyData.name, plan: "Enterprise" } 
-  : null;
 ---
 
-<Layout>
-  <AdminShell client:load
-    user={sidebarUser}
-    firstTeam={firstTeam ?? undefined}
+<Layout title="Company Settings">
+  <AdminShell 
+    client:load
+    user={sidebarData.user}
+    firstTeam={sidebarData.team ?? undefined}
     crumbParentLabel="Administration"
-    crumbParentHref="/manage"
+    crumbParentHref="/manage/settings"
     crumbCurrent="Company"
-    isAdmin={isAdmin}
+    isAdmin={authContext.isAdmin}
     currentPath="/manage/client"
   >
     <div class="space-y-6">
+      <!-- Page Header -->
       <div>
         <h1 class="text-3xl font-bold tracking-tight">Company Settings</h1>
         <p class="text-muted-foreground">
@@ -101,98 +133,13 @@ const firstTeam = companyData?.name
         </p>
       </div>
 
-      <!-- Wrapper enthält Skeleton + React-Insel -->
-      <div id="company-form-mount" class="w-full relative">
-        <!-- SKELETON: sichtbar bis das React-Form gerendert ist -->
-        <div id="company-form-skeleton" aria-hidden="true" class="space-y-6">
-          <div class="border rounded-xl p-6 bg-card">
-            <div class="mb-4 flex items-center gap-2">
-              <div class="h-5 w-5 rounded-md bg-muted animate-pulse"></div>
-              <div class="h-6 w-48 rounded bg-muted animate-pulse"></div>
-            </div>
-
-            <div class="space-y-4">
-              <!-- Section: Basic Information -->
-              <div class="space-y-3">
-                <div class="h-5 w-40 rounded bg-muted animate-pulse"></div>
-                <div class="h-10 w-full rounded-md bg-muted animate-pulse"></div>
-              </div>
-
-              <div class="h-px w-full bg-border my-4"></div>
-
-              <!-- Section: Address -->
-              <div class="space-y-3">
-                <div class="h-5 w-28 rounded bg-muted animate-pulse"></div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div class="h-10 w-full rounded-md bg-muted animate-pulse md:col-span-2"></div>
-                  <div class="h-10 w-full rounded-md bg-muted animate-pulse"></div>
-                  <div class="h-10 w-full rounded-md bg-muted animate-pulse"></div>
-                  <div class="h-10 w-full rounded-md bg-muted animate-pulse md:col-span-2"></div>
-                </div>
-              </div>
-
-              <div class="h-px w-full bg-border my-4"></div>
-
-              <!-- Section: Tax and Web -->
-              <div class="space-y-3">
-                <div class="h-5 w-32 rounded bg-muted animate-pulse"></div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div class="h-10 w-full rounded-md bg-muted animate-pulse"></div>
-                  <div class="h-10 w-full rounded-md bg-muted animate-pulse"></div>
-                </div>
-              </div>
-
-              <div class="flex justify-end pt-6">
-                <div class="h-10 w-36 rounded-md bg-muted animate-pulse"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- REACT-FORM -->
+      <!-- Company Management Form -->
+      <div class="max-w">
         <CompanyManagementForm 
           client:only="react" 
-          initialData={{
-            id: companyData?.id ?? me.client_id,
-            name: companyData?.name ?? "",
-            address_street: companyData?.address_street ?? "",
-            address_city: companyData?.address_city ?? "",
-            address_zip: companyData?.address_zip ? String(companyData.address_zip) : "",
-            address_country: companyData?.address_country ?? "",
-            vat: companyData?.vat ?? "",
-            website: companyData?.website ?? "",
-            isActive: companyData?.isActive ?? true,
-          }}
+          initialData={initialFormData}
         />
-
-        <!-- kleines Script blendet Skeleton aus, sobald ein <form> im Wrapper existiert -->
-        <script>
-          (() => {
-            const wrap = document.getElementById("company-form-mount");
-            const skel = document.getElementById("company-form-skeleton");
-
-            if (!wrap || !skel) return;
-
-            const hide = () => {
-              if (wrap.querySelector("form")) {
-                skel.style.display = "none";
-                return true;
-              }
-              return false;
-            };
-
-            if (!hide()) {
-              const obs = new MutationObserver(() => {
-                if (hide()) obs.disconnect();
-              });
-              obs.observe(wrap, { childList: true, subtree: true });
-              window.addEventListener("load", hide);
-              setTimeout(hide, 3000);
-            }
-          })();
-        </script>
       </div>
     </div>
-
   </AdminShell>
 </Layout>
