@@ -4,7 +4,7 @@ const {downscaleAttachments, convertMulterFilesToNodemailerAttachments} = requir
 
 async function storeOutgoingAttachmentsInDB(attachments, clientId, emailId) {
   console.log("[Attachment-Handler-Outgoing] Saving attachments", attachments.length);
-  const formatedAttachments = convertMulterFilesToNodemailerAttachments(attachments)
+  const formatedAttachments = convertMulterFilesToNodemailerAttachments(attachments);
   const downscaledAttachments = await downscaleAttachments(formatedAttachments);
   const attachmentData = [];
   for (const att of downscaledAttachments) {

@@ -10,6 +10,9 @@ const router = express.Router();
 const supabase = require("../config/supabase");
 const { authenticate } = require('../middleware/auth');
 const { validateId, sanitizeText } = require('../middleware/validation');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
+const {storeMacroAttachmentsInDB} = require("../services/attachments/macroAttachments")
 
 /**
  * Get all macros for authenticated user's client
@@ -109,14 +112,18 @@ router.get('/getMacro',
  */
 router.post('/createMacro',
   authenticate,
+  upload.array('attachments'),
   sanitizeText('title', { required: true, maxLength: 200 }),
   sanitizeText('text', { required: true, maxLength: 5000 }),
   async (req, res) => {
     try {
       const title = req.sanitized.title;
       const text = req.sanitized.text;
-      const groupId = req.body.groupId;
+      console.log(req.body.groupId);
+      const groupId = parseInt(req.body.groupId) || null;
       const client_id = req.user.client_id;
+      const attachments = req.files || [];
+      console.log(attachments, title, text, groupId);
 
       console.log('[MACROS] Creating macro for client:', client_id);
 
@@ -134,6 +141,13 @@ router.post('/createMacro',
       if (error) {
         console.error('[MACROS] Create macro failed:', error.message);
         return res.status(500).json({ error: 'Datenbankfehler' });
+      }
+
+      if (attachments.length > 0) {
+        console.log('[MACROS] Saving attachments');
+        storeMacroAttachmentsInDB(attachments, client_id, data.id, data);
+      } else {
+        console.log('[MACROS] No attachments, continue')
       }
 
       console.log('[MACROS] Macro created successfully:', data.id);
