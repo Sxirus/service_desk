@@ -770,19 +770,23 @@ const registerCreateAccount = async (
   });
   console.log("[actions.registerCreateAccount] Sign up attempt completed");
 
-  // 2) If session missing, try sign-in
-  if (!signUpRes.data.session) {
-    console.log("[actions.registerCreateAccount] No session from signup, trying sign-in");
-    const signInRes = await ssr.auth.signInWithPassword({ email, password, options: { captchaToken } });
-    if (signInRes.error) {
-      const msg = signInRes.error.message || signUpRes.error?.message || "Could not create session";
-      console.error("[actions.registerCreateAccount] Sign-in failed:", msg);
-      return { success: false, message: msg };
+  // 2) Handle signup errors
+  if (signUpRes.error) {
+    console.error("[actions.registerCreateAccount] Signup error:", signUpRes.error.message);
+    // If user already exists, return specific error
+    if (signUpRes.error.message.includes("already registered") || signUpRes.error.message.includes("already exists")) {
+      return { success: false, message: "An account with this email already exists. Please sign in instead." };
     }
-    console.log("[actions.registerCreateAccount] Sign-in successful");
-  } else {
-    console.log("[actions.registerCreateAccount] Session created from signup");
+    return { success: false, message: signUpRes.error.message };
   }
+
+  // 3) If no session was created, something went wrong
+  if (!signUpRes.data.session && !signUpRes.data.user) {
+    console.error("[actions.registerCreateAccount] No session or user created");
+    return { success: false, message: "Failed to create account. Please try again." };
+  }
+
+  console.log("[actions.registerCreateAccount] Account created successfully");
 
   // 3) Persist registration session progress
   try {
@@ -1076,7 +1080,7 @@ const registerCreateSupportMailbox = async (
     imap_port: input.imap_port,
     smtp: input.smtp,
     smtp_port: input.smtp_port,
-    created_by: employee.id,
+    created_by: user.id,
   };
 
   const { data, error } = await admin
@@ -1101,10 +1105,18 @@ const registerTestSupportMailbox = async (
   _input: z.infer<typeof registerTestSupportMailboxSchema>,
   _context: ActionAPIContext
 ) => {
-  // DEV-STUB: Immer erfolgreich zurückgeben.
-  // Später hier echten IMAP/SMTP-Check einbauen.
+  // TODO: Implement actual IMAP/SMTP connection testing
+  // For now, this is a stub that simulates a successful connection
+  console.log("[actions.registerTestSupportMailbox] Testing mailbox connection (stub)");
   await new Promise((r) => setTimeout(r, 500));
-  return { success: true };
+  
+  // In production, you should:
+  // 1. Fetch the mailbox config from database using client_email_id
+  // 2. Attempt IMAP connection
+  // 3. Attempt SMTP connection
+  // 4. Return actual test results
+  
+  return { success: true, message: "Connection test passed (simulated)" };
 };
 
 

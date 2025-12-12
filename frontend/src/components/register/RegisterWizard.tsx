@@ -19,6 +19,8 @@ import {
   ServerCog,
   CheckCircle2,
   AlertTriangle,
+  UserPlus,
+  Trash2,
 } from "lucide-react";
 
 // shadcn/ui
@@ -40,7 +42,7 @@ type Props = {
   currentUser: UserLite | null;
 };
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 4;
 
 /* =========================
    STEP 1: Account schema
@@ -88,6 +90,16 @@ const supportSchema = z.object({
   smtp_port: z.coerce.number().int().min(1),
 });
 type SupportFormData = z.infer<typeof supportSchema>;
+
+/* =========================
+   STEP 4: Team invite schema
+   ========================= */
+const teamMemberSchema = z.object({
+  email: z.string().email("Please enter a valid email."),
+  name: z.string().min(1, "Please enter a name."),
+  role_id: z.coerce.number().int().positive("Please select a role."),
+});
+type TeamMemberData = z.infer<typeof teamMemberSchema>;
 
 /* =========================
    Turnstile (sichtbar, normal)
@@ -645,6 +657,83 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
     }
   };
 
+  /* ---- Step 4 (Team invites) ---- */
+  const [teamMembers, setTeamMembers] = useState<TeamMemberData[]>([]);
+  const [currentMember, setCurrentMember] = useState<TeamMemberData>({
+    email: "",
+    name: "",
+    role_id: 2, // Default to regular user (role_id = 2)
+  });
+  const [submittingTeam, setSubmittingTeam] = useState(false);
+  const [addingMember, setAddingMember] = useState(false);
+
+  const roles = [
+    { id: 1, name: "Admin" },
+    { id: 2, name: "User" },
+  ];
+
+  const handleAddMember = () => {
+    // Validate current member
+    try {
+      teamMemberSchema.parse(currentMember);
+      // Check for duplicate emails
+      if (teamMembers.some(m => m.email.toLowerCase() === currentMember.email.toLowerCase())) {
+        alert("This email has already been added.");
+        return;
+      }
+      setTeamMembers([...teamMembers, currentMember]);
+      setCurrentMember({ email: "", name: "", role_id: 2 });
+    } catch (e: any) {
+      if (e.errors && e.errors.length > 0) {
+        alert(e.errors[0].message);
+      } else {
+        alert("Please fill in all fields correctly.");
+      }
+    }
+  };
+
+  const handleRemoveMember = (index: number) => {
+    setTeamMembers(teamMembers.filter((_, i) => i !== index));
+  };
+
+  const handleInviteTeam = async () => {
+    if (teamMembers.length === 0) {
+      // Skip if no members added
+      setStep(5);
+      return;
+    }
+
+    setSubmittingTeam(true);
+    try {
+      const { actions } = await import("astro:actions");
+      const results = [];
+      
+      for (const member of teamMembers) {
+        const formData = new FormData();
+        formData.append('email', member.email);
+        formData.append('name', member.name);
+        formData.append('role_id', member.role_id.toString());
+        
+        const result = await actions.createEmployee(formData);
+        results.push({ member, result });
+      }
+
+      // Check if any failed
+      const failed = results.filter(r => !r.result?.data?.success);
+      if (failed.length > 0) {
+        const failedEmails = failed.map(f => f.member.email).join(", ");
+        alert(`Some invites failed: ${failedEmails}`);
+      }
+
+      // Move to completion step
+      setStep(5);
+    } catch (e: any) {
+      alert(e?.message || "Unexpected error inviting team members");
+    } finally {
+      setSubmittingTeam(false);
+    }
+  };
+
   /* =========================
      RENDER
      ========================= */
@@ -1199,22 +1288,178 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
         </>
       )}
 
-      {/* ---------- NEXT STEPS PLACEHOLDER ---------- */}
-      {step > 3 && (
+      {/* ---------- STEP 4: TEAM INVITES ---------- */}
+      {step === 4 && (
         <Card className="w-full max-w-md shadow-lg">
-          <CardHeader className="text-center">
-            <CardTitle className="text-xl">Next: Team invites</CardTitle>
-            <CardDescription>Invite your teammates and assign roles.</CardDescription>
+          <CardHeader>
+            <div className="flex items-center space-x-2 mb-2">
+              <UserPlus className="h-5 w-5" />
+              <CardTitle className="text-xl">Invite Your Team</CardTitle>
+            </div>
+            <CardDescription>
+              Add team members now or skip and do it later from the dashboard.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="flex items-center justify-between">
-            <Button variant="outline" onClick={() => setStep(3)}>
-              <ChevronLeft className="mr-2 h-4 w-4" />
-              Back
-            </Button>
-            <Button onClick={() => setStep(4)}>
-              Continue
+          <CardContent className="space-y-6">
+            {/* Add Member Form */}
+            <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+              <div className="grid gap-3">
+                <div>
+                  <label className="text-sm font-medium">Email</label>
+                  <Input
+                    type="email"
+                    placeholder="colleague@company.com"
+                    value={currentMember.email}
+                    onChange={(e) => setCurrentMember({ ...currentMember, email: e.target.value })}
+                    disabled={submittingTeam}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Name</label>
+                  <Input
+                    type="text"
+                    placeholder="John Doe"
+                    value={currentMember.name}
+                    onChange={(e) => setCurrentMember({ ...currentMember, name: e.target.value })}
+                    disabled={submittingTeam}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Role</label>
+                  <Select
+                    value={currentMember.role_id.toString()}
+                    onValueChange={(value) => setCurrentMember({ ...currentMember, role_id: Number(value) })}
+                    disabled={submittingTeam}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {roles.map((role) => (
+                        <SelectItem key={role.id} value={role.id.toString()}>
+                          {role.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={handleAddMember}
+                disabled={submittingTeam}
+              >
+                <UserPlus className="h-4 w-4 mr-2" />
+                Add Team Member
+              </Button>
+            </div>
+
+            {/* Team Members List */}
+            {teamMembers.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">Team Members ({teamMembers.length})</h4>
+                <div className="space-y-2">
+                  {teamMembers.map((member, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between p-3 border rounded-lg bg-background"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{member.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{member.email}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {roles.find(r => r.id === member.role_id)?.name}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveMember(index)}
+                        disabled={submittingTeam}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex items-center justify-between pt-4">
+              <Button variant="outline" onClick={() => setStep(3)} disabled={submittingTeam}>
+                <ChevronLeft className="mr-2 h-4 w-4" />
+                Back
+              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => setStep(5)}
+                  disabled={submittingTeam}
+                >
+                  Skip
+                </Button>
+                <Button
+                  onClick={handleInviteTeam}
+                  disabled={submittingTeam || teamMembers.length === 0}
+                >
+                  {submittingTeam ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      Inviting...
+                    </>
+                  ) : (
+                    <>
+                      Invite {teamMembers.length} {teamMembers.length === 1 ? 'Member' : 'Members'}
+                      <ChevronRight className="ml-2 h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ---------- COMPLETION ---------- */}
+      {step > 4 && (
+        <Card className="w-full max-w-md shadow-lg">
+          <CardHeader className="text-center space-y-4">
+            <div className="mx-auto h-16 w-16 rounded-full bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 flex items-center justify-center">
+              <CheckCircle2 className="h-8 w-8" />
+            </div>
+            <CardTitle className="text-2xl">Registration Complete!</CardTitle>
+            <CardDescription className="text-base">
+              Your account and company have been successfully set up.
+              {teamMembers.length > 0 && (
+                <> {teamMembers.length} team {teamMembers.length === 1 ? 'member has' : 'members have'} been invited.</>
+              )}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button 
+              className="w-full" 
+              size="lg"
+              onClick={() => {
+                // Clear all registration data
+                try {
+                  localStorage.removeItem(accStorageKey);
+                  localStorage.removeItem(compStorageKey);
+                  localStorage.removeItem(supStorageKey);
+                } catch {}
+                // Redirect to dashboard
+                window.location.href = '/dashboard';
+              }}
+            >
+              Go to Dashboard
               <ChevronRight className="ml-2 h-4 w-4" />
             </Button>
+            <p className="text-xs text-center text-muted-foreground">
+              You can configure additional settings and add more team members from the dashboard.
+            </p>
           </CardContent>
         </Card>
       )}
