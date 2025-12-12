@@ -27,12 +27,13 @@ const formSchema = z.object({
   name: z.string().min(2, {
     message: "Company name must be at least 2 characters.",
   }),
-  address: z.string(),
-  city: z.string(),
-  postalCode: z.string(),
-  country: z.string(),
-  vat: z.string(),
-  website: z.string(),
+  address_street: z.string().optional().nullable(),
+  address_city: z.string().optional().nullable(),
+  address_zip: z.coerce.string().optional().nullable(),
+  address_country: z.string().optional().nullable(),
+  vat: z.string().optional().nullable(),
+  website: z.string().optional().nullable(),
+  isActive: z.boolean().optional(),
 })
 
 type FormData = z.infer<typeof formSchema>;
@@ -41,12 +42,13 @@ interface CompanyManagementFormProps {
   initialData: {
     id: number
     name: string
-    address: string
-    city: string
-    postalCode: string
-    country: string
-    vat: string
-    website: string
+    address_street: string | null
+    address_city: string | null
+    address_zip: string | null
+    address_country: string | null
+    vat: string | null
+    website: string | null
+    isActive?: boolean
   }
 }
 
@@ -57,10 +59,10 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: initialData.name,
-      address: initialData.address,
-      city: initialData.city,
-      postalCode: initialData.postalCode,
-      country: initialData.country,
+      address_street: initialData.address_street,
+      address_city: initialData.address_city,
+      address_zip: initialData.address_zip,
+      address_country: initialData.address_country,
       vat: initialData.vat,
       website: initialData.website,
       isActive: initialData.isActive,
@@ -126,7 +128,6 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
             <div className="space-y-4">
               <div className="flex items-center space-x-2">
                 <h3 className="text-lg font-medium">Basic Information</h3>
-                <Badge variant="outline">Editable</Badge>
               </div>
 
               <FormField
@@ -151,7 +152,6 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
             <div className="space-y-4">
               <div className="flex items-center space-x-2">
                 <h3 className="text-lg font-medium">Address</h3>
-                <Badge variant="outline">Editable</Badge>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -219,7 +219,6 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
             <div className="space-y-4">
               <div className="flex items-center space-x-2">
                 <h3 className="text-lg font-medium">Other Information</h3>
-                <Badge variant="secondary">Coming Soon</Badge>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -233,7 +232,7 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
                         <Input 
                           placeholder="DE123456789" 
                           {...field} 
-                          disabled 
+                          value={field.value ?? ""} 
                         />
                       </FormControl>
                     </FormItem>
