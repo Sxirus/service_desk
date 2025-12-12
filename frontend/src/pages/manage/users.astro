@@ -80,7 +80,7 @@ const [
   { data: roleAssignments, error: assignmentsErr }
 ] = await Promise.all([
   supabase.from("roles").select("id, name").order("id"),
-  supabase.from("employees").select("id, name, disabled").eq("client_id", authContext.employee.client_id).order("name"),
+  supabase.from("employees").select("id, name, disabled, client_id, user_id").eq("client_id", authContext.employee.client_id).order("name"),
   supabase.from("roles-employees").select("employee_id, role_id")
 ]);
 
