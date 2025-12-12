@@ -5,6 +5,7 @@ import { MoreHorizontal } from "lucide-react"
 import { useState } from "react"
  
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +23,7 @@ export type User = {
   name: string
   role: string
   email: string
+  disabled?: boolean
 }
 
 interface Role {
@@ -33,6 +35,7 @@ interface Role {
 function UserActionsCell({ user, roles }: { user: User, roles: Role[] }) {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [disableDialogOpen, setDisableDialogOpen] = useState(false);
 
   return (
     <>
@@ -48,6 +51,9 @@ function UserActionsCell({ user, roles }: { user: User, roles: Role[] }) {
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setEditDialogOpen(true)}>
             Edit User
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setDisableDialogOpen(true)}>
+            {user.disabled ? 'Enable User' : 'Disable User'}
           </DropdownMenuItem>
           <DropdownMenuItem 
             onClick={() => setDeleteDialogOpen(true)}
@@ -73,6 +79,14 @@ function UserActionsCell({ user, roles }: { user: User, roles: Role[] }) {
         isOpen={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
       />
+
+      {/* Disable Dialog */}
+      <DeleteUserDialog
+        user={user}
+        isOpen={disableDialogOpen}
+        onOpenChange={setDisableDialogOpen}
+        mode={user.disabled ? 'enable' : 'disable'}
+      />
     </>
   );
 }
@@ -81,6 +95,17 @@ export const createColumns = (roles: Role[]): ColumnDef<User>[] => [
   {
     accessorKey: "name",
     header: "Name",
+    cell: ({ row }) => {
+      const user = row.original;
+      return (
+        <div className="flex items-center gap-2">
+          <span>{user.name}</span>
+          {user.disabled && (
+            <Badge variant="secondary" className="text-xs">Disabled</Badge>
+          )}
+        </div>
+      );
+    },
   },
   {
     accessorKey: "email",

@@ -1,0 +1,65 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import { createClient } from "@/lib/supabase";
+import SubscriptionManager from "@/components/SubscriptionManager";
+import AdminShell from "@/components/AdminShell";
+
+// Create Supabase client with server-side rendering support
+const supabase = createClient({
+  request: Astro.request,
+  cookies: Astro.cookies,
+});
+
+// Get the currently authenticated user
+const { data: { user }, error: userErr } = await supabase.auth.getUser();
+if (userErr || !user) return Astro.redirect("/");
+
+// Get session for API calls
+const { data: { session } } = await supabase.auth.getSession();
+if (!session) return Astro.redirect("/");
+
+// Get user's employee record to check client_id
+const { data: employee } = await supabase
+  .from("employees")
+  .select("id, name, client_id")
+  .eq("user_id", user.id)
+  .single();
+
+if (!employee) {
+  return Astro.redirect("/");
+}
+
+const userObj = {
+  id: user.id,
+  email: user.email!,
+  employee_id: employee.id,
+  employee_name: employee.name,
+  client_id: employee.client_id,
+};
+
+// Check if user is admin (role_id = 1)
+const { data: myRoles } = await supabase
+  .from("roles-employees")
+  .select("role_id")
+  .eq("employee_id", employee.id);
+
+const isAdmin = myRoles?.some((r: any) => r.role_id === 1) ?? false;
+---
+
+<BaseLayout title="Subscription Management">
+  <AdminShell
+    client:load
+    user={{
+      name: employee.name,
+      email: user.email,
+      avatarUrl: null,
+    }}
+    isAdmin={isAdmin}
+    currentPath="/manage/subscription"
+    crumbParentLabel="Administration"
+    crumbParentHref="/manage"
+    crumbCurrent="Subscription"
+  >
+    <SubscriptionManager client:load />
+  </AdminShell>
+</BaseLayout>
