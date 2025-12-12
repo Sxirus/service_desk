@@ -28,10 +28,15 @@ export async function getAttachmentSignedUrl(
   }
 
   try {
-    const url = await apiClient.post('/emails/getSignedUrl', {
+    const response = await apiClient.post('/emails/getSignedUrl', {
       path: path.trim(),
       location
     });
+
+    if (!response.success) {
+      throw new Error('error');
+    }
+    const url = response.signedUrl;
 
     if (!url || typeof url !== 'string') {
       throw new Error('Invalid URL returned from server');
