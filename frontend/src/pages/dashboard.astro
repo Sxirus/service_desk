@@ -52,11 +52,13 @@ const result_customers = await fetch(`http://localhost:3000/api/customers/getAss
     'Content-Type': 'application/json'
   }
 });
+
 const customersJSON = await result_customers.json();
-const len = customersJSON.length;
+const customersData = customersJSON.data;
+const len = customersData.length;
 var customers: number[] = [];
 for (let i = 0; i < len; i++) {
-  var customer_id = customersJSON[i].id;
+  var customer_id = customersData[i].id;
   customers.push(customer_id);
 }
 
@@ -71,7 +73,8 @@ const mailresult = await fetch(`http://localhost:3000/api/emails/getMailsbyCusto
     'Content-Type': 'application/json'
   }
 });
-const mails = await mailresult.json();
+const mailsJSON = await mailresult.json();
+const mails = mailsJSON.data
 
 // Admin Rolle prüfen. Rolle 1 = admin
 const { data: myRoles, error: rolesErr } = await supabase
