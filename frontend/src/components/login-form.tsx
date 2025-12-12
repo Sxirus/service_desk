@@ -69,7 +69,7 @@ export function LoginForm({ className, siteKey, ...props }: Props) {
       if (!captchaToken) {
         setLoading(false);
         return setError("Bitte das CAPTCHA ausfüllen.");
-      }
+      } 
 
       const formData = new FormData(formRef.current!);
       formData.append("captchaToken", captchaToken);

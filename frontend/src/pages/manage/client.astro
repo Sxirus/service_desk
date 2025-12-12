@@ -104,10 +104,10 @@ console.log("[client-settings] Page setup complete, rendering");
 const initialFormData = {
   id: companyData?.id ?? authContext.employee.client_id,
   name: companyData?.name ?? "",
-  address: companyData?.address_street ?? "",
-  city: companyData?.address_city ?? "",
-  postalCode: companyData?.address_zip ?? "",
-  country: companyData?.address_country ?? "",
+  address_street: companyData?.address_street ?? "",
+  address_city: companyData?.address_city ?? "",
+  address_zip: companyData?.address_zip ?? "",
+  address_country: companyData?.address_country ?? "",
   vat: companyData?.vat ?? "",
   website: companyData?.website ?? ""
 };

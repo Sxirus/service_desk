@@ -1,0 +1,26 @@
+---
+import Layout from "../layouts/BaseLayout.astro";
+import { createClient } from "../lib/supabase.ts";
+import RegisterWizard from "@/components/register/RegisterWizard";
+
+const supabase = createClient({ request: Astro.request, cookies: Astro.cookies });
+const { data: { user } } = await supabase.auth.getUser();
+
+// Use env site key; empty string falls back to dynamic loader error if missing
+const cfSiteKey = import.meta.env.TURNSTILE_SITE_KEY ?? "";
+
+// Generate a nonce for this registration attempt
+const regNonce = crypto.randomUUID();
+---
+
+<Layout title="Register">
+  <div class="min-h-svh w-full bg-background flex items-center justify-center p-4">
+    <RegisterWizard
+      client:only="react"
+      initialStep={1}
+      regNonce={regNonce}
+      siteKey={cfSiteKey}
+      currentUser={user ? { id: user.id, email: user.email ?? "" } : null}
+    />
+  </div>
+</Layout>
