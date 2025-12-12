@@ -12,9 +12,11 @@ import {
   Check, 
   AlertCircle,
   RefreshCw,
-  ExternalLink 
+  ExternalLink,
+  Sparkles 
 } from 'lucide-react';
 import { apiClient } from '@/utils/api';
+import UpgradeFlow from '@/components/UpgradeFlow';
 
 interface Subscription {
   id: string;
@@ -35,14 +37,59 @@ interface SubscriptionData {
   subscription: Subscription | null;
 }
 
+interface UsageStats {
+  activeEmployees: number;
+  emailsSentThisMonth: number;
+  limits: {
+    maxEmployees: number;
+    maxEmailsPerMonth: number;
+  };
+}
+
 export default function SubscriptionManager() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<SubscriptionData | null>(null);
+  const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [upgradeQuantity, setUpgradeQuantity] = useState(1);
 
   useEffect(() => {
-    fetchSubscription();
+    const handleUpgradeReturn = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const sessionId = params.get('session_id');
+      
+      if (params.get('upgrade') === 'success' && sessionId) {
+        // Complete the subscription in the database
+        try {
+          console.log('[SubscriptionManager] Completing subscription with session:', sessionId);
+          const completeResponse = await apiClient.post('/client/complete-subscription', {
+            sessionId
+          });
+
+          if (!completeResponse.success) {
+            console.error('[SubscriptionManager] Failed to complete subscription:', completeResponse.error);
+            setError(completeResponse.error || 'Failed to complete subscription');
+          } else {
+            console.log('[SubscriptionManager] Subscription completed successfully');
+          }
+        } catch (e: any) {
+          console.error('[SubscriptionManager] Error completing subscription:', e);
+          setError(e?.message || 'Failed to complete subscription');
+        }
+        
+        // Clean up URL and refresh
+        window.history.replaceState({}, '', '/manage/subscription');
+        setTimeout(() => {
+          fetchSubscription();
+        }, 500);
+      } else {
+        fetchSubscription();
+      }
+    };
+    
+    handleUpgradeReturn();
   }, []);
 
   const fetchSubscription = async () => {
@@ -60,6 +107,18 @@ export default function SubscriptionManager() {
         });
       }
       setData(response);
+
+      // Fetch usage stats if on free tier
+      if (response.tier === 'free') {
+        try {
+          const statsResponse = await apiClient.get('/client/usage-stats');
+          console.log('[SubscriptionManager] Usage stats:', statsResponse);
+          setUsageStats(statsResponse);
+        } catch (statsErr: any) {
+          console.error('[SubscriptionManager] Failed to fetch usage stats:', statsErr);
+          // Don't fail the whole component if stats fail
+        }
+      }
     } catch (e: any) {
       console.error('[SubscriptionManager] Error:', e);
       setError(e?.message || 'Failed to load subscription');
@@ -79,6 +138,22 @@ export default function SubscriptionManager() {
       alert(e?.message || 'Failed to open billing portal');
       setPortalLoading(false);
     }
+  };
+
+  const startUpgrade = () => {
+    // Calculate quantity based on current active employees or default to 1
+    const quantity = usageStats?.activeEmployees || 1;
+    setUpgradeQuantity(Math.max(1, quantity));
+    setShowUpgrade(true);
+  };
+
+  const handleUpgradeSuccess = () => {
+    setShowUpgrade(false);
+    fetchSubscription();
+  };
+
+  const handleUpgradeCancel = () => {
+    setShowUpgrade(false);
   };
 
   const formatDate = (timestamp: number) => {
@@ -143,6 +218,27 @@ export default function SubscriptionManager() {
   }
 
   const isFree = data.tier === 'free' || !data.subscription;
+  const priceId = import.meta.env.PUBLIC_STRIPE_PRICE_ID || 'price_1QXlxnP5zXCWi9Tt8f0KNLoe';
+
+  // Show upgrade flow if user clicked upgrade
+  if (showUpgrade) {
+    return (
+      <div className="max-w-4xl space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Upgrade to Pro Plan</h1>
+          <p className="text-muted-foreground mt-2">
+            Complete your payment to unlock unlimited access
+          </p>
+        </div>
+        <UpgradeFlow
+          priceId={priceId}
+          quantity={upgradeQuantity}
+          onSuccess={handleUpgradeSuccess}
+          onCancel={handleUpgradeCancel}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -173,6 +269,71 @@ export default function SubscriptionManager() {
         <CardContent className="space-y-4">
           {isFree ? (
             <>
+              {/* Usage Statistics */}
+              {usageStats && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold">Current Usage</h3>
+                  
+                  {/* Active Employees */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground flex items-center">
+                        <Users className="h-4 w-4 mr-2" />
+                        Active Employees
+                      </span>
+                      <span className="font-medium">
+                        {usageStats.activeEmployees} / {usageStats.limits.maxEmployees}
+                      </span>
+                    </div>
+                    <div className="w-full bg-secondary rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full transition-all ${
+                          usageStats.activeEmployees >= usageStats.limits.maxEmployees 
+                            ? 'bg-destructive' 
+                            : 'bg-primary'
+                        }`}
+                        style={{ 
+                          width: `${Math.min((usageStats.activeEmployees / usageStats.limits.maxEmployees) * 100, 100)}%` 
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Emails Sent This Month */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground flex items-center">
+                        <CreditCard className="h-4 w-4 mr-2" />
+                        Emails Sent This Month
+                      </span>
+                      <span className="font-medium">
+                        {usageStats.emailsSentThisMonth} / {usageStats.limits.maxEmailsPerMonth}
+                      </span>
+                    </div>
+                    <div className="w-full bg-secondary rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full transition-all ${
+                          usageStats.emailsSentThisMonth >= usageStats.limits.maxEmailsPerMonth 
+                            ? 'bg-destructive' 
+                            : 'bg-primary'
+                        }`}
+                        style={{ 
+                          width: `${Math.min((usageStats.emailsSentThisMonth / usageStats.limits.maxEmailsPerMonth) * 100, 100)}%` 
+                        }}
+                      />
+                    </div>
+                    {usageStats.emailsSentThisMonth >= usageStats.limits.maxEmailsPerMonth && (
+                      <p className="text-xs text-destructive flex items-center mt-1">
+                        <AlertCircle className="h-3 w-3 mr-1" />
+                        You've reached your monthly email limit
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <Separator />
+
               <div className="space-y-2">
                 <h3 className="font-semibold">Free Tier Features</h3>
                 <ul className="space-y-2">
@@ -195,7 +356,11 @@ export default function SubscriptionManager() {
                 <p className="text-sm text-muted-foreground mb-3">
                   Upgrade to Pro for unlimited users and emails
                 </p>
-                <Button onClick={() => window.location.href = '/register?upgrade=true'}>
+                <Button 
+                  onClick={startUpgrade}
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                >
+                  <Sparkles className="mr-2 h-4 w-4" />
                   Upgrade to Pro Plan
                 </Button>
               </div>

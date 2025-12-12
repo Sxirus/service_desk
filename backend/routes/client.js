@@ -316,6 +316,87 @@ router.post('/create-checkout-session',
 );
 
 /**
+ * POST /api/client/upgrade-checkout-session
+ * 
+ * Authentication: Required
+ * Creates a checkout session for upgrading from free to paid tier
+ * 
+ * Body: { priceId: string, quantity: number }
+ */
+router.post('/upgrade-checkout-session',
+  authenticate,
+  async (req, res) => {
+    try {
+      const client_id = req.user.client_id;
+      const { priceId, quantity = 1 } = req.body;
+
+      if (!priceId) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'priceId is required' 
+        });
+      }
+
+      console.log('[CLIENT] Creating upgrade checkout session for client:', client_id, 'quantity:', quantity);
+
+      // Get client data
+      const { data: clientData, error: clientError } = await supabase
+        .from('clients')
+        .select('stripe_customer_id, subscription_tier')
+        .eq('id', client_id)
+        .single();
+
+      if (clientError || !clientData) {
+        console.error('[CLIENT] Failed to fetch client:', clientError?.message);
+        return res.status(500).json({ 
+          success: false,
+          error: 'Failed to fetch client data' 
+        });
+      }
+
+      if (!clientData.stripe_customer_id) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'Client does not have a Stripe customer ID. Please contact support.' 
+        });
+      }
+
+      // Create checkout session with upgrade-specific URLs
+      const sessionResult = await createCheckoutSession({
+        customerId: clientData.stripe_customer_id,
+        priceId,
+        quantity,
+        successUrl: `${process.env.FRONTEND_URL || 'http://localhost:4321'}/manage/subscription?upgrade=success&session_id={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `${process.env.FRONTEND_URL || 'http://localhost:4321'}/manage/subscription?upgrade=cancelled`,
+      });
+
+      if (!sessionResult.success) {
+        console.error('[CLIENT] Failed to create upgrade checkout session:', sessionResult.error);
+        return res.status(500).json({ 
+          success: false,
+          error: sessionResult.error 
+        });
+      }
+
+      console.log('[CLIENT] Successfully created upgrade checkout session:', sessionResult.sessionId);
+      res.json({
+        success: true,
+        clientSecret: sessionResult.clientSecret,
+        sessionId: sessionResult.sessionId
+      });
+
+    } catch (err) {
+      console.error('[CLIENT] Server error creating upgrade checkout session:', err.message);
+      res.status(500).json({ 
+        success: false,
+        error: 'Server error', 
+        message: err.message 
+      });
+    }
+  }
+);
+
+/**
  * Complete Stripe Subscription
  * POST /api/client/complete-subscription
  * 
@@ -634,6 +715,100 @@ router.post('/update-subscription-quantity',
 
     } catch (err) {
       console.error('[CLIENT] Server error updating subscription quantity:', err.message);
+      res.status(500).json({
+        success: false,
+        error: 'Server error',
+        message: err.message
+      });
+    }
+  }
+);
+
+/**
+ * Get usage statistics for free tier
+ * GET /api/client/usage-stats
+ * 
+ * Returns active employee count and email count for current month
+ */
+router.get('/usage-stats',
+  authenticate,
+  async (req, res) => {
+    try {
+      console.log('[CLIENT] Getting usage stats for client:', req.user.client_id);
+
+      // Get active employee count (non-disabled)
+      const { count: activeEmployees, error: empError } = await supabase
+        .from('employees')
+        .select('*', { count: 'exact', head: true })
+        .eq('client_id', req.user.client_id)
+        .or('disabled.is.null,disabled.eq.false');
+
+      if (empError) {
+        console.error('[CLIENT] Error counting employees:', empError.message);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to count employees'
+        });
+      }
+
+      // Get email count for current month
+      const now = new Date();
+      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      
+      // Get customer IDs for this client to filter sent emails
+      const { data: customers, error: customerError } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('client_id', req.user.client_id);
+
+      if (customerError) {
+        console.error('[CLIENT] Error fetching customers:', customerError.message);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to fetch customers'
+        });
+      }
+
+      const customerIds = (customers || []).map(c => c.id);
+      
+      let emailCount = 0;
+      if (customerIds.length > 0) {
+        const { count, error: emailError } = await supabase
+          .from('sent-mail')
+          .select('*', { count: 'exact', head: true })
+          .in('customer_id', customerIds)
+          .gte('send_at', firstDayOfMonth.toISOString());
+
+        if (emailError) {
+          console.error('[CLIENT] Error counting emails:', emailError.message);
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to count emails'
+          });
+        }
+
+        emailCount = count || 0;
+      }
+
+      console.log('[CLIENT] Usage stats:', {
+        activeEmployees,
+        emailCount,
+        customerCount: customerIds.length,
+        month: firstDayOfMonth.toISOString()
+      });
+
+      res.json({
+        success: true,
+        activeEmployees: activeEmployees || 0,
+        emailsSentThisMonth: emailCount || 0,
+        limits: {
+          maxEmployees: 1,
+          maxEmailsPerMonth: 50
+        }
+      });
+
+    } catch (err) {
+      console.error('[CLIENT] Server error getting usage stats:', err.message);
       res.status(500).json({
         success: false,
         error: 'Server error',

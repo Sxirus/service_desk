@@ -321,7 +321,19 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       });
 
       // Send email
-      await apiClient.postFormData(`/emails/sendMail?customerId=${customerId}`, formData);
+      const response = await apiClient.postFormData(`/emails/sendMail?customerId=${customerId}`, formData);
+      
+      // Check if limit was reached
+      if (response && typeof response === 'object' && 'limitReached' in response) {
+        const limitType = response.limitType || 'emails';
+        if (limitType === 'users') {
+          setError('User limit exceeded. You have more than 1 active user on the Free plan. Please upgrade to Pro or disable users to continue.');
+        } else {
+          setError('Email limit reached. You have sent 50 emails this month on the Free plan. Please upgrade to Pro to send unlimited emails.');
+        }
+        setIsSending(false);
+        return;
+      }
 
       // Mark conversation as read
       try {
