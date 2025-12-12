@@ -12,7 +12,7 @@ const { authenticate } = require('../middleware/auth');
 const { validateId, sanitizeText } = require('../middleware/validation');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
-const {storeMacroAttachmentsInDB} = require("../services/attachments/macroAttachments")
+const {storeMacroAttachmentsInDB, deleteAttachmentsFromStorage} = require("../services/attachments/macroAttachments")
 
 /**
  * Get all macros for authenticated user's client
@@ -259,6 +259,25 @@ router.delete('/deleteMacro',
       const macroId = req.sanitized.macroId;
 
       console.log('[MACROS] Deleting macro:', macroId);
+
+      const { data: oldAttachments, error: oldAttachmentsError } = await supabase
+        .from('macros')
+        .select('attachments')
+        .eq('id', macroId)
+        .single();
+      
+      if (oldAttachmentsError) {
+        console.error('[MACROS] Delete failed:', oldAttachments.message);
+        return res.status(500).json({ error: 'Datenbankfehler' });
+      }
+      
+      if (oldAttachments.attachments.length > 0) {
+        const response = await deleteAttachmentsFromStorage(oldAttachments.attachments);
+        if (!response.success) {
+          console.error('[MACROS] Delete failed:', response.message);
+          return res.status(500).json({ error: 'Datenbankfehler' });
+        }
+      }
 
       // Delete macro
       const { error } = await supabase

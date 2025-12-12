@@ -71,4 +71,33 @@ async function storeMacroAttachmentsInDB(attachments, client_id, macro_id) {
   }
 }
 
-module.exports = {storeMacroAttachmentsInDB}
+async function deleteAttachmentsFromStorage(attachments) {xw
+
+  try {
+    // Extrahiere nur die object_paths
+    const filePaths = attachments.map(file => file.object_path);
+    
+    // Lösche alle Dateien auf einmal
+    const { data, error } = await supabase
+      .storage
+      .from('macro-attachments')
+      .remove(filePaths);
+    
+    if (error) {
+      console.error('Fehler beim Löschen:', error);
+      return { success: false, error: error.message };
+    }
+    
+    return { 
+      success: true, 
+      deletedCount: attachments.length,
+      message: `${attachments.length} Dateien gelöscht` 
+    };
+    
+  } catch (error) {
+    console.error('Unerwarteter Fehler:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+module.exports = {storeMacroAttachmentsInDB, deleteAttachmentsFromStorage}
