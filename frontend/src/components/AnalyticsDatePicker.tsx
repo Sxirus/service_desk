@@ -95,7 +95,7 @@ export function AnalyticsDatePicker({
                     <Button
                         variant="ghost"
                         size="sm"
-                        className=" justify-start font-normal"
+                        className="justify-start font-normal"
                         onClick={() => handlePreset(7)}
                     >
                         Last 7 days
@@ -103,7 +103,7 @@ export function AnalyticsDatePicker({
                     <Button
                         variant="ghost"
                         size="sm"
-                        className=" justify-start font-normal"
+                        className="justify-start font-normal"
                         onClick={() => handlePreset(14)}
                     >
                         Last 14 days
@@ -111,7 +111,7 @@ export function AnalyticsDatePicker({
                     <Button
                         variant="ghost"
                         size="sm"
-                        className=" justify-start font-normal"
+                        className="justify-start font-normal"
                         onClick={() => handlePreset(30)}
                     >
                         Last 30 days
@@ -119,7 +119,7 @@ export function AnalyticsDatePicker({
                     <Button
                         variant="ghost"
                         size="sm"
-                        className=" justify-start font-normal"
+                        className="justify-start font-normal"
                         onClick={() => handlePreset(60)}
                     >
                         Last 60 days
