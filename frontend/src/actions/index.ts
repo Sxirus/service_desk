@@ -1509,27 +1509,73 @@ const registerCreateSupportMailbox = async (
    ====================================================== */
 
 const registerTestSupportMailboxSchema = z.object({
-  client_email_id: z.number().int().positive(),
+  email_address: z.string().email(),
+  password: z.string().min(1),
+  imap: z.string().min(1),
+  imap_port: z.number().int().min(1),
+  smtp: z.string().min(1),
+  smtp_port: z.number().int().min(1),
 });
 
 const registerTestSupportMailbox = async (
-  _input: z.infer<typeof registerTestSupportMailboxSchema>,
-  _context: ActionAPIContext
+  input: z.infer<typeof registerTestSupportMailboxSchema>,
+  context: ActionAPIContext
 ) => {
-  // TODO: Implement actual IMAP/SMTP connection testing
-  // For now, this is a stub that simulates a successful connection
-  console.log("[actions.registerTestSupportMailbox] Testing mailbox connection (stub)");
-  await new Promise((r) => setTimeout(r, 500));
+  console.log("[actions.registerTestSupportMailbox] Testing mailbox connection for:", input.email_address);
   
-  // In production, you should:
-  // 1. Fetch the mailbox config from database using client_email_id
-  // 2. Attempt IMAP connection
-  // 3. Attempt SMTP connection
-  // 4. Return actual test results
-  
-  return { success: true, message: "Connection test passed (simulated)" };
+  try {
+    // Get authenticated user session
+    const ssr = createSSR({ request: context.request, cookies: context.cookies });
+    const { data: { session } } = await ssr.auth.getSession();
+    
+    if (!session?.access_token) {
+      return { success: false, message: "Unauthorized" };
+    }
+    
+    // Call backend API to test connections
+    const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
+    const response = await fetch(`${apiUrl}/emails/test-mailbox`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        email_address: input.email_address,
+        password: input.password,
+        imap: input.imap,
+        imap_port: input.imap_port,
+        smtp: input.smtp,
+        smtp_port: input.smtp_port,
+      }),
+    });
+    
+    const result = await response.json();
+    
+    if (!response.ok || !result.success) {
+      console.error("[actions.registerTestSupportMailbox] Backend test failed:", result);
+      return {
+        success: false,
+        message: result.message || 'Connection test failed',
+        details: result.details,
+        errors: result.errors,
+      };
+    }
+    
+    console.log("[actions.registerTestSupportMailbox] Backend test successful");
+    return {
+      success: true,
+      message: result.message,
+      details: result.details,
+    };
+  } catch (e: any) {
+    console.error("[actions.registerTestSupportMailbox] Unexpected error:", e);
+    return { 
+      success: false, 
+      message: "Connection test failed: " + (e?.message || "Unknown error") 
+    };
+  }
 };
-
 
 
 /* ----------------------- EXPORTS ----------------------- */

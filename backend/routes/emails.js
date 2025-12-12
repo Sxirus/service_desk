@@ -747,4 +747,139 @@ router.post('/getSignedUrl',
     }
   }
 );
+
+/**
+ * Test mailbox IMAP/SMTP connection
+ * POST /api/emails/test-mailbox
+ * 
+ * Authentication: Required
+ * Body: { email_address, password, imap, imap_port, smtp, smtp_port }
+ */
+router.post('/test-mailbox',
+  authenticate,
+  async (req, res) => {
+    try {
+      const { email_address, password, imap, imap_port, smtp, smtp_port } = req.body;
+
+      if (!email_address || !password || !imap || !imap_port || !smtp || !smtp_port) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Missing required fields' 
+        });
+      }
+
+      console.log('[EMAILS] Testing mailbox connection for:', email_address);
+
+      const results = {
+        imap: { success: false, message: '' },
+        smtp: { success: false, message: '' },
+      };
+
+      // Test IMAP connection
+      try {
+        const Imap = require('imap');
+        
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            if (imap) imap.end();
+            reject(new Error('IMAP connection timeout'));
+          }, 10000);
+          
+          const imapConnection = new Imap({
+            user: email_address,
+            password: password,
+            host: imap,
+            port: imap_port,
+            tls: imap_port === 993,
+            tlsOptions: { rejectUnauthorized: false },
+            connTimeout: 10000,
+            authTimeout: 10000,
+          });
+          
+          imapConnection.once('ready', () => {
+            clearTimeout(timeout);
+            console.log('[EMAILS] IMAP connection successful');
+            results.imap = { success: true, message: 'IMAP connection successful' };
+            imapConnection.end();
+            resolve();
+          });
+          
+          imapConnection.once('error', (err) => {
+            clearTimeout(timeout);
+            console.error('[EMAILS] IMAP error:', err.message);
+            results.imap = { success: false, message: err.message };
+            reject(err);
+          });
+          
+          imapConnection.connect();
+        });
+      } catch (imapErr) {
+        console.error('[EMAILS] IMAP test failed:', imapErr.message);
+        results.imap = { 
+          success: false, 
+          message: imapErr.message || 'IMAP connection failed' 
+        };
+      }
+
+      // Test SMTP connection
+      try {
+        const transporter = nodemailer.createTransport({
+          host: smtp,
+          port: smtp_port,
+          secure: smtp_port === 465,
+          auth: {
+            user: email_address,
+            pass: password,
+          },
+          tls: {
+            rejectUnauthorized: false,
+          },
+          connectionTimeout: 10000,
+          greetingTimeout: 10000,
+        });
+        
+        await transporter.verify();
+        console.log('[EMAILS] SMTP connection successful');
+        results.smtp = { success: true, message: 'SMTP connection successful' };
+        
+        transporter.close();
+      } catch (smtpErr) {
+        console.error('[EMAILS] SMTP test failed:', smtpErr.message);
+        results.smtp = { 
+          success: false, 
+          message: smtpErr.message || 'SMTP connection failed' 
+        };
+      }
+
+      // Return comprehensive results
+      const allSuccess = results.imap.success && results.smtp.success;
+      
+      if (!allSuccess) {
+        const failedServices = [];
+        if (!results.imap.success) failedServices.push(`IMAP: ${results.imap.message}`);
+        if (!results.smtp.success) failedServices.push(`SMTP: ${results.smtp.message}`);
+        
+        return res.status(400).json({
+          success: false,
+          message: 'Connection test failed',
+          details: results,
+          errors: failedServices,
+        });
+      }
+      
+      return res.json({
+        success: true,
+        message: 'All connections tested successfully',
+        details: results,
+      });
+    } catch (err) {
+      console.error('[EMAILS] Test mailbox error:', err.message);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Connection test failed: ' + err.message 
+      });
+    }
+  }
+);
+
 module.exports = router;

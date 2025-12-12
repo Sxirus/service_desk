@@ -507,7 +507,13 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
   };
 
   const skipCompanyOptional = () => {
-    setCompanyIdx((i) => Math.min(6, i + 1));
+    // If we're on the VAT step (6), proceed to create company
+    if (companyIdx === 6) {
+      createCompany();
+    } else {
+      // Otherwise just skip to next step
+      setCompanyIdx((i) => Math.min(6, i + 1));
+    }
   };
 
   const createCompany = async () => {
@@ -695,9 +701,14 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
       }
       setClientEmailId(createRes.data.client_email_id);
 
-      // 2) testen
+      // 2) Test connection with credentials directly
       const testRes = await actions.registerTestSupportMailbox({
-        client_email_id: createRes.data.client_email_id,
+        email_address: supportForm.getValues("email_address"),
+        password: supportForm.getValues("password"),
+        imap: supportForm.getValues("imap"),
+        imap_port: supportForm.getValues("imap_port"),
+        smtp: supportForm.getValues("smtp"),
+        smtp_port: supportForm.getValues("smtp_port"),
       });
       if (testRes?.data?.success) {
         setTestStatus({ ok: true, message: "Connection successful." });
