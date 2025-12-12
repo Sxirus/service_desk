@@ -216,19 +216,21 @@ console.log("[user-management] Page setup complete, rendering");
   >
     <div class="space-y-6">
       <!-- Page Header -->
-      <div class="flex items-start justify-between">
+      <div class="flex items-center justify-between">
         <div>
           <h1 class="text-3xl font-bold tracking-tight">User Management</h1>
-          <p class="text-muted-foreground">
+          <p class="text-muted-foreground mt-1">
             Manage employee accounts and role assignments for your organization.
           </p>
         </div>
         
         <!-- Create User Dialog Button -->
-        <CreateUserDialog 
-          client:only="react" 
-          roles={roleRows ?? []} 
-        />
+        <div class="flex-shrink-0">
+          <CreateUserDialog 
+            client:only="react" 
+            roles={roleRows ?? []} 
+          />
+        </div>
       </div>
 
       <!-- Users Table Card -->
