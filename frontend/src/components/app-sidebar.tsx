@@ -115,6 +115,10 @@ export function AppSidebar({
           {
             title: "Analytics",
             url: "/manage/analytics"
+          },
+          {
+            title: "Subscription",
+            url: "/manage/subscription"
           }
         ],
       });

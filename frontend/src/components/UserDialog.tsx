@@ -56,19 +56,28 @@ interface DeleteUserDialogProps {
   user: User;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
+  mode?: 'delete' | 'disable' | 'enable';
 }
 
 // Delete Dialog Component
-export function DeleteUserDialog({ user, isOpen, onOpenChange }: DeleteUserDialogProps) {
+export function DeleteUserDialog({ user, isOpen, onOpenChange, mode = 'delete' }: DeleteUserDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleDelete = async () => {
+  const handleAction = async () => {
     setIsLoading(true);
     
     try {
       const formData = new FormData();
       formData.append('id', user.id);
-      const result = await actions.deleteEmployee(formData);
+      
+      let result;
+      if (mode === 'delete') {
+        result = await actions.deleteEmployee(formData);
+      } else if (mode === 'disable') {
+        result = await actions.disableEmployee(formData);
+      } else {
+        result = await actions.enableEmployee(formData);
+      }
       
       // Close dialog and reload page
       onOpenChange(false);
@@ -78,31 +87,52 @@ export function DeleteUserDialog({ user, isOpen, onOpenChange }: DeleteUserDialo
       location.href = url.toString();
       
     } catch (err) {
-      console.error('Error deleting user:', err);
-      alert("Error deleting user");
+      console.error('Error:', err);
+      alert(`Error ${mode === 'delete' ? 'deleting' : mode === 'disable' ? 'disabling' : 'enabling'} user`);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const getTitle = () => {
+    if (mode === 'delete') return 'Delete User';
+    if (mode === 'disable') return 'Disable User';
+    return 'Enable User';
+  };
+
+  const getDescription = () => {
+    if (mode === 'delete') {
+      return `Are you sure you want to delete the user "${user.name}" (${user.email})? This action cannot be undone.`;
+    }
+    if (mode === 'disable') {
+      return `Are you sure you want to disable the user "${user.name}" (${user.email})? They will not be able to log in, and won't count towards your subscription.`;
+    }
+    return `Are you sure you want to enable the user "${user.name}" (${user.email})? They will be able to log in again and will count towards your subscription.`;
+  };
+
+  const getButtonText = () => {
+    if (mode === 'delete') return isLoading ? 'Deleting...' : 'Delete';
+    if (mode === 'disable') return isLoading ? 'Disabling...' : 'Disable';
+    return isLoading ? 'Enabling...' : 'Enable';
   };
 
   return (
     <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete User</AlertDialogTitle>
+          <AlertDialogTitle>{getTitle()}</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to delete the user "{user.name}" ({user.email})? 
-            This action cannot be undone.
+            {getDescription()}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
           <AlertDialogAction 
-            onClick={handleDelete} 
+            onClick={handleAction} 
             disabled={isLoading}
-            className="bg-red-600 hover:bg-red-700"
+            className={mode === 'delete' ? 'bg-red-600 hover:bg-red-700' : ''}
           >
-            {isLoading ? "Deleting..." : "Delete"}
+            {getButtonText()}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

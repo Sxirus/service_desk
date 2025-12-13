@@ -1,0 +1,44 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import { createClient } from "@/lib/supabase";
+import { getCompletePageContext } from "@/lib/auth-helpers";
+import SubscriptionManager from "@/components/SubscriptionManager";
+import AdminShell from "@/components/AdminShell";
+
+// Create Supabase client with server-side rendering support
+const supabase = createClient({
+  request: Astro.request,
+  cookies: Astro.cookies,
+});
+
+// Get complete page context (auth + sidebar data)
+const pageContext = await getCompletePageContext(supabase, Astro.cookies);
+
+if (!pageContext) {
+  return Astro.redirect("/");
+}
+
+const { authContext, sidebarData } = pageContext;
+
+// Get session for API calls
+const { data: { session } } = await supabase.auth.getSession();
+if (!session) return Astro.redirect("/");
+
+// Use isAdmin from authContext
+const isAdmin = authContext.isAdmin;
+---
+
+<BaseLayout title="Subscription Management">
+  <AdminShell
+    client:load
+    user={sidebarData.user}
+    firstTeam={sidebarData.team ?? undefined}
+    isAdmin={isAdmin}
+    currentPath="/manage/subscription"
+    crumbParentLabel="Administration"
+    crumbParentHref="/manage"
+    crumbCurrent="Subscription"
+  >
+    <SubscriptionManager client:load />
+  </AdminShell>
+</BaseLayout>

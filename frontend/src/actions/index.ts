@@ -214,6 +214,44 @@ const createEmployee = async (
     });
     console.log("[actions.createEmployee] Activation email sent");
 
+    // 9) Update Stripe subscription quantity (if on paid plan)
+    try {
+      // Get total ACTIVE employee count for this client
+      const { count: employeeCount } = await admin
+        .from("employees")
+        .select("*", { count: "exact", head: true })
+        .eq("client_id", me.client_id)
+        .or("disabled.is.null,disabled.eq.false"); // Only count non-disabled users
+
+      const newQuantity = employeeCount || 1;
+      console.log("[actions.createEmployee] Updating subscription quantity to:", newQuantity);
+
+      // Call backend to update Stripe subscription
+      const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
+      const { data: { session: userSession } } = await ssr.auth.getSession();
+      
+      if (userSession?.access_token) {
+        const response = await fetch(`${apiUrl}/client/update-subscription-quantity`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${userSession.access_token}`
+          },
+          body: JSON.stringify({ quantity: newQuantity })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          console.log("[actions.createEmployee] Subscription quantity updated");
+        } else {
+          console.warn("[actions.createEmployee] Failed to update subscription:", result.error);
+        }
+      }
+    } catch (stripeErr: any) {
+      console.warn("[actions.createEmployee] Stripe update warning:", stripeErr?.message);
+      // Don't fail the entire operation if subscription update fails
+    }
+
     console.log("[actions.createEmployee] ok");
     return { success: true, message: "Employee created and invite sent" };
   } catch (e: any) {
@@ -505,10 +543,277 @@ const deleteEmployee = async (
       console.log("[actions.deleteEmployee] Auth user deleted");
     }
 
+    // 10) Update Stripe subscription quantity (if on paid plan)
+    try {
+      // Get total ACTIVE employee count for this client (after deletion)
+      const { count: employeeCount } = await admin
+        .from("employees")
+        .select("*", { count: "exact", head: true })
+        .eq("client_id", me.client_id)
+        .or("disabled.is.null,disabled.eq.false"); // Only count non-disabled users
+
+      const newQuantity = Math.max(employeeCount || 1, 1); // Minimum 1 user
+      console.log("[actions.deleteEmployee] Updating subscription quantity to:", newQuantity);
+
+      // Call backend to update Stripe subscription
+      const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
+      const { data: { session: userSession } } = await ssr.auth.getSession();
+      
+      if (userSession?.access_token) {
+        const response = await fetch(`${apiUrl}/client/update-subscription-quantity`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${userSession.access_token}`
+          },
+          body: JSON.stringify({ quantity: newQuantity })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          console.log("[actions.deleteEmployee] Subscription quantity updated");
+        } else {
+          console.warn("[actions.deleteEmployee] Failed to update subscription:", result.error);
+        }
+      }
+    } catch (stripeErr: any) {
+      console.warn("[actions.deleteEmployee] Stripe update warning:", stripeErr?.message);
+      // Don't fail the entire operation if subscription update fails
+    }
+
     console.log("[actions.deleteEmployee] ok");
     return { success: true, message: "Employee deleted successfully" };
   } catch (e: any) {
     console.error("[actions.deleteEmployee] unexpected:", e?.message ?? e);
+    return { success: false, message: "Unexpected error" };
+  }
+};
+
+/* ----------------------- ADMIN: DISABLE EMPLOYEE ----------------------- */
+
+const disableEmployeeSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
+type DisableEmployeeInput = z.infer<typeof disableEmployeeSchema>;
+
+/**
+ * Admin-only function to disable employees
+ * Disabled users cannot log in and don't count towards subscription
+ */
+const disableEmployee = async (
+  { id }: DisableEmployeeInput,
+  context: ActionAPIContext
+) => {
+  console.log("[actions.disableEmployee] start for employee:", id);
+  try {
+    const ssr = createSSR({ request: context.request, cookies: context.cookies });
+    const { data: { user }, error: userErr } = await ssr.auth.getUser();
+    if (userErr || !user) {
+      return { success: false, message: "Unauthorized" };
+    }
+
+    const { data: me, error: meErr } = await ssr
+      .from("employees")
+      .select("id, client_id")
+      .eq("user_id", user.id)
+      .single();
+
+    if (meErr || !me) {
+      return { success: false, message: "Forbidden" };
+    }
+
+    const { data: myRoles, error: rolesErr } = await ssr
+      .from("roles-employees")
+      .select("role_id")
+      .eq("employee_id", me.id);
+
+    if (rolesErr || !myRoles?.some((r) => r.role_id === 1)) {
+      return { success: false, message: "Forbidden" };
+    }
+
+    if (id === me.id) {
+      return { success: false, message: "Cannot disable your own account" };
+    }
+
+    const { data: targetEmployee, error: targetErr } = await ssr
+      .from("employees")
+      .select("user_id, client_id")
+      .eq("id", id)
+      .single();
+
+    if (targetErr || !targetEmployee || targetEmployee.client_id !== me.client_id) {
+      return { success: false, message: "Employee not found" };
+    }
+
+    const admin = createAdmin(
+      import.meta.env.SUPABASE_URL!,
+      import.meta.env.SUPABASE_KEY!,
+      { auth: { persistSession: false } }
+    );
+
+    // Set disabled flag in employees table
+    const { error: updateErr } = await admin
+      .from("employees")
+      .update({ disabled: true })
+      .eq("id", id);
+
+    if (updateErr) {
+      console.error("[actions.disableEmployee] update error:", updateErr.message);
+      return { success: false, message: "Failed to disable employee" };
+    }
+
+    // Ban user in Supabase Auth
+    const { error: banErr } = await admin.auth.admin.updateUserById(
+      targetEmployee.user_id,
+      { ban_duration: "876000h" } // ~100 years = effectively permanent
+    );
+
+    if (banErr) {
+      console.warn("[actions.disableEmployee] ban error:", banErr.message);
+    }
+
+    // Update subscription quantity (exclude disabled users)
+    try {
+      const { count: activeCount } = await admin
+        .from("employees")
+        .select("*", { count: "exact", head: true })
+        .eq("client_id", me.client_id)
+        .or("disabled.is.null,disabled.eq.false");
+
+      const newQuantity = Math.max(activeCount || 1, 1);
+      const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
+      const { data: { session: userSession } } = await ssr.auth.getSession();
+      
+      if (userSession?.access_token) {
+        await fetch(`${apiUrl}/client/update-subscription-quantity`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${userSession.access_token}`
+          },
+          body: JSON.stringify({ quantity: newQuantity })
+        });
+      }
+    } catch (stripeErr: any) {
+      console.warn("[actions.disableEmployee] Stripe update warning:", stripeErr?.message);
+    }
+
+    return { success: true, message: "Employee disabled successfully" };
+  } catch (e: any) {
+    console.error("[actions.disableEmployee] unexpected:", e?.message ?? e);
+    return { success: false, message: "Unexpected error" };
+  }
+};
+
+/* ----------------------- ADMIN: ENABLE EMPLOYEE ----------------------- */
+
+const enableEmployeeSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
+type EnableEmployeeInput = z.infer<typeof enableEmployeeSchema>;
+
+/**
+ * Admin-only function to enable disabled employees
+ */
+const enableEmployee = async (
+  { id }: EnableEmployeeInput,
+  context: ActionAPIContext
+) => {
+  console.log("[actions.enableEmployee] start for employee:", id);
+  try {
+    const ssr = createSSR({ request: context.request, cookies: context.cookies });
+    const { data: { user }, error: userErr } = await ssr.auth.getUser();
+    if (userErr || !user) {
+      return { success: false, message: "Unauthorized" };
+    }
+
+    const { data: me, error: meErr } = await ssr
+      .from("employees")
+      .select("id, client_id")
+      .eq("user_id", user.id)
+      .single();
+
+    if (meErr || !me) {
+      return { success: false, message: "Forbidden" };
+    }
+
+    const { data: myRoles, error: rolesErr } = await ssr
+      .from("roles-employees")
+      .select("role_id")
+      .eq("employee_id", me.id);
+
+    if (rolesErr || !myRoles?.some((r) => r.role_id === 1)) {
+      return { success: false, message: "Forbidden" };
+    }
+
+    const { data: targetEmployee, error: targetErr } = await ssr
+      .from("employees")
+      .select("user_id, client_id")
+      .eq("id", id)
+      .single();
+
+    if (targetErr || !targetEmployee || targetEmployee.client_id !== me.client_id) {
+      return { success: false, message: "Employee not found" };
+    }
+
+    const admin = createAdmin(
+      import.meta.env.SUPABASE_URL!,
+      import.meta.env.SUPABASE_KEY!,
+      { auth: { persistSession: false } }
+    );
+
+    // Remove disabled flag
+    const { error: updateErr } = await admin
+      .from("employees")
+      .update({ disabled: false })
+      .eq("id", id);
+
+    if (updateErr) {
+      console.error("[actions.enableEmployee] update error:", updateErr.message);
+      return { success: false, message: "Failed to enable employee" };
+    }
+
+    // Unban user in Supabase Auth
+    const { error: unbanErr } = await admin.auth.admin.updateUserById(
+      targetEmployee.user_id,
+      { ban_duration: "none" }
+    );
+
+    if (unbanErr) {
+      console.warn("[actions.enableEmployee] unban error:", unbanErr.message);
+    }
+
+    // Update subscription quantity (include newly enabled user)
+    try {
+      const { count: activeCount } = await admin
+        .from("employees")
+        .select("*", { count: "exact", head: true })
+        .eq("client_id", me.client_id)
+        .or("disabled.is.null,disabled.eq.false");
+
+      const newQuantity = Math.max(activeCount || 1, 1);
+      const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
+      const { data: { session: userSession } } = await ssr.auth.getSession();
+      
+      if (userSession?.access_token) {
+        await fetch(`${apiUrl}/client/update-subscription-quantity`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${userSession.access_token}`
+          },
+          body: JSON.stringify({ quantity: newQuantity })
+        });
+      }
+    } catch (stripeErr: any) {
+      console.warn("[actions.enableEmployee] Stripe update warning:", stripeErr?.message);
+    }
+
+    return { success: true, message: "Employee enabled successfully" };
+  } catch (e: any) {
+    console.error("[actions.enableEmployee] unexpected:", e?.message ?? e);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -986,6 +1291,17 @@ const registerCreateCompany = async (
   });
   console.log("[actions.registerCreateCompany] Registration session updated via fallback path");
 
+  // Create Stripe customer
+  await createStripeCustomerForClient(user, clientRow.id, {
+    email: user.email,
+    name: clientRow.name,
+    address_street,
+    address_zip,
+    address_city,
+    address_country,
+    vat: vat ?? undefined,
+  });
+
   console.log("[actions.registerCreateCompany] ok");
   return { success: true, client_id: clientRow.id };
 };
@@ -1011,6 +1327,101 @@ async function upsertRegSession(reg_nonce: string, user_id: string, last_step: n
     console.log("[upsertRegSession] Registration session upserted successfully");
   } catch (e: any) {
     console.error("[upsertRegSession] Failed to upsert registration session:", e?.message);
+  }
+}
+
+async function createStripeCustomerForClient(
+  user: any,
+  client_id: number,
+  clientData: {
+    email?: string;
+    name: string;
+    address_street: string;
+    address_zip: string;
+    address_city: string;
+    address_country: string;
+    vat?: string;
+  }
+) {
+  console.log("[createStripeCustomerForClient] start", { client_id, name: clientData.name });
+  
+  // Only attempt Stripe creation if API key is configured
+  if (!import.meta.env.STRIPE_SECRET_KEY) {
+    console.warn("[createStripeCustomerForClient] Stripe secret key not configured, skipping");
+    return;
+  }
+
+  try {
+    // Dynamic import to avoid issues if Stripe isn't installed
+    const Stripe = (await import('stripe')).default;
+    const stripe = new Stripe(import.meta.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2024-11-20.acacia' as any,
+    });
+
+    const customerData: any = {
+      email: clientData.email || user.email,
+      name: clientData.name,
+      metadata: {
+        client_id: client_id.toString(),
+        created_via: 'registration_flow',
+      },
+    };
+
+    // Add address if all required fields are present
+    if (
+      clientData.address_street &&
+      clientData.address_city &&
+      clientData.address_zip &&
+      clientData.address_country
+    ) {
+      customerData.address = {
+        line1: clientData.address_street,
+        city: clientData.address_city,
+        postal_code: clientData.address_zip,
+        country: clientData.address_country,
+      };
+
+      customerData.shipping = {
+        name: clientData.name,
+        address: {
+          line1: clientData.address_street,
+          city: clientData.address_city,
+          postal_code: clientData.address_zip,
+          country: clientData.address_country,
+        },
+      };
+    }
+
+    // Add VAT number if present
+    if (clientData.vat) {
+      customerData.metadata.vat_number = clientData.vat;
+    }
+
+    const customer = await stripe.customers.create(customerData);
+    console.log("[createStripeCustomerForClient] Stripe customer created:", customer.id);
+
+    // Update client record with Stripe customer ID
+    const admin = createAdmin(import.meta.env.SUPABASE_URL!, import.meta.env.SUPABASE_KEY!, {
+      auth: { persistSession: false },
+    });
+
+    const { error: updateError } = await admin
+      .from('clients')
+      .update({ stripe_customer_id: customer.id })
+      .eq('id', client_id);
+
+    if (updateError) {
+      console.error("[createStripeCustomerForClient] Failed to save Stripe ID to database:", updateError.message);
+      // Stripe customer was created but we couldn't save the ID
+      // This should be handled manually later
+    } else {
+      console.log("[createStripeCustomerForClient] Stripe customer ID saved to database");
+    }
+
+    console.log("[createStripeCustomerForClient] Stripe customer created:", customer.id);
+  } catch (e: any) {
+    console.error("[createStripeCustomerForClient] Error creating Stripe customer:", e?.message);
+    // Don't fail registration if Stripe integration fails
   }
 }
 
@@ -1098,27 +1509,73 @@ const registerCreateSupportMailbox = async (
    ====================================================== */
 
 const registerTestSupportMailboxSchema = z.object({
-  client_email_id: z.number().int().positive(),
+  email_address: z.string().email(),
+  password: z.string().min(1),
+  imap: z.string().min(1),
+  imap_port: z.number().int().min(1),
+  smtp: z.string().min(1),
+  smtp_port: z.number().int().min(1),
 });
 
 const registerTestSupportMailbox = async (
-  _input: z.infer<typeof registerTestSupportMailboxSchema>,
-  _context: ActionAPIContext
+  input: z.infer<typeof registerTestSupportMailboxSchema>,
+  context: ActionAPIContext
 ) => {
-  // TODO: Implement actual IMAP/SMTP connection testing
-  // For now, this is a stub that simulates a successful connection
-  console.log("[actions.registerTestSupportMailbox] Testing mailbox connection (stub)");
-  await new Promise((r) => setTimeout(r, 500));
+  console.log("[actions.registerTestSupportMailbox] Testing mailbox connection for:", input.email_address);
   
-  // In production, you should:
-  // 1. Fetch the mailbox config from database using client_email_id
-  // 2. Attempt IMAP connection
-  // 3. Attempt SMTP connection
-  // 4. Return actual test results
-  
-  return { success: true, message: "Connection test passed (simulated)" };
+  try {
+    // Get authenticated user session
+    const ssr = createSSR({ request: context.request, cookies: context.cookies });
+    const { data: { session } } = await ssr.auth.getSession();
+    
+    if (!session?.access_token) {
+      return { success: false, message: "Unauthorized" };
+    }
+    
+    // Call backend API to test connections
+    const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
+    const response = await fetch(`${apiUrl}/emails/test-mailbox`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        email_address: input.email_address,
+        password: input.password,
+        imap: input.imap,
+        imap_port: input.imap_port,
+        smtp: input.smtp,
+        smtp_port: input.smtp_port,
+      }),
+    });
+    
+    const result = await response.json();
+    
+    if (!response.ok || !result.success) {
+      console.error("[actions.registerTestSupportMailbox] Backend test failed:", result);
+      return {
+        success: false,
+        message: result.message || 'Connection test failed',
+        details: result.details,
+        errors: result.errors,
+      };
+    }
+    
+    console.log("[actions.registerTestSupportMailbox] Backend test successful");
+    return {
+      success: true,
+      message: result.message,
+      details: result.details,
+    };
+  } catch (e: any) {
+    console.error("[actions.registerTestSupportMailbox] Unexpected error:", e);
+    return { 
+      success: false, 
+      message: "Connection test failed: " + (e?.message || "Unknown error") 
+    };
+  }
 };
-
 
 
 /* ----------------------- EXPORTS ----------------------- */
@@ -1181,6 +1638,20 @@ export const server = {
     accept: "form",
     input: deleteEmployeeSchema,
     handler: (input, context) => deleteEmployee(input, context),
+  }),
+
+  // Admin-only employee disable
+  disableEmployee: defineAction({
+    accept: "form",
+    input: disableEmployeeSchema,
+    handler: (input, context) => disableEmployee(input, context),
+  }),
+
+  // Admin-only employee enable
+  enableEmployee: defineAction({
+    accept: "form",
+    input: enableEmployeeSchema,
+    handler: (input, context) => enableEmployee(input, context),
   }),
 
   // Admin-only company update

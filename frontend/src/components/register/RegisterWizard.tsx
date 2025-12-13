@@ -21,6 +21,9 @@ import {
   AlertTriangle,
   UserPlus,
   Trash2,
+  CreditCard,
+  Check,
+  Zap,
 } from "lucide-react";
 
 // shadcn/ui
@@ -34,6 +37,9 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
+// Stripe payment form
+import StripePaymentForm from "./StripePaymentForm";
+
 type UserLite = { id: string; email: string };
 type Props = {
   initialStep?: number;
@@ -42,7 +48,7 @@ type Props = {
   currentUser: UserLite | null;
 };
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 6;
 
 /* =========================
    STEP 1: Account schema
@@ -294,6 +300,56 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
   /* ---- Step control ---- */
   const [step, setStep] = useState<number>(initialStep);
 
+  // Check for payment success on mount
+  React.useEffect(() => {
+    const handlePaymentReturn = async () => {
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const paymentStatus = urlParams.get('payment');
+        const sessionId = urlParams.get('session_id');
+        
+        if (paymentStatus === 'success') {
+          // Payment completed via redirect - complete subscription on backend
+          if (sessionId) {
+            try {
+              const { actions } = await import("astro:actions");
+              // We need to call the backend directly to complete subscription
+              const { createBrowserClient } = await import('@supabase/ssr');
+              const supabase = createBrowserClient(
+                import.meta.env.PUBLIC_SUPABASE_URL!,
+                import.meta.env.PUBLIC_SUPABASE_ANON_KEY!
+              );
+              
+              const { data: { session } } = await supabase.auth.getSession();
+              
+              if (session) {
+                const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
+                await fetch(`${apiUrl}/client/complete-subscription`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`,
+                  },
+                  body: JSON.stringify({ sessionId }),
+                  credentials: 'include',
+                });
+              }
+            } catch (e) {
+              console.error('[RegisterWizard] Failed to complete subscription:', e);
+            }
+          }
+          
+          // Payment completed successfully, go to completion step
+          setStep(7);
+          // Clean up URL
+          window.history.replaceState({}, '', '/register');
+        }
+      }
+    };
+    
+    handlePaymentReturn();
+  }, []);
+
   /* ---- Step 1 (Account) ---- */
   const [accountIdx, setAccountIdx] = useState<number>(0); // 0..3
   const [submittingAccount, setSubmittingAccount] = useState<boolean>(false);
@@ -451,7 +507,13 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
   };
 
   const skipCompanyOptional = () => {
-    setCompanyIdx((i) => Math.min(6, i + 1));
+    // If we're on the VAT step (6), proceed to create company
+    if (companyIdx === 6) {
+      createCompany();
+    } else {
+      // Otherwise just skip to next step
+      setCompanyIdx((i) => Math.min(6, i + 1));
+    }
   };
 
   const createCompany = async () => {
@@ -639,9 +701,14 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
       }
       setClientEmailId(createRes.data.client_email_id);
 
-      // 2) testen
+      // 2) Test connection with credentials directly
       const testRes = await actions.registerTestSupportMailbox({
-        client_email_id: createRes.data.client_email_id,
+        email_address: supportForm.getValues("email_address"),
+        password: supportForm.getValues("password"),
+        imap: supportForm.getValues("imap"),
+        imap_port: supportForm.getValues("imap_port"),
+        smtp: supportForm.getValues("smtp"),
+        smtp_port: supportForm.getValues("smtp_port"),
       });
       if (testRes?.data?.success) {
         setTestStatus({ ok: true, message: "Connection successful." });
@@ -725,12 +792,84 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
         alert(`Some invites failed: ${failedEmails}`);
       }
 
-      // Move to completion step
+      // Move to payment plan selection
       setStep(5);
     } catch (e: any) {
       alert(e?.message || "Unexpected error inviting team members");
     } finally {
       setSubmittingTeam(false);
+    }
+  };
+
+  /* ---- Step 5 (Payment Plan) ---- */
+  const [selectedPlan, setSelectedPlan] = useState<'free' | 'paid' | null>(null);
+
+  const plans = [
+    {
+      id: 'free' as const,
+      name: 'Free Tier',
+      price: '€0',
+      features: [
+        '1 user account',
+        'Send up to 50 emails/month',
+        'Basic support',
+        'Email management',
+      ],
+    },
+    {
+      id: 'paid' as const,
+      name: 'Pro Plan',
+      price: '€9.99',
+      priceNote: 'per user/month',
+      features: [
+        'Unlimited users',
+        'Unlimited emails',
+        'Priority support',
+        'Advanced analytics',
+        'Custom integrations',
+      ],
+    },
+  ];
+
+  const handlePlanSelection = (planId: 'free' | 'paid') => {
+    setSelectedPlan(planId);
+    if (planId === 'free') {
+      // Skip payment, go to completion
+      setStep(7);
+    } else {
+      // Go to payment details
+      setStep(6);
+    }
+  };
+
+  /* ---- Step 6 (Payment Details) ---- */
+  const [processingPayment, setProcessingPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+
+  // Stripe Price ID - should be set in environment variables
+  // For now, using a placeholder - replace with actual price ID from Stripe Dashboard
+  const STRIPE_PRICE_ID = import.meta.env.PUBLIC_STRIPE_PRICE_ID || 'price_placeholder';
+
+  const handlePaymentSuccess = () => {
+    // Payment completed successfully, move to completion
+    setStep(7);
+  };
+
+  const handlePaymentSubmit = async () => {
+    setProcessingPayment(true);
+    setPaymentError(null);
+    
+    try {
+      // TODO: Implement Stripe payment processing
+      // For now, just simulate success
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Move to completion
+      setStep(7);
+    } catch (e: any) {
+      setPaymentError(e?.message || "Payment failed");
+    } finally {
+      setProcessingPayment(false);
     }
   };
 
@@ -1424,8 +1563,104 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
         </Card>
       )}
 
+      {/* ---------- STEP 5: PAYMENT PLAN ---------- */}
+      {step === 5 && (
+        <Card className="w-full max-w-md shadow-lg">
+          <CardHeader>
+            <div className="flex items-center space-x-2 mb-2">
+              <CreditCard className="h-5 w-5" />
+              <CardTitle className="text-xl">Choose Your Plan</CardTitle>
+            </div>
+            <CardDescription>
+              Select the plan that best fits your needs. You can upgrade anytime.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {plans.map((plan) => (
+              <div
+                key={plan.id}
+                className={cn(
+                  "border rounded-lg p-4 cursor-pointer transition-all",
+                  selectedPlan === plan.id
+                    ? "border-primary bg-primary/5 ring-2 ring-primary"
+                    : "border-border hover:border-primary/50"
+                )}
+                onClick={() => setSelectedPlan(plan.id)}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h3 className="font-semibold text-lg">{plan.name}</h3>
+                    <div className="flex items-baseline gap-1 mt-1">
+                      <span className="text-2xl font-bold">{plan.price}</span>
+                      {plan.priceNote && (
+                        <span className="text-sm text-muted-foreground">{plan.priceNote}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div
+                    className={cn(
+                      "h-5 w-5 rounded-full border-2 flex items-center justify-center",
+                      selectedPlan === plan.id
+                        ? "border-primary bg-primary"
+                        : "border-muted-foreground"
+                    )}
+                  >
+                    {selectedPlan === plan.id && <Check className="h-3 w-3 text-white" />}
+                  </div>
+                </div>
+                <ul className="space-y-2">
+                  {plan.features.map((feature, index) => (
+                    <li key={index} className="flex items-center text-sm">
+                      <Check className="h-4 w-4 mr-2 text-primary flex-shrink-0" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+
+            <div className="flex items-center justify-between pt-4">
+              <Button variant="outline" onClick={() => setStep(4)}>
+                <ChevronLeft className="mr-2 h-4 w-4" />
+                Back
+              </Button>
+              <Button
+                onClick={() => selectedPlan && handlePlanSelection(selectedPlan)}
+                disabled={!selectedPlan}
+              >
+                Continue
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ---------- STEP 6: PAYMENT DETAILS ---------- */}
+      {step === 6 && (
+        <Card className="w-full max-w-md shadow-lg">
+          <CardHeader>
+            <div className="flex items-center space-x-2 mb-2">
+              <CreditCard className="h-5 w-5" />
+              <CardTitle className="text-xl">Payment Details</CardTitle>
+            </div>
+            <CardDescription>
+              Enter your payment information to complete the subscription.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <StripePaymentForm
+              priceId={STRIPE_PRICE_ID}
+              quantity={teamMembers.length + 1}
+              onSuccess={handlePaymentSuccess}
+              onBack={() => setStep(5)}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {/* ---------- COMPLETION ---------- */}
-      {step > 4 && (
+      {step > 6 && (
         <Card className="w-full max-w-md shadow-lg">
           <CardHeader className="text-center space-y-4">
             <div className="mx-auto h-16 w-16 rounded-full bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 flex items-center justify-center">

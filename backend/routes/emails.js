@@ -217,6 +217,65 @@ router.post('/sendMail',
 
       console.log('[EMAILS] Sending mail to customer:', customerId, 'using client SMTP:', client_id);
 
+      // Check if client is on free tier and has reached limits
+      const { data: clientData, error: clientError } = await supabase
+        .from('clients')
+        .select('subscription_tier, auto_assign_employee_on_send')
+        .eq('id', client_id)
+        .single();
+
+      if (clientError) {
+        console.error('[EMAILS] Error fetching client data:', clientError.message);
+      } else if (clientData.subscription_tier === 'free' || !clientData.subscription_tier) {
+        // Check user limit for free tier
+        const { count: activeEmployeeCount } = await supabase
+          .from('employees')
+          .select('*', { count: 'exact', head: true })
+          .eq('client_id', client_id)
+          .or('disabled.is.null,disabled.eq.false');
+
+        if (activeEmployeeCount && activeEmployeeCount > 1) {
+          console.warn('[EMAILS] Free tier user limit exceeded:', activeEmployeeCount, '/ 1');
+          return res.status(403).json({
+            success: false,
+            error: 'User limit exceeded',
+            message: 'You have more than 1 active user on the Free plan. Please upgrade to Pro or disable users to continue sending emails.',
+            limitReached: true,
+            limitType: 'users'
+          });
+        }
+
+        // Check email limit for free tier
+        const now = new Date();
+        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        
+        const { data: customers } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('client_id', client_id);
+
+        const customerIds = (customers || []).map(c => c.id);
+        
+        if (customerIds.length > 0) {
+          const { count: emailCount } = await supabase
+            .from('sent-mail')
+            .select('*', { count: 'exact', head: true })
+            .in('customer_id', customerIds)
+            .gte('send_at', firstDayOfMonth.toISOString());
+
+          if (emailCount && emailCount >= 50) {
+            console.warn('[EMAILS] Free tier email limit reached:', emailCount, '/ 50');
+            return res.status(403).json({
+              success: false,
+              error: 'Email limit reached',
+              message: 'You have reached your monthly email limit of 50. Please upgrade to Pro plan to send unlimited emails.',
+              limitReached: true,
+              limitType: 'emails'
+            });
+          }
+        }
+      }
+
       // Validate recipient email
       if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
         return res.status(400).json({ 
@@ -225,17 +284,7 @@ router.post('/sendMail',
         });
       }
 
-      const {data: settings, error: settingsFetchError} = await supabase
-        .from('clients')
-        .select('auto_assign_employee_on_send')
-        .eq('id', client_id)
-        .single();
-      
-      if (settingsFetchError) {
-        console.error('[Emails] Error fetching the clients send settings, employee will not be assigned');
-      }
-
-      const autoAssign = settings.auto_assign_employee_on_send;
+      const autoAssign = clientData?.auto_assign_employee_on_send;
       console.log('[Emails] Auto assign employee:', autoAssign);
 
       if(autoAssign) {
@@ -698,4 +747,139 @@ router.post('/getSignedUrl',
     }
   }
 );
+
+/**
+ * Test mailbox IMAP/SMTP connection
+ * POST /api/emails/test-mailbox
+ * 
+ * Authentication: Required
+ * Body: { email_address, password, imap, imap_port, smtp, smtp_port }
+ */
+router.post('/test-mailbox',
+  authenticate,
+  async (req, res) => {
+    try {
+      const { email_address, password, imap, imap_port, smtp, smtp_port } = req.body;
+
+      if (!email_address || !password || !imap || !imap_port || !smtp || !smtp_port) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Missing required fields' 
+        });
+      }
+
+      console.log('[EMAILS] Testing mailbox connection for:', email_address);
+
+      const results = {
+        imap: { success: false, message: '' },
+        smtp: { success: false, message: '' },
+      };
+
+      // Test IMAP connection
+      try {
+        const Imap = require('imap');
+        
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            if (imap) imap.end();
+            reject(new Error('IMAP connection timeout'));
+          }, 10000);
+          
+          const imapConnection = new Imap({
+            user: email_address,
+            password: password,
+            host: imap,
+            port: imap_port,
+            tls: imap_port === 993,
+            tlsOptions: { rejectUnauthorized: false },
+            connTimeout: 10000,
+            authTimeout: 10000,
+          });
+          
+          imapConnection.once('ready', () => {
+            clearTimeout(timeout);
+            console.log('[EMAILS] IMAP connection successful');
+            results.imap = { success: true, message: 'IMAP connection successful' };
+            imapConnection.end();
+            resolve();
+          });
+          
+          imapConnection.once('error', (err) => {
+            clearTimeout(timeout);
+            console.error('[EMAILS] IMAP error:', err.message);
+            results.imap = { success: false, message: err.message };
+            reject(err);
+          });
+          
+          imapConnection.connect();
+        });
+      } catch (imapErr) {
+        console.error('[EMAILS] IMAP test failed:', imapErr.message);
+        results.imap = { 
+          success: false, 
+          message: imapErr.message || 'IMAP connection failed' 
+        };
+      }
+
+      // Test SMTP connection
+      try {
+        const transporter = nodemailer.createTransport({
+          host: smtp,
+          port: smtp_port,
+          secure: smtp_port === 465,
+          auth: {
+            user: email_address,
+            pass: password,
+          },
+          tls: {
+            rejectUnauthorized: false,
+          },
+          connectionTimeout: 10000,
+          greetingTimeout: 10000,
+        });
+        
+        await transporter.verify();
+        console.log('[EMAILS] SMTP connection successful');
+        results.smtp = { success: true, message: 'SMTP connection successful' };
+        
+        transporter.close();
+      } catch (smtpErr) {
+        console.error('[EMAILS] SMTP test failed:', smtpErr.message);
+        results.smtp = { 
+          success: false, 
+          message: smtpErr.message || 'SMTP connection failed' 
+        };
+      }
+
+      // Return comprehensive results
+      const allSuccess = results.imap.success && results.smtp.success;
+      
+      if (!allSuccess) {
+        const failedServices = [];
+        if (!results.imap.success) failedServices.push(`IMAP: ${results.imap.message}`);
+        if (!results.smtp.success) failedServices.push(`SMTP: ${results.smtp.message}`);
+        
+        return res.status(400).json({
+          success: false,
+          message: 'Connection test failed',
+          details: results,
+          errors: failedServices,
+        });
+      }
+      
+      return res.json({
+        success: true,
+        message: 'All connections tested successfully',
+        details: results,
+      });
+    } catch (err) {
+      console.error('[EMAILS] Test mailbox error:', err.message);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Connection test failed: ' + err.message 
+      });
+    }
+  }
+);
+
 module.exports = router;

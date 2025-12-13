@@ -4,6 +4,7 @@ import { createClient } from "../lib/supabase.ts";
 
 // Sidebar Shell
 import AdminShell from "@/components/AdminShell";
+import LimitBanner from "@/components/LimitBanner";
 
 // Create Supabase client with server-side rendering support
 const supabase = createClient({
@@ -104,14 +105,18 @@ const sidebarUser = {
 
 // Team Eintrag
 let firstTeam = null as null | { name: string; plan?: string | null };
+let subscriptionTier = 'free';
 try {
   const { data: clientRow } = await supabase
     .from("clients")
-    .select("id, name")
+    .select("id, name, subscription_tier")
     .eq("id", me.client_id)
     .single();
   if (clientRow?.name) {
     firstTeam = { name: clientRow.name, plan: "Enterprise" };
+  }
+  if (clientRow?.subscription_tier) {
+    subscriptionTier = clientRow.subscription_tier;
   }
 } catch {}
 ---
@@ -127,6 +132,9 @@ try {
     currentPath="/dashboard"
   >
     <div class="space-y-6">
+      <!-- Limit Banner -->
+      <LimitBanner client:load tier={subscriptionTier} />
+      
       <!-- Header Section -->
       <div class="flex justify-between items-center">
         <h1 class="text-3xl font-bold">Dashboard</h1>
