@@ -400,7 +400,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
         <button
           type="button"
           onClick={handleToggleCollapse}
-          className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors"
+          className="inline-flex cursor-pointer items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors"
           title={isCollapsed ? 'Expand reply area' : 'Collapse reply area'}
           aria-label={isCollapsed ? 'Expand reply area' : 'Collapse reply area'}
           aria-expanded={!isCollapsed}
@@ -450,7 +450,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isSending}
-                className="absolute bottom-2 left-2 h-8 w-8 rounded-full bg-primary/70 hover:bg-primary text-primary-foreground flex items-center justify-center transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="absolute cursor-pointer bottom-2 left-2 h-8 w-8 rounded-full bg-primary/70 hover:bg-primary text-primary-foreground flex items-center justify-center transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label="Add attachments"
                 title="Attach files"
               >
@@ -484,7 +484,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
             <Button
               onClick={handleSend}
               disabled={isSending}
-              className="shrink-0"
+              className="shrink-0 cursor-pointer"
               aria-label="Send reply"
             >
               {isSending ? (
