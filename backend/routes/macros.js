@@ -145,7 +145,7 @@ router.post('/createMacro',
 
       if (attachments.length > 0) {
         console.log('[MACROS] Saving attachments');
-        storeMacroAttachmentsInDB(attachments, client_id, data.id, data);
+        storeMacroAttachmentsInDB(attachments, client_id, data.id, null, null);
       } else {
         console.log('[MACROS] No attachments, continue')
       }
@@ -202,16 +202,22 @@ router.post('/createGroup',
  * Authentication: Required
  * Authorization: Macro must belong to user's client
  */
-router.put('/updateMacro',
+router.post('/updateMacro',
   authenticate,
+  upload.array('attachments'),
   validateId('macroId'),
   sanitizeText('title', { required: false, maxLength: 200 }),
   sanitizeText('text', { required: false, maxLength: 5000 }),
   async (req, res) => {
     try {
       const macroId = req.sanitized.macroId;
+      const deletedAttachments = JSON.parse(req.body.deletedAttachments);
+      const oldAttachments = JSON.parse(req.body.oldAttachments);
+      const attachments = req.files || [];
 
       console.log('[MACROS] Updating macro:', macroId);
+
+      console.log(deletedAttachments, oldAttachments, attachments);
 
       // Build update object with only provided fields
       const updates = {};
@@ -234,9 +240,15 @@ router.put('/updateMacro',
         console.error('[MACROS] Update failed:', error.message);
         return res.status(500).json({ error: 'Datenbankfehler' });
       }
+      result = { success: true, data: data };
+
+      if (attachments.length > 0 || oldAttachments.length > 0 || deletedAttachments > 0) {
+        const newAttachments = storeMacroAttachmentsInDB(attachments, req.user.client_id, data.id, deletedAttachments, oldAttachments);
+        result.attachments = newAttachments;
+      }
 
       console.log('[MACROS] Macro updated successfully');
-      res.json({ success: true, data: data });
+      res.json(result);
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
       res.status(500).json({ error: 'Serverfehler' });
@@ -260,6 +272,7 @@ router.delete('/deleteMacro',
 
       console.log('[MACROS] Deleting macro:', macroId);
 
+      //deleting attachments from database
       const { data: oldAttachments, error: oldAttachmentsError } = await supabase
         .from('macros')
         .select('attachments')
@@ -271,7 +284,7 @@ router.delete('/deleteMacro',
         return res.status(500).json({ error: 'Datenbankfehler' });
       }
       
-      if (oldAttachments.attachments.length > 0) {
+      if (oldAttachments.attachments != null && oldAttachments.attachments.length > 0) {
         const response = await deleteAttachmentsFromStorage(oldAttachments.attachments);
         if (!response.success) {
           console.error('[MACROS] Delete failed:', response.message);

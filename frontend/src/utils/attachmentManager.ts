@@ -21,7 +21,7 @@ import type { EmailAttachment, FileUploadState } from '@/types/ticket.types';
  */
 export async function getAttachmentSignedUrl(
   path: string,
-  location: 'mail-attachments' | 'sent-attachments'
+  location: 'mail-attachments' | 'sent-attachments' | 'macro-attachments'
 ): Promise<string> {
   if (!path || !path.trim()) {
     throw new Error('Attachment path is required');

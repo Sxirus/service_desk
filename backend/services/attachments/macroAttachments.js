@@ -2,12 +2,18 @@ const supabase = require('../../config/supabase');
 const crypto = require('node:crypto');
 const {convertMulterFilesToNodemailerAttachments} = require('./attachmenthandler');
 
-async function storeMacroAttachmentsInDB(attachments, client_id, macro_id) {
+async function storeMacroAttachmentsInDB(attachments, client_id, macro_id, deletedAttachments, oldAttachments) {
   console.log("[Attachment-Handler-Macro] Saving attachments", attachments.length);
   const formatedAttachments = convertMulterFilesToNodemailerAttachments(attachments);
   const attachmentData = [];
 
-  console.log(formatedAttachments);
+  oldAttachments.forEach(att => {
+    attachmentData.push(att);
+  });
+
+  if (deletedAttachments != null && deletedAttachments.length > 0) {
+    deleteAttachmentsFromStorage(deletedAttachments);
+  }
 
   for(const att of formatedAttachments) {
     try {
@@ -58,20 +64,23 @@ async function storeMacroAttachmentsInDB(attachments, client_id, macro_id) {
     }
   }
   try {
-    const {error: insertError} = await supabase
+    const {data: returnData, error: insertError} = await supabase
       .from('macros')
       .update({attachments: attachmentData})
-      .eq('id', macro_id);
+      .eq('id', macro_id)
+      .select()
+      .single()
 
     if (insertError) {
       console.error('[Attachment-Handler-Macro] Insert-Fehler:', insertError);
     }
+    return returnData;
   } catch (err) {
     console.log("[Attachment-Handler-Macro] Error saving in the Database", err);
   }
 }
 
-async function deleteAttachmentsFromStorage(attachments) {xw
+async function deleteAttachmentsFromStorage(attachments) {
 
   try {
     // Extrahiere nur die object_paths
