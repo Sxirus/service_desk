@@ -183,6 +183,53 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({ url, filename, onClose }) =
 };
 
 /**
+ * Checks if HTML content has significant HTML tags beyond basic formatting
+ * Uses regex patterns to work in both server and client environments
+ * Requires substantial HTML content to avoid false positives
+ */
+const hasSignificantHtml = (htmlContent: string | undefined): boolean => {
+  if (!htmlContent) return false;
+  
+  // Remove simple wrappers like <div dir="ltr"><br></div>, <p><br></p>, etc.
+  const cleanedHtml = htmlContent
+    .replace(/<div[^>]*>\s*<br\s*\/?>\s*<\/div>/gi, '')
+    .replace(/<p[^>]*>\s*<br\s*\/?>\s*<\/p>/gi, '')
+    .replace(/<br\s*\/?>/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  // If there's very little content left, it's not significant
+  if (cleanedHtml.length < 50) return false;
+  
+  // Check for tables (very significant)
+  if (/<table[>\s]/i.test(htmlContent)) return true;
+  
+  // Check for images (very significant)
+  if (/<img[>\s]/i.test(htmlContent)) return true;
+  
+  // Check for headings (significant)
+  if (/<h[1-6][>\s]/i.test(htmlContent)) return true;
+  
+  // Check for multiple divs or spans with styling (indicates complex layout)
+  const styledDivSpanCount = (htmlContent.match(/<(div|span)[^>]+(style|class)=/gi) || []).length;
+  if (styledDivSpanCount >= 3) return true;
+  
+  // Check for font tags (old-school HTML emails)
+  const fontTagCount = (htmlContent.match(/<font[>\s]/gi) || []).length;
+  if (fontTagCount >= 2) return true;
+  
+  // Check for complex lists or blockquotes
+  if (/<(ul|ol)[>\s].*<li/is.test(htmlContent) && /<li[^>]*>/gi.test(htmlContent)) {
+    const listItems = (htmlContent.match(/<li[^>]*>/gi) || []).length;
+    if (listItems >= 3) return true;
+  }
+  
+  if (/<blockquote[>\s]/i.test(htmlContent)) return true;
+  
+  return false;
+};
+
+/**
  * Individual email message component
  */
 interface EmailMessageProps {
@@ -193,6 +240,10 @@ interface EmailMessageProps {
 
 const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPreview }) => {
   const isOutgoing = email.type === 'sent';
+  const [showHtml, setShowHtml] = useState(false);
+  
+  // Check if this email has significant HTML (only for incoming emails)
+  const hasHtml = email.type === 'incoming' && hasSignificantHtml(email.html_content);
 
   return (
     <article 
@@ -256,6 +307,60 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
             })
           }}
         />
+
+        {/* HTML View Toggle Button - Only show if email has significant HTML */}
+        {hasHtml && (
+          <div className="mt-3">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowHtml(!showHtml)}
+              className="text-xs"
+              aria-expanded={showHtml}
+              aria-controls={`html-content-${email.id}`}
+            >
+              <>
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  className={`h-3 w-3 mr-1 transition-transform ${showHtml ? 'rotate-90' : ''}`}
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor" 
+                  strokeWidth="2"
+                  aria-hidden="true"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
+                </svg>
+                {showHtml ? 'Hide' : 'Show'} HTML Version
+              </>
+            </Button>
+            
+            {/* HTML Content Display */}
+            {showHtml && email.type === 'incoming' && email.html_content && (
+              <div 
+                id={`html-content-${email.id}`}
+                className="mt-3 p-4 border rounded-md bg-white overflow-auto max-h-96"
+                role="region"
+                aria-label="HTML version of email"
+                dangerouslySetInnerHTML={{ 
+                  __html: DOMPurify.sanitize(email.html_content, {
+                    ALLOWED_TAGS: [
+                      'b', 'i', 'em', 'strong', 'a', 'br', 'p', 'ul', 'ol', 'li',
+                      'div', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+                      'table', 'thead', 'tbody', 'tr', 'td', 'th',
+                      'img', 'blockquote', 'pre', 'code', 'hr', 'sup', 'sub'
+                    ],
+                    ALLOWED_ATTR: [
+                      'href', 'title', 'target', 'src', 'alt', 'width', 'height',
+                      'style', 'class', 'colspan', 'rowspan', 'align', 'valign'
+                    ],
+                    ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
+                  })
+                }}
+              />
+            )}
+          </div>
+        )}
 
         {/* Attachments */}
         {email.has_attachments && email.attachments.length > 0 && (
