@@ -1,0 +1,67 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import InboxManagementPanel from "../../components/InboxManagementPanel";
+import AdminShell from "../../components/AdminShell";
+import { createClient } from "../../lib/supabase";
+import { getCompletePageContext } from "../../lib/auth-helpers";
+
+// Initialize Supabase client
+const supabase = createClient({
+  request: Astro.request,
+  cookies: Astro.cookies
+});
+
+// Get authentication context
+const pageContext = await getCompletePageContext(supabase, Astro.cookies);
+
+if (!pageContext) {
+  return Astro.redirect("/");
+}
+
+const { authContext, sidebarData } = pageContext;
+
+// Verify admin role
+if (!authContext.isAdmin) {
+  return Astro.redirect("/dashboard");
+}
+
+// Get session for API calls
+const { data: { session } } = await supabase.auth.getSession();
+if (!session) {
+  return Astro.redirect("/");
+}
+
+// Fetch groups using Supabase directly
+let groups: Array<{ id: number; name: string }> = [];
+try {
+  const { data: groupsData, error: groupsError } = await supabase
+    .from("employee_groups")
+    .select("id, name")
+    .eq("client_id", authContext.employee.client_id)
+    .order("name");
+
+  if (groupsError) {
+    console.error('[inboxes] Failed to load groups:', groupsError);
+  } else {
+    groups = (groupsData || []).map(g => ({ id: Number(g.id), name: g.name }));
+    console.log('[inboxes] Loaded', groups.length, 'groups');
+  }
+} catch (error) {
+  console.error('Failed to load groups:', error);
+}
+---
+
+<BaseLayout title="Inbox Management">
+  <AdminShell
+    client:load
+    user={sidebarData.user}
+    firstTeam={sidebarData.team ?? undefined}
+    crumbParentLabel="Administration"
+    crumbParentHref="/manage"
+    crumbCurrent="Inbox Management"
+    isAdmin={authContext.isAdmin}
+    currentPath="/manage/inboxes"
+  >
+    <InboxManagementPanel client:load groups={groups} />
+  </AdminShell>
+</BaseLayout>

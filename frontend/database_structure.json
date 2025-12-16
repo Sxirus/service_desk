@@ -645,17 +645,6 @@
             "updatable"
           ],
           "default_value": "false"
-        },
-        {
-          "name": "processing_status",
-          "data_type": "text",
-          "format": "text",
-          "options": [
-            "nullable",
-            "updatable"
-          ],
-          "default_value": "'new'::text",
-          "comment": "Processing status used for AI Response generation"
         }
       ],
       "primary_keys": [

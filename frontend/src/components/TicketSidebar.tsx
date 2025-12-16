@@ -116,6 +116,67 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
     rootMargin: '100px'
   });
 
+  const [groups, setGroups] = useState<Array<{id: number; name: string; description: string | null}>>([]);
+  const [assignedName, setAssignedName] = useState<string | null>(null);
+  const [combinedAssignments, setCombinedAssignments] = useState<Array<{title: string; text: string; type: 'employee' | 'group'}>>([]);
+
+  // Load groups on mount
+  useEffect(() => {
+    const loadGroups = async () => {
+      try {
+        const response = await apiClient.get('/groups/getGroups');
+        if (response.success) {
+          setGroups(response.data || []);
+        }
+      } catch (error) {
+        console.error('[TicketSidebar] Failed to load groups:', error);
+      }
+    };
+    
+    loadGroups();
+  }, []);
+
+  // Combine employees and groups into single list, determine assigned name
+  useEffect(() => {
+    // Create combined list with type indicators
+    const employeeItems = employees.map(emp => ({
+      title: `👤 ${emp.title}`,
+      text: `employee:${emp.text}`,
+      type: 'employee' as const
+    }));
+
+    const groupItems = groups.map(group => ({
+      title: `👥 ${group.name}`,
+      text: `group:${group.id}`,
+      type: 'group' as const
+    }));
+
+    setCombinedAssignments([...groupItems, ...employeeItems]);
+
+    // Determine what is currently assigned
+    // Priority: group_id > employee_id
+    if (customer.group_id) {
+      // Only update if we have groups loaded
+      if (groups.length > 0) {
+        const assignedGroup = groups.find(g => g.id === customer.group_id);
+        if (assignedGroup) {
+          setAssignedName(`👥 ${assignedGroup.name}`);
+          console.log('[TicketSidebar] Assigned group found:', assignedGroup.name);
+        } else {
+          console.warn('[TicketSidebar] Group ID', customer.group_id, 'not found in groups list');
+        }
+      } else {
+        console.log('[TicketSidebar] Groups not yet loaded, waiting...');
+      }
+    } else if (assignedEmployeeName) {
+      setAssignedName(`👤 ${assignedEmployeeName}`);
+      console.log('[TicketSidebar] Assigned employee found:', assignedEmployeeName);
+    } else {
+      setAssignedName(null);
+      console.log('[TicketSidebar] No assignment found');
+    }
+  }, [employees, groups, customer.group_id, assignedEmployeeName]);
+
   /**
    * Adapt types for legacy components that expect numeric IDs
    * TODO: Update CustomerInfo and ShopifyOrders to use string IDs
@@ -135,42 +196,71 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
   };
 
   /**
-   * Handle employee assignment event from child component
+   * Handle assignment event from child component (employee or group)
    */
   useEffect(() => {
     const handleAssignment = async (e: Event) => {
       const customEvent = e as CustomEvent;
-      const employeeId = customEvent?.detail?.text;
+      const assignmentValue = customEvent?.detail?.text;
 
-      if (employeeId === undefined || employeeId === null) {
-        console.log('[TicketSidebar] Missing employeeId in assignment event');
+      if (assignmentValue === undefined || assignmentValue === null) {
+        console.log('[TicketSidebar] Missing assignment value in event');
         return;
       }
 
-      console.log('[TicketSidebar] Assigning employee:', employeeId, 'to customer:', customer.id);
+      // Parse the assignment value to determine type
+      const [type, id] = assignmentValue.split(':');
       
-      try {
-        const response = await apiClient.post('/client/assignEmployee', {
-          employee_id: employeeId,
-          customer_id: customer.id
-        });
+      if (type === 'employee') {
+        console.log('[TicketSidebar] Assigning employee:', id, 'to customer:', customer.id);
         
-        if (response.success) {
-          console.log('[TicketSidebar] Employee assigned successfully');
-          // Optional: Show success notification
-        } else {
-          console.error('[TicketSidebar] Assignment failed:', response.error);
-          // Optional: Show error notification and revert UI
+        try {
+          const response = await apiClient.post('/client/assignEmployee', {
+            employee_id: id,
+            customer_id: customer.id
+          });
+          
+          if (response.success) {
+            console.log('[TicketSidebar] Employee assigned successfully');
+            // Update local state
+            const assignedEmp = employees.find(e => e.text === id);
+            if (assignedEmp) {
+              setAssignedName(`👤 ${assignedEmp.title}`);
+            }
+          } else {
+            console.error('[TicketSidebar] Employee assignment failed:', response.error);
+          }
+        } catch (error) {
+          console.error('[TicketSidebar] Failed to assign employee:', error);
         }
-      } catch (error) {
-        console.error('[TicketSidebar] Failed to assign employee:', error);
-        // Optional: Show error notification and revert UI
+      } else if (type === 'group') {
+        console.log('[TicketSidebar] Assigning group:', id, 'to customer:', customer.id);
+        
+        try {
+          const response = await apiClient.post('/client/assignGroup', {
+            group_id: id,
+            customer_id: customer.id
+          });
+          
+          if (response.success) {
+            console.log('[TicketSidebar] Group assigned successfully');
+            // Update local state
+            const assignedGroup = groups.find(g => g.id === parseInt(id));
+            if (assignedGroup) {
+              setAssignedName(`👥 ${assignedGroup.name}`);
+            }
+          } else {
+            console.error('[TicketSidebar] Group assignment failed:', response.error);
+          }
+        } catch (error) {
+          console.error('[TicketSidebar] Failed to assign group:', error);
+        }
       }
     };
 
     window.addEventListener('Zuweisung', handleAssignment);
     return () => window.removeEventListener('Zuweisung', handleAssignment);
-  }, [customer.id]);
+  }, [customer.id, groups, employees]);
 
   return (
     <aside 
@@ -221,14 +311,14 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
           />
         </SidebarCard>
 
-        {/* Employee Assignment */}
-        <SidebarCard title="Assign Employee" id="assign-employee">
+        {/* Assignment (Employee or Group) */}
+        <SidebarCard title="Assign To" id="assign-to">
           <Assign
-            items={employees}
-            placeholder="Search employee..."
+            items={combinedAssignments}
+            placeholder="Search employee or group..."
             eventName="Zuweisung"
             customerId={customer.id}
-            assigned={assignedEmployeeName}
+            assigned={assignedName}
           />
         </SidebarCard>
       </div>

@@ -36,7 +36,6 @@ export interface IncomingEmail extends BaseEmail {
   html_content?: string;
   email_address: string;
   read: boolean;
-  processing_status: string;
   received_by?: string;
   to_email_address?: string;
 }
@@ -62,6 +61,7 @@ export interface Customer {
   name: string;
   client_id: string;
   employee_id: string | null;
+  group_id?: number | null;
 }
 
 /**

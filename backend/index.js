@@ -54,6 +54,10 @@ app.use('/api/shopify', require('./routes/shopify'));
 
 app.use('/api/analytics', require('./routes/analytics'));
 
+app.use('/api/groups', require('./routes/groups'));
+
+app.use('/api/inboxes', require('./routes/inboxes'));
+
 // Global error handling middleware
 // This catches any unhandled errors from routes and provides consistent error responses
 app.use((err, req, res, next) => {

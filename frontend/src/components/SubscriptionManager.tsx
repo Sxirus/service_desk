@@ -358,7 +358,7 @@ export default function SubscriptionManager() {
                 </p>
                 <Button 
                   onClick={startUpgrade}
-                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                  className="bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
                 >
                   <Sparkles className="mr-2 h-4 w-4" />
                   Upgrade to Pro Plan
@@ -459,27 +459,27 @@ export default function SubscriptionManager() {
           <CardContent>
             <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <li className="flex items-center text-sm">
-                <Check className="h-4 w-4 mr-2 text-primary flex-shrink-0" />
+                <Check className="h-4 w-4 mr-2 text-primary shrink-0" />
                 Unlimited users
               </li>
               <li className="flex items-center text-sm">
-                <Check className="h-4 w-4 mr-2 text-primary flex-shrink-0" />
+                <Check className="h-4 w-4 mr-2 text-primary shrink-0" />
                 Unlimited emails
               </li>
               <li className="flex items-center text-sm">
-                <Check className="h-4 w-4 mr-2 text-primary flex-shrink-0" />
+                <Check className="h-4 w-4 mr-2 text-primary shrink-0" />
                 Priority support
               </li>
               <li className="flex items-center text-sm">
-                <Check className="h-4 w-4 mr-2 text-primary flex-shrink-0" />
+                <Check className="h-4 w-4 mr-2 text-primary shrink-0" />
                 Advanced analytics
               </li>
               <li className="flex items-center text-sm">
-                <Check className="h-4 w-4 mr-2 text-primary flex-shrink-0" />
+                <Check className="h-4 w-4 mr-2 text-primary shrink-0" />
                 Custom integrations
               </li>
               <li className="flex items-center text-sm">
-                <Check className="h-4 w-4 mr-2 text-primary flex-shrink-0" />
+                <Check className="h-4 w-4 mr-2 text-primary shrink-0" />
                 Team collaboration
               </li>
             </ul>

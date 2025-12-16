@@ -31,6 +31,16 @@ export function Assign({
   const placeholderClass = isAssigned ? `${placeholderStyleAssigned}` : "placeholder-gray-400";
   const [placeholderClassState, setPlaceholderClassState] = useState(placeholderClass);
 
+  // Update placeholder when assigned prop changes
+  useEffect(() => {
+    if (assigned != null) {
+      setPlaceholderState(assigned);
+      setPlaceholderClassState(placeholderStyleAssigned);
+    } else {
+      setPlaceholderState(placeholder);
+      setPlaceholderClassState("placeholder-gray-400");
+    }
+  }, [assigned, placeholder]);
     
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);

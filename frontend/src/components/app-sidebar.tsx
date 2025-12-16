@@ -14,6 +14,7 @@ import {
   SquareTerminal,
   Users,
   Home,
+  Inbox,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -39,11 +40,18 @@ type FirstTeamOverride = {
   plan?: string | null
 }
 
+type InboxType = {
+  id: number
+  name: string
+  description?: string | null
+}
+
 type Props = React.ComponentProps<typeof Sidebar> & {
   userOverride?: UserOverride
   firstTeamOverride?: FirstTeamOverride
   isAdmin?: boolean
   currentPath?: string
+  accessibleInboxes?: InboxType[]
 }
 
 export function AppSidebar({ 
@@ -51,6 +59,7 @@ export function AppSidebar({
   firstTeamOverride, 
   isAdmin = false,
   currentPath = "/",
+  accessibleInboxes = [],
   ...props 
 }: Props) {
   // Userdaten befüllen
@@ -71,16 +80,23 @@ export function AppSidebar({
 
   // Navigation Items basierend auf Rolle und aktueller Seite
   const getNavItems = () => {
+    // Build inbox items array with Dashboard, All Mails, and accessible inboxes
+    const inboxItems = [
+      { title: "Dashboard", url: "/dashboard" },
+      { title: 'All Mails', url: '/mail_list' },
+      ...accessibleInboxes.map(inbox => ({
+        title: inbox.name,
+        url: `/inboxes/${inbox.id}`
+      }))
+    ];
+
     const baseItems = [
       {
-        title: "Service Desk",
+        title: "Inbox",
         url: "/",
         icon: Home,
-        isActive: currentPath === "/" || currentPath === "/dashboard" || currentPath == '/mail_list',
-        items: [
-          { title: "Dashboard", url: "/dashboard" },
-          { title: 'All Mails', url: '/mail_list' },
-        ],
+        isActive: currentPath === "/" || currentPath === "/dashboard" || currentPath === '/mail_list' || currentPath.startsWith("/inboxes"),
+        items: inboxItems,
       },
     ];
 
@@ -115,6 +131,10 @@ export function AppSidebar({
           {
             title: "Analytics",
             url: "/manage/analytics"
+          },
+          {
+            title: "Inboxes",
+            url: "/manage/inboxes"
           },
           {
             title: "Subscription",

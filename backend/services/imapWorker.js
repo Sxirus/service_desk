@@ -16,17 +16,17 @@ const pollingIntervals = new Map();
  * @param {Object} config - Email account configuration
  */
 async function startImapWorker({ email, password, imapHost, imapPort, clientId }) {
-    console.log(`[${email}] Starting time-cutoff polling worker (120s interval)`);
+    console.log(`[${email}] Starting time-cutoff polling worker (5min interval)`);
     
     const confirmation = await getConfirmation(clientId);
     
     // Execute first poll immediately
     await pollNewEmailsSinceLast({ email, password, imapHost, imapPort, clientId }, confirmation);
     
-    // Set up polling interval (120 seconds = 2 minutes)
+    // Set up polling interval (5 minutes = 300000 ms)
     const interval = setInterval(async () => {
         await pollNewEmailsSinceLast({ email, password, imapHost, imapPort, clientId }, confirmation);
-    }, 120000);
+    }, 300000);
     
     pollingIntervals.set(email, interval);
 }

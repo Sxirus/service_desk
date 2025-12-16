@@ -26,6 +26,7 @@ import type { User } from "@/components/datatable/columns";
 import ClientUsersTable from "@/components/datatable/ClientUsersTable";
 import CreateUserDialog from "@/components/UserDialog";
 import AdminShell from "@/components/AdminShell";
+import { GroupManagementPanel } from "@/components/GroupManagementPanel";
 
 // Initialize Supabase client with request context
 const supabase = createClient({ 
@@ -200,6 +201,12 @@ console.log("[user-management] Table data prepared:", {
   rowCount: tableData.length
 });
 
+// Transform employees for group management
+const employeesForGroups = ((employees as Employee[]) ?? []).map(emp => ({
+  id: emp.id,
+  name: emp.name
+}));
+
 console.log("[user-management] Page setup complete, rendering");
 ---
 
@@ -225,7 +232,7 @@ console.log("[user-management] Page setup complete, rendering");
         </div>
         
         <!-- Create User Dialog Button -->
-        <div class="flex-shrink-0">
+        <div class="shrink-0">
           <CreateUserDialog 
             client:only="react" 
             roles={roleRows ?? []} 
@@ -240,6 +247,16 @@ console.log("[user-management] Page setup complete, rendering");
             client:only="react" 
             data={tableData} 
             roles={roleRows ?? []} 
+          />
+        </div>
+      </div>
+
+      <!-- Employee Groups Section -->
+      <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+        <div class="p-6">
+          <GroupManagementPanel
+            client:only="react"
+            employees={employeesForGroups}
           />
         </div>
       </div>
