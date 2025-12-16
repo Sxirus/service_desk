@@ -23,6 +23,7 @@ import { ShopifyOrders } from './ShopifyOrders';
 import { CustomerInfo } from './CustomerInfo';
 import type { TicketSidebarProps } from '@/types/ticket.types';
 import type { ShopifyClientData } from '@/types/shopify.types';
+import { apiClient } from '@/utils/api';
 
 /**
  * Intersection Observer hook for lazy loading
@@ -146,15 +147,30 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
         return;
       }
 
-      console.log('[TicketSidebar] Employee assignment:', employeeId);
+      console.log('[TicketSidebar] Assigning employee:', employeeId, 'to customer:', customer.id);
       
-      // Event handled by Assign component's internal logic
-      // This listener is for any additional sidebar-level logic if needed
+      try {
+        const response = await apiClient.post('/client/assignEmployee', {
+          employee_id: employeeId,
+          customer_id: customer.id
+        });
+        
+        if (response.success) {
+          console.log('[TicketSidebar] Employee assigned successfully');
+          // Optional: Show success notification
+        } else {
+          console.error('[TicketSidebar] Assignment failed:', response.error);
+          // Optional: Show error notification and revert UI
+        }
+      } catch (error) {
+        console.error('[TicketSidebar] Failed to assign employee:', error);
+        // Optional: Show error notification and revert UI
+      }
     };
 
     window.addEventListener('Zuweisung', handleAssignment);
     return () => window.removeEventListener('Zuweisung', handleAssignment);
-  }, []);
+  }, [customer.id]);
 
   return (
     <aside 

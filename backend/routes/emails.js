@@ -288,28 +288,7 @@ router.post('/sendMail',
       console.log('[Emails] Auto assign employee:', autoAssign);
 
       if(autoAssign) {
-        // Verify employee belongs to user's client
-        const { data: employee, error: employeeError } = await supabase
-          .from('employees')
-          .select('client_id')
-          .eq('id', employee_id)
-          .single();
-
-        if (employeeError || !employee) {
-          console.error('[Emails] Employee not found:', employee_id);
-          return res.status(404).json({ error: 'Employee not found' });
-        }
-
-        if (employee.client_id !== client_id) {
-          console.warn('[Emails] Unauthorized employee access attempt:', {
-            employee_id,
-            employee_client_id: employee.client_id,
-            user_client_id: client_id
-          });
-          return res.status(403).json({ error: 'Employee does not belong to your client' });
-        }
-
-        // Verify customer belongs to user's client
+        // Verify customer belongs to user's client and check current assignment
         const { data: customer, error: customerError } = await supabase
           .from('customers')
           .select('client_id, employee_id')
@@ -330,21 +309,43 @@ router.post('/sendMail',
           return res.status(403).json({ error: 'Customer does not belong to your client' });
         }
 
-        if (customer.employee_id != employee_id) {
-          // Both verified - proceed with assignment
+        // Only auto-assign if no employee is currently assigned
+        if (customer.employee_id === null || customer.employee_id === undefined) {
+          // Verify employee belongs to user's client
+          const { data: employee, error: employeeError } = await supabase
+            .from('employees')
+            .select('client_id')
+            .eq('id', employee_id)
+            .single();
+
+          if (employeeError || !employee) {
+            console.error('[Emails] Employee not found:', employee_id);
+            return res.status(404).json({ error: 'Employee not found' });
+          }
+
+          if (employee.client_id !== client_id) {
+            console.warn('[Emails] Unauthorized employee access attempt:', {
+              employee_id,
+              employee_client_id: employee.client_id,
+              user_client_id: client_id
+            });
+            return res.status(403).json({ error: 'Employee does not belong to your client' });
+          }
+
+          // Proceed with auto-assignment
           const { data, error } = await supabase
             .from('customers')
             .update({ employee_id: employee_id })
             .eq('id', customerId);
 
           if (error) {
-            console.error('[Emails] Assignment update failed:', error.message);
+            console.error('[Emails] Auto-assignment update failed:', error.message);
             return res.status(500).json({ error: 'Datenbankfehler' });
           }
 
-          console.log('[Emails] Successfully assigned employee', employee_id, 'to customer', customerId);
+          console.log('[Emails] Successfully auto-assigned employee', employee_id, 'to customer', customerId);
         } else {
-          console.log('[Emails] Employee was already assigned')
+          console.log('[Emails] Customer already has an assigned employee, skipping auto-assign');
         }
       }
       
