@@ -1611,7 +1611,7 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                 <ul className="space-y-2">
                   {plan.features.map((feature, index) => (
                     <li key={index} className="flex items-center text-sm">
-                      <Check className="h-4 w-4 mr-2 text-primary flex-shrink-0" />
+                      <Check className="h-4 w-4 mr-2 text-primary shrink-0" />
                       <span>{feature}</span>
                     </li>
                   ))}

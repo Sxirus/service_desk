@@ -7,11 +7,18 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { apiClient } from "@/utils/api";
 
 export type ShellUser = {
   name?: string | null;
   email?: string | null;
   avatarUrl?: string | null;
+};
+
+type InboxType = {
+  id: number;
+  name: string;
+  description?: string | null;
 };
 
 type Props = {
@@ -37,11 +44,28 @@ export default function AdminShell({
 }: Props) {
   // Aktueller Pfad aus dem Browser ermitteln, falls nicht übergeben
   const [detectedPath, setDetectedPath] = React.useState("");
+  const [accessibleInboxes, setAccessibleInboxes] = React.useState<InboxType[]>([]);
 
   React.useEffect(() => {
     if (typeof window !== "undefined") {
       setDetectedPath(window.location.pathname);
     }
+  }, []);
+
+  // Fetch accessible inboxes on mount
+  React.useEffect(() => {
+    const fetchInboxes = async () => {
+      try {
+        const response = await apiClient.get('/inboxes/getAccessibleInboxes');
+        if (response.success && response.data) {
+          setAccessibleInboxes(response.data);
+        }
+      } catch (error) {
+        console.error('Failed to load accessible inboxes:', error);
+      }
+    };
+
+    fetchInboxes();
   }, []);
 
   // Verwende den übergebenen Pfad oder den erkannten Pfad
@@ -58,6 +82,7 @@ export default function AdminShell({
         firstTeamOverride={firstTeam}
         isAdmin={isAdmin}
         currentPath={finalPath}
+        accessibleInboxes={accessibleInboxes}
       />
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">

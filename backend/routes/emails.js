@@ -525,10 +525,10 @@ router.get('/getMailsbyCustomerIds',
       
       const { data, error } = await supabase
         .from('incoming-mails') 
-        .select('*')
+        .select('*, customers(id, name)')
         .in('customer_id', authorizedIds)
         .eq('read', false)
-        .order('send_at', { ascending: true })
+        .order('send_at', { ascending: false })
         .limit(100);
 
       if (error) {

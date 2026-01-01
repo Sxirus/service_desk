@@ -13,7 +13,7 @@ const activeWorkers = new Map(); // Map: clientEmailId -> emailAddress
  * Uses time-cutoff strategy to only fetch emails since last processed email
  */
 async function initializeWorkers() {
-    console.log('Initializing time-cutoff polling workers (120s interval)...');
+    console.log('Initializing time-cutoff polling workers (5min interval)...');
 
     // Fetch all client email configurations with provider settings
     const { data: clientEmails, error } = await supabase

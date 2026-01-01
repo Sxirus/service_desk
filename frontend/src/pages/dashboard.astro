@@ -53,7 +53,8 @@ const result_customers = await fetch(`http://localhost:3000/api/customers/getAss
     'Content-Type': 'application/json'
   }
 });
-const customersJSON = await result_customers.json();
+const customersResponse = await result_customers.json();
+const customersJSON = customersResponse.data || [];
 const len = customersJSON.length;
 var customers: number[] = [];
 for (let i = 0; i < len; i++) {
@@ -72,7 +73,11 @@ const mailresult = await fetch(`http://localhost:3000/api/emails/getMailsbyCusto
     'Content-Type': 'application/json'
   }
 });
-const mails = await mailresult.json();
+const mailResponse = await mailresult.json();
+const mails = (mailResponse.data || []).map((mail: any) => ({
+  ...mail,
+  customer_name: mail.customers?.name || 'Unknown'
+}));
 
 // Admin Rolle prüfen. Rolle 1 = admin
 const { data: myRoles, error: rolesErr } = await supabase
@@ -85,6 +90,26 @@ if (rolesErr) {
 }
 
 const isAdmin = !!myRoles?.some((r) => r.role_id === 1);
+
+// Fetch employee's groups
+const { data: employeeGroupsJunction, error: groupsErr } = await supabase
+  .from('employee_group_members')
+  .select('group_id')
+  .eq('employee_id', me.id);
+
+if (groupsErr) {
+  console.error("[dashboard] groups lookup:", groupsErr.message);
+}
+
+let groupNames = '-';
+if (employeeGroupsJunction && employeeGroupsJunction.length > 0) {
+  const groupIds = employeeGroupsJunction.map(g => g.group_id);
+  const { data: groups } = await supabase
+    .from('employee_groups')
+    .select('name')
+    .in('id', groupIds);
+  groupNames = groups?.map(g => g.name).join(', ') || '-';
+}
 
 // Mitarbeiter-Info für Sidebar
 const { data: employees, error: empsErr } = await supabase
@@ -140,103 +165,65 @@ try {
         <h1 class="text-3xl font-bold">Dashboard</h1>
       </div>
 
-      <!-- User Info Card -->
-      <div class="bg-white p-6 rounded-lg shadow-sm border">
-        <h2 class="text-xl font-semibold mb-4">Willkommen, {meName}!</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
-          <div>
-            <span class="font-medium">User ID:</span> {user.id}
-          </div>
-          <div>
-            <span class="font-medium">E-Mail:</span> {user.email}
-          </div>
-          <div>
-            <span class="font-medium">Rolle:</span> {isAdmin ? "Administrator" : "Benutzer"}
-          </div>
-          <div>
-            <span class="font-medium">Team:</span> {firstTeam?.name ?? "Nicht zugeordnet"}
-          </div>
-        </div>
-      </div>
-
-      <!-- Quick Actions Section (optional) -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="bg-white p-6 rounded-lg shadow-sm border">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <svg class="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <div class="ml-4">
-              <dt class="text-sm font-medium text-gray-500 truncate">Gesamte E-Mails</dt>
-              <dd class="text-2xl font-semibold text-gray-900">{mails.length}</dd>
-            </div>
-          </div>
-        </div>
-
-        <div class="bg-white p-6 rounded-lg shadow-sm border">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <svg class="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div class="ml-4">
-              <dt class="text-sm font-medium text-gray-500 truncate">Status</dt>
-              <dd class="text-2xl font-semibold text-gray-900">Aktiv</dd>
-            </div>
-          </div>
-        </div>
-
-        <div class="bg-white p-6 rounded-lg shadow-sm border">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <svg class="h-8 w-8 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </div>
-            <div class="ml-4">
-              <dt class="text-sm font-medium text-gray-500 truncate">Rolle</dt>
-              <dd class="text-lg font-semibold text-gray-900">{isAdmin ? "Admin" : "User"}</dd>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Recent Emails Section -->
+      <!-- My Tickets Section -->
       <div class="bg-white rounded-lg shadow-sm border">
         <div class="px-6 py-4 border-b">
-          <h2 class="text-xl font-semibold">Aktuelle E-Mails</h2>
-          <p class="text-sm text-gray-600 mt-1">Die 10 neuesten E-Mails</p>
+          <h2 class="text-xl font-semibold">Assigned Tickets</h2>
+          <p class="text-sm text-gray-600 mt-1">{mails.length} ticket{mails.length !== 1 ? "s" : ""} assigned to you</p>
         </div>
         
-        <div class="p-6">
+        <div class="overflow-x-auto">
           {mails.length > 0 ? (
-            <ul class="space-y-3">
-              {mails.map((mail: any) => (
-                <li class="group">
-                  <a 
-                    href={`/tickets/${mail.customer_id}`}
-                    class="flex items-center p-4 border border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors group-hover:shadow-sm"
-                  >
-                    <div class="flex-1 overflow-hidden">
-                      <div class="font-medium text-gray-900 truncate">
-                        {mail.subject}
+            <table class="w-full">
+              <thead class="bg-gray-50 border-b">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Subject
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    From
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Customer
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Date
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                {mails.map((mail: any) => (
+                  <tr class="hover:bg-gray-50 cursor-pointer" onclick={`window.location.href='/tickets/${mail.customer_id}'`}>
+                    <td class="px-6 py-4">
+                      <div class={`font-medium ${!mail.read ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
+                        {mail.subject || "(No Subject)"}
                       </div>
-                      <div class="text-sm text-gray-500 mt-1">
-                        Kunde ID: {mail.customer_id}
-                      </div>
-                    </div>
-                    <div class="ml-4">
-                      <svg class="w-5 h-5 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                      </svg>
-                    </div>
-                  </a>
-                </li>
-              ))}
-            </ul>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600">
+                      {mail.email_address}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600">
+                      {mail.customer_name || "Unknown"}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600">
+                      {new Date(mail.send_at).toLocaleString()}
+                    </td>
+                    <td class="px-6 py-4 text-sm">
+                      <span class={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        mail.read 
+                          ? 'bg-gray-100 text-gray-800' 
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {mail.read ? 'Read' : 'Unread'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           ) : (
             <div class="text-center py-12">
               <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">

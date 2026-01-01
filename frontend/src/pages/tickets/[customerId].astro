@@ -128,7 +128,8 @@ const [
       id,
       name,
       client_id,
-      employee_id
+      employee_id,
+      group_id
     `)
     .eq("id", customerId)
     .eq("client_id", clientId)
@@ -144,7 +145,6 @@ const [
       html_content,
       email_address,
       read,
-      processing_status,
       attachments
     `)
     .eq("customer_id", customerId)

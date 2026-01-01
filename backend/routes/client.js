@@ -123,9 +123,13 @@ router.post('/assignEmployee',
       }
 
       // Both verified - proceed with assignment
+      // Clear group_id when assigning employee to avoid conflicts
       const { data, error } = await supabase
         .from('customers')
-        .update({ employee_id: employee_id })
+        .update({ 
+          employee_id: employee_id,
+          group_id: null
+        })
         .eq('id', customer_id);
 
       if (error) {
@@ -134,6 +138,96 @@ router.post('/assignEmployee',
       }
 
       console.log('[CLIENT] Successfully assigned employee', employee_id, 'to customer', customer_id);
+      res.json({ success: true, data });
+    } catch (err) {
+      console.error('[CLIENT] Server error:', err.message);
+      res.status(500).json({ error: 'Serverfehler' });
+    }
+  }
+);
+
+/**
+ * Assign group to customer
+ * POST /api/client/assignGroup
+ * Body: { group_id, customer_id }
+ * 
+ * Authentication: Required
+ * Authorization: Both group and customer must belong to user's client
+ */
+router.post('/assignGroup',
+  authenticate,
+  validateId('group_id'),
+  validateId('customer_id'),
+  async (req, res) => {
+    try {
+      const group_id = req.sanitized.group_id;
+      const customer_id = req.sanitized.customer_id;
+      const client_id = req.user.client_id;
+
+      console.log('[CLIENT] Assigning group:', {
+        group_id,
+        customer_id,
+        client_id
+      });
+
+      // Verify group belongs to user's client
+      const { data: group, error: groupError } = await supabase
+        .from('employee_groups')
+        .select('client_id')
+        .eq('id', group_id)
+        .single();
+
+      if (groupError || !group) {
+        console.error('[CLIENT] Group not found:', group_id);
+        return res.status(404).json({ error: 'Group not found' });
+      }
+
+      if (group.client_id !== client_id) {
+        console.warn('[CLIENT] Unauthorized group access attempt:', {
+          group_id,
+          group_client_id: group.client_id,
+          user_client_id: client_id
+        });
+        return res.status(403).json({ error: 'Group does not belong to your client' });
+      }
+
+      // Verify customer belongs to user's client
+      const { data: customer, error: customerError } = await supabase
+        .from('customers')
+        .select('client_id')
+        .eq('id', customer_id)
+        .single();
+
+      if (customerError || !customer) {
+        console.error('[CLIENT] Customer not found:', customer_id);
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+
+      if (customer.client_id !== client_id) {
+        console.warn('[CLIENT] Unauthorized customer access attempt:', {
+          customer_id,
+          customer_client_id: customer.client_id,
+          user_client_id: client_id
+        });
+        return res.status(403).json({ error: 'Customer does not belong to your client' });
+      }
+
+      // Both verified - proceed with assignment
+      // Clear employee_id when assigning group to avoid conflicts
+      const { data, error } = await supabase
+        .from('customers')
+        .update({ 
+          group_id: group_id,
+          employee_id: null 
+        })
+        .eq('id', customer_id);
+
+      if (error) {
+        console.error('[CLIENT] Group assignment update failed:', error.message);
+        return res.status(500).json({ error: 'Datenbankfehler' });
+      }
+
+      console.log('[CLIENT] Successfully assigned group', group_id, 'to customer', customer_id);
       res.json({ success: true, data });
     } catch (err) {
       console.error('[CLIENT] Server error:', err.message);
