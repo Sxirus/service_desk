@@ -569,4 +569,158 @@ router.post('/setFilters',
   }
 );
 
+/**
+ * Get email counts for all accessible inboxes (for sidebar display)
+ * GET /api/inboxes/getCounts
+ * 
+ * Authentication: Required
+ * Returns: { all: number, inboxes: { [inbox_id]: number } }
+ */
+router.get('/getCounts',
+  authenticate,
+  async (req, res) => {
+    try {
+      const employee_id = req.user.employee_id;
+      const client_id = req.user.client_id;
+
+      console.log('[INBOXES] Fetching email counts for employee:', employee_id);
+
+      // Get count for "Dashboard" (unread emails from customers assigned to this employee)
+      const { count: dashboardCount, error: dashboardError } = await supabase
+        .from('incoming-mails')
+        .select('id, customers!inner(employee_id)', { count: 'exact', head: true })
+        .eq('client_id', client_id)
+        .eq('customers.employee_id', employee_id)
+        .eq('read', false);
+
+      if (dashboardError) {
+        console.error('[INBOXES] Error counting dashboard mails:', dashboardError.message);
+      }
+
+      // Get total count for "All Mails"
+      const { count: allCount, error: allError } = await supabase
+        .from('incoming-mails')
+        .select('*', { count: 'exact', head: true })
+        .eq('client_id', client_id);
+
+      if (allError) {
+        console.error('[INBOXES] Error counting all mails:', allError.message);
+        return res.status(500).json({ error: 'Datenbankfehler' });
+      }
+
+      // Get employee's groups
+      const { data: employeeGroups, error: groupsError } = await supabase
+        .from('employee_group_members')
+        .select('group_id')
+        .eq('employee_id', employee_id);
+
+      if (groupsError) {
+        console.error('[INBOXES] Error fetching employee groups:', groupsError.message);
+        return res.status(500).json({ error: 'Datenbankfehler' });
+      }
+
+      const groupIds = employeeGroups.map(g => g.group_id);
+      
+      if (groupIds.length === 0) {
+        return res.json({ 
+          success: true, 
+          data: { 
+            dashboard: dashboardCount || 0,
+            all: allCount || 0, 
+            inboxes: {} 
+          } 
+        });
+      }
+
+      // Get accessible inboxes with their filters
+      const { data: inboxGroups, error: inboxError } = await supabase
+        .from('inbox_groups')
+        .select(`
+          inbox_id,
+          inboxes (
+            id,
+            client_id,
+            inbox_filters (
+              filter_type,
+              filter_config
+            )
+          )
+        `)
+        .in('group_id', groupIds);
+
+      if (inboxError) {
+        console.error('[INBOXES] Error fetching inbox groups:', inboxError.message);
+        return res.status(500).json({ error: 'Datenbankfehler' });
+      }
+
+      // Get unique inbox IDs
+      const uniqueInboxes = [];
+      const seenIds = new Set();
+      
+      for (const ig of inboxGroups) {
+        if (ig.inboxes && ig.inboxes.client_id === client_id && !seenIds.has(ig.inboxes.id)) {
+          uniqueInboxes.push(ig.inboxes);
+          seenIds.add(ig.inboxes.id);
+        }
+      }
+
+      // Count emails for each inbox based on their filters
+      const inboxCounts = {};
+      
+      for (const inbox of uniqueInboxes) {
+        const filters = inbox.inbox_filters || [];
+        
+        // Build count query with same filter logic as getInboxEmails
+        let query = supabase
+          .from('incoming-mails')
+          .select('id, customers!inner(group_id)', { count: 'exact', head: true })
+          .eq('client_id', client_id);
+
+        // Apply filters
+        for (const filter of filters) {
+          const config = filter.filter_config;
+
+          if (filter.filter_type === 'read_status') {
+            if (config.show === 'read') {
+              query = query.eq('read', true);
+            } else if (config.show === 'unread') {
+              query = query.eq('read', false);
+            }
+          }
+
+          if (filter.filter_type === 'assignment') {
+            if (config.show === 'unassigned') {
+              query = query.is('customers.group_id', null);
+            } else if (config.show === 'groups' && config.group_ids && config.group_ids.length > 0) {
+              query = query.in('customers.group_id', config.group_ids);
+            }
+          }
+        }
+
+        const { count, error: countError } = await query;
+        
+        if (countError) {
+          console.error(`[INBOXES] Error counting emails for inbox ${inbox.id}:`, countError.message);
+          inboxCounts[inbox.id] = 0;
+        } else {
+          inboxCounts[inbox.id] = count || 0;
+        }
+      }
+
+      console.log('[INBOXES] Email counts:', { dashboard: dashboardCount, all: allCount, inboxes: inboxCounts });
+      res.json({ 
+        success: true, 
+        data: { 
+          dashboard: dashboardCount || 0,
+          all: allCount || 0, 
+          inboxes: inboxCounts 
+        } 
+      });
+    } catch (err) {
+      console.error('[INBOXES] Server error:', err.message);
+      res.status(500).json({ error: 'Serverfehler' });
+    }
+  }
+);
+
 module.exports = router;

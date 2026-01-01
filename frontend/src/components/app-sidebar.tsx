@@ -80,13 +80,13 @@ export function AppSidebar({
 
   // Navigation Items basierend auf Rolle und aktueller Seite
   const getNavItems = () => {
-    // Build inbox items array with Dashboard, All Mails, and accessible inboxes
+    // Build inbox items array with Dashboard and accessible inboxes
     const inboxItems = [
-      { title: "Dashboard", url: "/dashboard" },
-      { title: 'All Mails', url: '/mail_list' },
+      { title: "Your Assigned Tickets", url: "/dashboard" },
       ...accessibleInboxes.map(inbox => ({
         title: inbox.name,
-        url: `/inboxes/${inbox.id}`
+        url: `/inboxes/${inbox.id}`,
+        inboxId: inbox.id
       }))
     ];
 
@@ -95,7 +95,7 @@ export function AppSidebar({
         title: "Inbox",
         url: "/",
         icon: Home,
-        isActive: currentPath === "/" || currentPath === "/dashboard" || currentPath === '/mail_list' || currentPath.startsWith("/inboxes"),
+        isActive: currentPath === "/" || currentPath === "/dashboard" || currentPath.startsWith("/inboxes"),
         items: inboxItems,
       },
     ];
@@ -113,19 +113,19 @@ export function AppSidebar({
             url: "/manage/settings"
           },
           { 
-            title: "Users", 
+            title: "Users & Groups", 
             url: "/manage/users",
           },
           { 
-            title: "Company", 
+            title: "Billing data", 
             url: "/manage/client",
           },
           { 
-            title: "Shopify Integration", 
+            title: "Integrations", 
             url: "/manage/shopify",
           },
           {
-            title: "Macro Editor",
+            title: "Macros",
             url: "/manage/macro"
           },
           {
