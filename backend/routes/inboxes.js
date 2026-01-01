@@ -597,53 +597,6 @@ router.get('/getCounts',
         console.error('[INBOXES] Error counting dashboard mails:', dashboardError.message);
       }
 
-      // Determine which inboxes this employee can access via group membership
-      const { data: groupsForAllCount, error: groupsForAllCountError } = await supabase
-        .from('employee_group_members')
-        .select('group_id')
-        .eq('employee_id', employee_id);
-
-      if (groupsForAllCountError) {
-        console.error('[INBOXES] Error fetching employee groups for all-count:', groupsForAllCountError.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
-      }
-
-      const groupIdsForAllCount = (groupsForAllCount || []).map((g) => g.group_id);
-
-      let allCount = 0;
-      let allError = null;
-
-      if (groupIdsForAllCount.length > 0) {
-        // Get inboxes that are accessible to these groups
-        const { data: accessibleInboxes, error: inboxAccessError } = await supabase
-          .from('inbox_groups')
-          .select('inbox_id')
-          .in('group_id', groupIdsForAllCount);
-
-        if (inboxAccessError) {
-          console.error('[INBOXES] Error fetching accessible inboxes for all-count:', inboxAccessError.message);
-          return res.status(500).json({ error: 'Datenbankfehler' });
-        }
-
-        const inboxIdsForAllCount = (accessibleInboxes || []).map((i) => i.inbox_id);
-
-        if (inboxIdsForAllCount.length > 0) {
-          // Get total count for "All Mails" limited to accessible inboxes
-          const allCountResult = await supabase
-            .from('incoming-mails')
-            .select('*', { count: 'exact', head: true })
-            .eq('client_id', client_id)
-            .in('inbox_id', inboxIdsForAllCount);
-
-          allCount = allCountResult.count;
-          allError = allCountResult.error;
-        }
-      }
-      if (allError) {
-        console.error('[INBOXES] Error counting all mails:', allError.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
-      }
-
       // Get employee's groups
       const { data: employeeGroups, error: groupsError } = await supabase
         .from('employee_group_members')
@@ -662,7 +615,6 @@ router.get('/getCounts',
           success: true, 
           data: { 
             dashboard: dashboardCount || 0,
-            all: allCount || 0, 
             inboxes: {} 
           } 
         });
@@ -743,12 +695,11 @@ router.get('/getCounts',
         }
       }
 
-      console.log('[INBOXES] Email counts:', { dashboard: dashboardCount, all: allCount, inboxes: inboxCounts });
+      console.log('[INBOXES] Email counts:', { dashboard: dashboardCount, inboxes: inboxCounts });
       res.json({ 
         success: true, 
         data: { 
           dashboard: dashboardCount || 0,
-          all: allCount || 0, 
           inboxes: inboxCounts 
         } 
       });

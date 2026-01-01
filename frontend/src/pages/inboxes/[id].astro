@@ -3,6 +3,7 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import AdminShell from "../../components/AdminShell";
 import { createClient } from "../../lib/supabase";
 import { getCompletePageContext } from "../../lib/auth-helpers";
+import { TicketsDataTable } from "@/components/datatable/TicketsDataTable";
 
 // Initialize Supabase client
 const supabase = createClient({
@@ -92,106 +93,40 @@ try {
     isAdmin={authContext.isAdmin}
     currentPath={`/inboxes/${inboxId}`}
   >
-    <div class="container mx-auto px-4 py-6">
+    <div class="space-y-6">
     {error ? (
       <div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
         {error}
       </div>
     ) : inbox ? (
-      <div>
-        <div class="mb-6">
-          <h1 class="text-3xl font-bold mb-2">{inbox.name}</h1>
-          {inbox.description && (
-            <p class="text-gray-600">{inbox.description}</p>
-          )}
-          <div class="mt-2 text-sm text-gray-500">
-            {emails.length} email{emails.length !== 1 ? "s" : ""}
-          </div>
+      <div class="bg-white mt-4 rounded-lg shadow-sm border p-6">
+        <div class="mb-4">
+          <h2 class="text-xl font-semibold">{inbox.name}</h2>
+          <p class="text-sm text-gray-600 mt-1">
+            {inbox.description ? `${inbox.description} • ` : ""}{emails.length} email{emails.length !== 1 ? "s" : ""}
+          </p>
         </div>
 
-        <div class="bg-white rounded-lg shadow">
-          <div class="overflow-x-auto">
-            <table class="w-full">
-              <thead class="bg-gray-50 border-b">
-                <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Subject
-                  </th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    From
-                  </th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Customer
-                  </th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Assigned To
-                  </th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="bg-white divide-y divide-gray-200">
-                {emails.map((email: any) => (
-                  <tr class="hover:bg-gray-50 cursor-pointer" onclick={`window.location.href='/tickets/${email.customer_id}'`}>
-                    <td class="px-6 py-4">
-                      <div class={`font-medium ${!email.read ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
-                        {email.subject || "(No Subject)"}
-                      </div>
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-600">
-                      {email.email_address}
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-600">
-                      {email.customers?.name || "Unknown"}
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-600">
-                      {email.customers?.employees?.name ? (
-                        <span class="inline-flex items-center gap-1">
-                          <span>👤</span>
-                          <span>{email.customers.employees.name}</span>
-                        </span>
-                      ) : email.customers?.employee_groups?.name ? (
-                        <span class="inline-flex items-center gap-1">
-                          <span>👥</span>
-                          <span>{email.customers.employee_groups.name}</span>
-                        </span>
-                      ) : (
-                        <span class="text-gray-400">Unassigned</span>
-                      )}
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-600">
-                      {new Date(email.send_at).toLocaleString()}
-                    </td>
-                    <td class="px-6 py-4 text-sm">
-                      <span class={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        email.read 
-                          ? 'bg-gray-100 text-gray-800' 
-                          : 'bg-blue-100 text-blue-800'
-                      }`}>
-                        {email.read ? 'Read' : 'Unread'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {emails.length === 0 && (
-              <div class="text-center py-12 text-gray-500">
-                <svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-                </svg>
-                <p>No emails in this inbox</p>
-              </div>
-            )}
-          </div>
-        </div>
+        <TicketsDataTable 
+          client:load
+          data={emails.map((email: any) => ({
+            id: email.id,
+            subject: email.subject,
+            email_address: email.email_address,
+            customer_id: email.customer_id,
+            customer_name: email.customers?.name || 'Unknown',
+            assigned_to: email.customers?.employees?.name || email.customers?.employee_groups?.name || null,
+            assigned_type: email.customers?.employees?.name ? 'employee' : email.customers?.employee_groups?.name ? 'group' : null,
+            send_at: email.send_at,
+            read: email.read
+          }))}
+          showAssignedColumn={true}
+          tableId={`inbox-${inboxId}`}
+        />
       </div>
     ) : (
       <div>Loading...</div>
     )}
+    </div>
   </AdminShell>
 </BaseLayout>

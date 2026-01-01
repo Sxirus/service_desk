@@ -20,24 +20,28 @@ import { apiClient } from "@/utils/api"
 
 // Hook für lazy loading der Email-Counts
 function useEmailCounts() {
-  const [counts, setCounts] = React.useState<{ dashboard: number; all: number; inboxes: Record<string, number> } | null>(null);
+  const [counts, setCounts] = React.useState<{ dashboard: number; inboxes: Record<string, number> } | null>(null);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
     const fetchCounts = async () => {
       try {
         const result = await apiClient.get('/inboxes/getCounts');
+        console.log('[NavMain] Fetched counts:', result);
         if (result.success) {
           setCounts(result.data);
         }
       } catch (error) {
-        console.error('Failed to fetch email counts:', error);
+        // Silently fail - counts are optional UI enhancement
+        console.error('[NavMain] Failed to fetch email counts:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchCounts();
+    // Small delay to ensure auth is ready
+    const timer = setTimeout(fetchCounts, 100);
+    return () => clearTimeout(timer);
   }, []);
 
   return { counts, loading };

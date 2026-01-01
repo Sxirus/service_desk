@@ -5,6 +5,7 @@ import { createClient } from "../lib/supabase.ts";
 // Sidebar Shell
 import AdminShell from "@/components/AdminShell";
 import LimitBanner from "@/components/LimitBanner";
+import { TicketsDataTable } from "@/components/datatable/TicketsDataTable";
 
 // Create Supabase client with server-side rendering support
 const supabase = createClient({
@@ -47,37 +48,53 @@ const client_id = me.client_id;
 
 // SERVER-SIDE API CALL with auth token
 // Note: Remove client_id from query - it comes from the auth token now
-const result_customers = await fetch(`http://localhost:3000/api/customers/getAssignedCustomers?employee_id=${me.id}`, {
-  headers: {
-    'Authorization': `Bearer ${session.access_token}`,
-    'Content-Type': 'application/json'
+let customersJSON: any[] = [];
+let mails: any[] = [];
+
+try {
+  const result_customers = await fetch(`http://localhost:3000/api/customers/getAssignedCustomers?employee_id=${me.id}`, {
+    headers: {
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json'
+    }
+  });
+  
+  if (!result_customers.ok) {
+    console.error("[dashboard] Failed to fetch customers:", result_customers.status, await result_customers.text());
+  } else {
+    const customersResponse = await result_customers.json();
+    customersJSON = customersResponse.data || [];
   }
-});
-const customersResponse = await result_customers.json();
-const customersJSON = customersResponse.data || [];
-const len = customersJSON.length;
-var customers: number[] = [];
-for (let i = 0; i < len; i++) {
-  var customer_id = customersJSON[i].id;
-  customers.push(customer_id);
+} catch (err) {
+  console.error("[dashboard] Error fetching customers:", err);
 }
 
-console.log(customers);
-const qs = customers.map(id => `ids=${encodeURIComponent(id)}`).join("&");
-console.log(qs);
+const customers: number[] = customersJSON.map((c: any) => c.id);
 
-// SERVER-SIDE API CALL with auth token
-const mailresult = await fetch(`http://localhost:3000/api/emails/getMailsbyCustomerIds?${qs}`, {
-  headers: {
-    'Authorization': `Bearer ${session.access_token}`,
-    'Content-Type': 'application/json'
+if (customers.length > 0) {
+  try {
+    const qs = customers.map(id => `ids=${encodeURIComponent(id)}`).join("&");
+    
+    const mailresult = await fetch(`http://localhost:3000/api/emails/getMailsbyCustomerIds?${qs}`, {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!mailresult.ok) {
+      console.error("[dashboard] Failed to fetch mails:", mailresult.status, await mailresult.text());
+    } else {
+      const mailResponse = await mailresult.json();
+      mails = (mailResponse.data || []).map((mail: any) => ({
+        ...mail,
+        customer_name: mail.customers?.name || 'Unknown'
+      }));
+    }
+  } catch (err) {
+    console.error("[dashboard] Error fetching mails:", err);
   }
-});
-const mailResponse = await mailresult.json();
-const mails = (mailResponse.data || []).map((mail: any) => ({
-  ...mail,
-  customer_name: mail.customers?.name || 'Unknown'
-}));
+}
 
 // Admin Rolle prüfen. Rolle 1 = admin
 const { data: myRoles, error: rolesErr } = await supabase
@@ -152,88 +169,27 @@ try {
     firstTeam={firstTeam ?? undefined}
     crumbParentLabel="Service Desk"
     crumbParentHref="/"
-    crumbCurrent="Dashboard"
+    crumbCurrent="Your assigned Tickets"
     isAdmin={isAdmin}
     currentPath="/dashboard"
   >
     <div class="space-y-6">
       <!-- Limit Banner -->
       <LimitBanner client:load tier={subscriptionTier} />
-      
-      <!-- Header Section -->
-      <div class="flex justify-between items-center">
-        <h1 class="text-3xl font-bold">Dashboard</h1>
-      </div>
 
       <!-- My Tickets Section -->
-      <div class="bg-white rounded-lg shadow-sm border">
-        <div class="px-6 py-4 border-b">
+      <div class="bg-white mt-4 rounded-lg shadow-sm border p-6">
+        <div class="mb-4">
           <h2 class="text-xl font-semibold">Assigned Tickets</h2>
           <p class="text-sm text-gray-600 mt-1">{mails.length} ticket{mails.length !== 1 ? "s" : ""} assigned to you</p>
         </div>
         
-        <div class="overflow-x-auto">
-          {mails.length > 0 ? (
-            <table class="w-full">
-              <thead class="bg-gray-50 border-b">
-                <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Subject
-                  </th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    From
-                  </th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Customer
-                  </th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="bg-white divide-y divide-gray-200">
-                {mails.map((mail: any) => (
-                  <tr class="hover:bg-gray-50 cursor-pointer" onclick={`window.location.href='/tickets/${mail.customer_id}'`}>
-                    <td class="px-6 py-4">
-                      <div class={`font-medium ${!mail.read ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
-                        {mail.subject || "(No Subject)"}
-                      </div>
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-600">
-                      {mail.email_address}
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-600">
-                      {mail.customer_name || "Unknown"}
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-600">
-                      {new Date(mail.send_at).toLocaleString()}
-                    </td>
-                    <td class="px-6 py-4 text-sm">
-                      <span class={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        mail.read 
-                          ? 'bg-gray-100 text-gray-800' 
-                          : 'bg-blue-100 text-blue-800'
-                      }`}>
-                        {mail.read ? 'Read' : 'Unread'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div class="text-center py-12">
-              <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              <h3 class="mt-4 text-lg font-medium text-gray-900">Keine E-Mails vorhanden</h3>
-              <p class="mt-2 text-gray-500">Es sind momentan keine E-Mails verfügbar.</p>
-            </div>
-          )}
-        </div>
+        <TicketsDataTable 
+          client:load
+          data={mails}
+          showAssignedColumn={false}
+          tableId="dashboard"
+        />
       </div>
     </div>
   </AdminShell>
