@@ -358,7 +358,7 @@ export default function SubscriptionManager() {
                 </p>
                 <Button 
                   onClick={startUpgrade}
-                  className="bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
                 >
                   <Sparkles className="mr-2 h-4 w-4" />
                   Upgrade to Pro Plan
