@@ -195,7 +195,7 @@ const [
   
   supabase
     .from("employees")
-    .select("id, name")
+    .select("id, name, avatar_url")
     .eq("client_id", clientId)
     .order("name"),
   
@@ -297,6 +297,15 @@ perf.end(errorCheckTimer);
 
 const processingTimer = perf.start('page-load', 'data-processing');
 
+// Build employee lookup map for quick access to agent names/avatars
+const employeeMap = new Map<string, { name: string; avatar_url: string | null }>();
+(employeeArray || []).forEach((emp: any) => {
+  employeeMap.set(String(emp.id), { 
+    name: emp.name || 'Support Agent', 
+    avatar_url: emp.avatar_url || null 
+  });
+});
+
 /**
  * Combine and sort incoming and sent emails into a unified thread
  * Type-safe email array with proper TypeScript interfaces
@@ -309,13 +318,18 @@ const emailArray: ThreadEmail[] = [
     has_attachments: mail.attachments?.length > 0,
     attachments: mail.attachments || []
   })),
-  ...(sentMails || []).map((mail: any): SentEmail => ({
-    ...mail,
-    type: 'sent',
-    employee_id: mail.employee_id,
-    has_attachments: mail.attachments?.length > 0,
-    attachments: mail.attachments || []
-  }))
+  ...(sentMails || []).map((mail: any): SentEmail => {
+    const agent = employeeMap.get(String(mail.employee_id));
+    return {
+      ...mail,
+      type: 'sent',
+      employee_id: mail.employee_id,
+      agent_name: agent?.name || 'Support Agent',
+      agent_avatar_url: agent?.avatar_url || null,
+      has_attachments: mail.attachments?.length > 0,
+      attachments: mail.attachments || []
+    };
+  })
 ].sort((a, b) => new Date(a.send_at).getTime() - new Date(b.send_at).getTime());
 
 log.info("Emails loaded:", emailArray.length);
@@ -468,6 +482,9 @@ log.info("[customer-ticket] Page setup complete, rendering");
     crumbCurrent={`${customer?.name} - Ticket` || "Ticket"}
     isAdmin={authContext.isAdmin}
     currentPath={`/tickets/${customerId}`}
+    employeeId={sidebarData.employeeId}
+    clientId={sidebarData.clientId}
+    subscriptionTier={sidebarData.subscriptionTier}
   >
     <div class="flex gap-6 h-[calc(100vh-5rem)] -mx-6 -mb-6 overflow-hidden">
       <!-- Main Content Area -->

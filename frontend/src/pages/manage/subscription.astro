@@ -38,6 +38,9 @@ const isAdmin = authContext.isAdmin;
     crumbParentLabel="Administration"
     crumbParentHref="/manage"
     crumbCurrent="Subscription"
+    employeeId={sidebarData.employeeId}
+    clientId={sidebarData.clientId}
+    subscriptionTier={sidebarData.subscriptionTier}
   >
     <SubscriptionManager client:load />
   </AdminShell>

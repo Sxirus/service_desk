@@ -46,6 +46,8 @@ export interface IncomingEmail extends BaseEmail {
 export interface SentEmail extends BaseEmail {
   type: 'sent';
   employee_id: string;
+  agent_name?: string;
+  agent_avatar_url?: string | null;
 }
 
 /**

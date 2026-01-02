@@ -390,6 +390,9 @@ log.info('Analytics page setup complete');
     crumbCurrent="Analytics"
     isAdmin={authContext.isAdmin}
     currentPath="/manage/analytics"
+    employeeId={sidebarData.employeeId}
+    clientId={sidebarData.clientId}
+    subscriptionTier={sidebarData.subscriptionTier}
   >
     <AnalyticsDashboard 
       client:load

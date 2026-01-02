@@ -30,6 +30,9 @@ type Props = {
   crumbCurrent?: string;
   isAdmin?: boolean;
   currentPath?: string;
+  employeeId?: number;
+  clientId?: number;
+  subscriptionTier?: string;
 };
 
 export default function AdminShell({
@@ -41,6 +44,9 @@ export default function AdminShell({
   crumbCurrent = "Data Fetching",
   isAdmin = false,
   currentPath,
+  employeeId = 0,
+  clientId = 0,
+  subscriptionTier = "free",
 }: Props) {
   // Aktueller Pfad aus dem Browser ermitteln, falls nicht übergeben
   const [detectedPath, setDetectedPath] = React.useState("");
@@ -83,6 +89,9 @@ export default function AdminShell({
         isAdmin={isAdmin}
         currentPath={finalPath}
         accessibleInboxes={accessibleInboxes}
+        employeeId={employeeId}
+        clientId={clientId}
+        subscriptionTier={subscriptionTier}
       />
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">

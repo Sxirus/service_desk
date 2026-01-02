@@ -33,6 +33,9 @@ export interface SidebarData {
     name: string;
     plan: string;
   } | null;
+  employeeId: number;
+  clientId: number;
+  subscriptionTier: string;
 }
 
 /**
@@ -128,35 +131,44 @@ export async function getSidebarData(
 
   // Parallel queries for better performance
   const [
-    { data: clientData },
+    { data: clientData, error: clientError },
     { data: employees }
   ] = await Promise.all([
     supabase
       .from("clients")
-      .select("id, name")
+      .select("id, name, subscription_tier")
       .eq("id", authContext.employee.client_id)
       .single(),
     supabase
       .from("employees")
-      .select("id, name")
+      .select("id, name, avatar_url")
       .eq("client_id", authContext.employee.client_id)
       .order("name")
   ]);
 
-  const employeeName = employees?.find((e) => e.id === authContext.employee.id)?.name 
-    ?? authContext.user.email 
+  log.info("Client data fetched:", { clientData, clientError });
+
+  const myEmployee = employees?.find((e) => e.id === authContext.employee.id);
+  const employeeName = myEmployee?.name && myEmployee.name.trim() 
+    ? myEmployee.name 
+    : authContext.user.email 
     ?? "User";
 
   const sidebarData: SidebarData = {
     user: {
       name: employeeName,
       email: authContext.user.email,
-      avatarUrl: null,
+      avatarUrl: myEmployee?.avatar_url ?? null,
     },
     team: clientData?.name 
-      ? { name: clientData.name, plan: "Enterprise" }
+      ? { name: clientData.name, plan: clientData.subscription_tier === "paid" ? "Professional Use" : "Free Use" }
       : null,
+    employeeId: authContext.employee.id,
+    clientId: authContext.employee.client_id,
+    subscriptionTier: clientData?.subscription_tier ?? "free",
   };
+
+  log.info("sidebarData.subscriptionTier:", sidebarData.subscriptionTier);
 
   return sidebarData;
 }

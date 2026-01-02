@@ -61,6 +61,9 @@ try {
     crumbCurrent="Inbox Management"
     isAdmin={authContext.isAdmin}
     currentPath="/manage/inboxes"
+    employeeId={sidebarData.employeeId}
+    clientId={sidebarData.clientId}
+    subscriptionTier={sidebarData.subscriptionTier}
   >
     <InboxManagementPanel client:load groups={groups} />
   </AdminShell>

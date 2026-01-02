@@ -52,6 +52,9 @@ type Props = React.ComponentProps<typeof Sidebar> & {
   isAdmin?: boolean
   currentPath?: string
   accessibleInboxes?: InboxType[]
+  employeeId?: number
+  clientId?: number
+  subscriptionTier?: string
 }
 
 export function AppSidebar({ 
@@ -60,14 +63,20 @@ export function AppSidebar({
   isAdmin = false,
   currentPath = "/",
   accessibleInboxes = [],
+  employeeId = 0,
+  clientId = 0,
+  subscriptionTier = "free",
   ...props 
 }: Props) {
   // Userdaten befüllen
+  const userName = userOverride?.name && userOverride.name.trim() 
+    ? userOverride.name 
+    : "User"
   const user = {
-    name: userOverride?.name ?? "User",
+    name: userName,
     email: userOverride?.email ?? "user@example.com",
     avatar: userOverride?.avatar ?? "",
-    initials: getInitials(userOverride?.name ?? "User"),
+    initials: getInitials(userName),
   }
 
   function getInitials(name: string) {
@@ -165,7 +174,12 @@ export function AppSidebar({
         <NavMain items={getNavItems()} />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={user} />
+        <NavUser 
+          user={user} 
+          employeeId={employeeId}
+          clientId={clientId}
+          subscriptionTier={subscriptionTier}
+        />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

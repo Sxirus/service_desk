@@ -245,6 +245,19 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
   // Check if this email has significant HTML (only for incoming emails)
   const hasHtml = email.type === 'incoming' && hasSignificantHtml(email.html_content);
 
+  // Get agent name and avatar for sent emails
+  const agentName = isOutgoing && email.type === 'sent' ? email.agent_name || 'Support Agent' : null;
+  const agentAvatarUrl = isOutgoing && email.type === 'sent' ? email.agent_avatar_url : null;
+  
+  // Generate initials for avatar fallback
+  const getInitials = (name: string) => {
+    if (!name) return 'SA';
+    const parts = name.trim().split(/\s+/);
+    const first = parts[0]?.[0] ?? '';
+    const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
+    return (first + last).toUpperCase() || 'SA';
+  };
+
   return (
     <article 
       className={`rounded-lg border shadow-sm ${
@@ -253,38 +266,49 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
           : 'bg-card border-border'
       }`}
       id={email.id}
-      aria-label={`${isOutgoing ? 'Sent' : 'Received'} message from ${isOutgoing ? 'support' : customerName}`}
+      aria-label={`${isOutgoing ? 'Sent' : 'Received'} message from ${isOutgoing ? agentName : customerName}`}
     >
       <div className="p-4">
         {/* Message Header */}
         <header className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div 
-              className={`flex h-8 w-8 items-center justify-center rounded-full ${
-                isOutgoing ? 'bg-blue-600' : 'bg-muted'
-              }`}
-              aria-hidden="true"
-            >
-              <svg
-                className={`h-4 w-4 ${isOutgoing ? 'text-white' : 'text-muted-foreground'}`}
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth="1.5"
-                stroke="currentColor"
+            {/* Avatar */}
+            {isOutgoing && agentAvatarUrl ? (
+              <img 
+                src={agentAvatarUrl} 
+                alt={agentName || 'Agent'} 
+                className="h-8 w-8 rounded-full object-cover"
+              />
+            ) : (
+              <div 
+                className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium ${
+                  isOutgoing ? 'bg-blue-600 text-white' : 'bg-muted text-muted-foreground'
+                }`}
+                aria-hidden="true"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-                />
-              </svg>
-            </div>
+                {isOutgoing ? getInitials(agentName || '') : (
+                  <svg
+                    className="h-4 w-4"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth="1.5"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
+                    />
+                  </svg>
+                )}
+              </div>
+            )}
             <div>
               <p className={`text-sm font-semibold ${
                 isOutgoing ? 'text-blue-900' : 'text-foreground'
               }`}>
-                {isOutgoing ? 'You' : customerName}
+                {isOutgoing ? agentName : customerName}
               </p>
               <p className="text-xs text-muted-foreground">
                 {isOutgoing ? 'Support Agent' : 'Customer'}

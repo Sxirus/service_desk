@@ -98,6 +98,164 @@ const passwordReset = async (
   }
 };
 
+/* ----------------------- UPDATE MY PROFILE (Self-Service) ----------------------- */
+
+// Schema for validating profile update input
+const updateMyProfileSchema = z.object({
+  name: z.string().min(1).max(100),
+  avatarBase64: z.string().optional().nullable(), // Base64-encoded WebP image data
+});
+
+type UpdateMyProfileInput = z.infer<typeof updateMyProfileSchema>;
+
+/**
+ * Self-service function for users to update their own profile
+ * Updates name and avatar URL in the employees table
+ * Avatar is uploaded server-side using admin client to bypass storage RLS
+ */
+const updateMyProfile = async (
+  { name, avatarBase64 }: UpdateMyProfileInput,
+  context: ActionAPIContext
+) => {
+  console.log("[actions.updateMyProfile] start");
+  console.log("[actions.updateMyProfile] Input received - name:", name, "hasAvatar:", !!avatarBase64);
+  try {
+    // 1) Verify the current user is authenticated
+    const ssr = createSSR({ request: context.request, cookies: context.cookies });
+    console.log("[actions.updateMyProfile] SSR client created");
+    
+    const { data: { user }, error: userErr } = await ssr.auth.getUser();
+    if (userErr || !user) {
+      console.error("[actions.updateMyProfile] getUser error:", userErr?.message);
+      return { success: false, message: "Unauthorized" };
+    }
+    console.log("[actions.updateMyProfile] User authenticated:", user.id);
+
+    // 2) Get current employee record
+    const { data: me, error: meErr } = await ssr
+      .from("employees")
+      .select("id, client_id")
+      .eq("user_id", user.id)
+      .single();
+
+    if (meErr || !me) {
+      console.error("[actions.updateMyProfile] employee lookup:", meErr?.message);
+      return { success: false, message: "Employee not found" };
+    }
+    console.log("[actions.updateMyProfile] Employee found:", me.id);
+
+    // 3) Use admin client to bypass RLS for storage and database updates
+    const admin = createAdmin(
+      import.meta.env.SUPABASE_URL!,
+      import.meta.env.SUPABASE_KEY!,
+      { auth: { persistSession: false } }
+    );
+
+    // 4) Upload avatar if provided
+    let avatarUrl: string | null = null;
+    if (avatarBase64) {
+      try {
+        // Convert base64 to buffer
+        const base64Data = avatarBase64.replace(/^data:image\/\w+;base64,/, "");
+        const buffer = Buffer.from(base64Data, "base64");
+        
+        // Generate file path: {client_id}/{employee_id}/avatar.webp
+        const filePath = `${me.client_id}/${me.id}/avatar.webp`;
+        
+        console.log("[actions.updateMyProfile] Uploading avatar to:", filePath);
+        
+        const { error: uploadError } = await admin.storage
+          .from("avatars")
+          .upload(filePath, buffer, {
+            contentType: "image/webp",
+            upsert: true,
+          });
+
+        if (uploadError) {
+          console.error("[actions.updateMyProfile] Avatar upload error:", uploadError.message);
+          return { success: false, message: "Failed to upload avatar: " + uploadError.message };
+        }
+
+        // Get public URL
+        const { data: urlData } = admin.storage
+          .from("avatars")
+          .getPublicUrl(filePath);
+        
+        avatarUrl = urlData.publicUrl + `?t=${Date.now()}`;
+        console.log("[actions.updateMyProfile] Avatar uploaded:", avatarUrl);
+      } catch (uploadErr: any) {
+        console.error("[actions.updateMyProfile] Avatar processing error:", uploadErr?.message);
+        return { success: false, message: "Failed to process avatar" };
+      }
+    }
+
+    // 5) Update employee record with name and avatar URL
+    const updateData: { name: string; avatar_url?: string } = { name };
+    if (avatarUrl) {
+      updateData.avatar_url = avatarUrl;
+    }
+    console.log("[actions.updateMyProfile] Update data:", JSON.stringify(updateData));
+
+    const { data: updateResult, error: updateErr } = await admin
+      .from("employees")
+      .update(updateData)
+      .eq("id", me.id)
+      .select();
+
+    if (updateErr) {
+      console.error("[actions.updateMyProfile] update error:", updateErr.message);
+      return { success: false, message: "Failed to update profile" };
+    }
+    console.log("[actions.updateMyProfile] Update result:", JSON.stringify(updateResult));
+    console.log("[actions.updateMyProfile] Profile updated successfully");
+
+    return { success: true, message: "Profile updated successfully" };
+  } catch (err: any) {
+    console.error("[actions.updateMyProfile] unexpected:", err?.message ?? err);
+    return { success: false, message: "Unexpected error" };
+  }
+};
+
+/* ----------------------- SEND PASSWORD RESET EMAIL (Self-Service) ----------------------- */
+
+/**
+ * Self-service function for authenticated users to request a password reset email
+ * Does not require CAPTCHA since user is already authenticated
+ */
+const sendPasswordResetEmail = async (
+  _input: {},
+  context: ActionAPIContext
+) => {
+  console.log("[actions.sendPasswordResetEmail] start");
+  try {
+    // 1) Verify the current user is authenticated
+    const ssr = createSSR({ request: context.request, cookies: context.cookies });
+    
+    const { data: { user }, error: userErr } = await ssr.auth.getUser();
+    if (userErr || !user || !user.email) {
+      console.error("[actions.sendPasswordResetEmail] getUser error:", userErr?.message);
+      return { success: false, message: "Unauthorized" };
+    }
+    console.log("[actions.sendPasswordResetEmail] User authenticated:", user.id);
+
+    // 2) Send password reset email
+    const { error } = await ssr.auth.resetPasswordForEmail(user.email, {
+      redirectTo: "http://localhost:4321/update-password",
+    });
+
+    if (error) {
+      console.error("[actions.sendPasswordResetEmail] error:", error.message);
+      return { success: false, message: error.message };
+    }
+
+    console.log("[actions.sendPasswordResetEmail] Email sent to:", user.email);
+    return { success: true, message: "Password reset email sent" };
+  } catch (err: any) {
+    console.error("[actions.sendPasswordResetEmail] unexpected:", err?.message ?? err);
+    return { success: false, message: "Unexpected error" };
+  }
+};
+
 /* ----------------------- ADMIN: CREATE EMPLOYEE ----------------------- */
 
 // Schema for validating employee creation input
@@ -1695,6 +1853,20 @@ export const server = {
     accept: "json",
     input: registerTestSupportMailboxSchema,
     handler: (input, context) => registerTestSupportMailbox(input, context),
+  }),
+
+  // Self-service profile update (name and avatar)
+  updateMyProfile: defineAction({
+    accept: "json",
+    input: updateMyProfileSchema,
+    handler: (input, context) => updateMyProfile(input, context),
+  }),
+
+  // Self-service password reset email (for authenticated users)
+  sendPasswordResetEmail: defineAction({
+    accept: "json",
+    input: z.object({}),
+    handler: (input, context) => sendPasswordResetEmail(input, context),
   }),
 
 };
