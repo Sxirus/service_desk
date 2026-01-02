@@ -308,10 +308,10 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
 
   return (
     <div className="p-6 bg-white rounded-lg shadow">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div className="flex items-center gap-2">
-          <Inbox className="w-6 h-6" />
-          <h2 className="text-2xl font-bold">Inbox Management</h2>
+          <Inbox className="w-5 h-5 text-muted-foreground" />
+          <h2 className="text-2xl font-semibold tracking-tight">Inbox Management</h2>
         </div>
         <Button
           onClick={() => {

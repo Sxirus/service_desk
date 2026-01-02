@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ImageCropper } from "@/components/ui/image-cropper"
+import { clearAvatarCache } from "@/utils/avatarManager"
 
 interface AccountSettingsDialogProps {
   open: boolean
@@ -99,6 +100,10 @@ export function AccountSettingsDialog({
 
       toast.success("Profile updated successfully")
       setPendingAvatarBlob(null)
+      
+      // Clear avatar cache to ensure fresh signed URL on reload
+      clearAvatarCache()
+      
       onOpenChange(false)
       
       // Reload page to reflect changes in sidebar

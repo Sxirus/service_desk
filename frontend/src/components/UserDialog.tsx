@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { IconPlus } from "@tabler/icons-react";
 import { actions } from "astro:actions";
+import { SimplePrivateAvatar } from "@/components/ui/private-avatar";
 
 interface Role {
   id: number;
@@ -41,6 +42,8 @@ export interface User {
   name: string;
   email: string;
   role: string;
+  avatar_url?: string | null;
+  disabled?: boolean;
 }
 
 interface UserDialogProps {
@@ -252,17 +255,29 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
       <form onSubmit={handleSubmit}>
         <DialogHeader>
           <DialogTitle>
-            {mode === 'create' ? 'Create New User' : 'Edit User'}
+            {mode === 'create' ? 'Add Team Member' : 'Edit Team Member'}
           </DialogTitle>
           <DialogDescription>
             {mode === 'create' 
-              ? 'Enter the details for the new user. All fields are required.'
-              : 'Edit user details. All fields are required.'
+              ? 'Add a new member to your team. They will receive an email invitation.'
+              : 'Update team member details and role.'
             }
           </DialogDescription>
         </DialogHeader>
         
         <div className="grid gap-4 py-4">
+          {/* Avatar display for edit mode */}
+          {mode === 'edit' && user && (
+            <div className="flex justify-center pb-2">
+              <SimplePrivateAvatar
+                src={user.avatar_url}
+                name={user.name}
+                className="h-16 w-16"
+                fallbackClassName="text-xl bg-primary/10 text-primary"
+              />
+            </div>
+          )}
+          
           <div className="grid gap-2">
             <Label htmlFor="email">Email</Label>
             <Input
@@ -367,9 +382,9 @@ export default function CreateUserDialog({ roles }: { roles: Role[] }) {
       roles={roles} 
       mode="create"
       trigger={
-        <Button variant="outline" size="sm">
-          <IconPlus className="w-4 h-4 mr-2" />
-          Create User
+        <Button size="sm" className="gap-2">
+          <IconPlus className="w-4 h-4" />
+          Add Member
         </Button>
       }
     />

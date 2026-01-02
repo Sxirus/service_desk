@@ -13,6 +13,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import DOMPurify from 'isomorphic-dompurify';
 import { formatDate } from '@/utils/formatDate.js';
+import { useAvatarUrl } from '@/hooks/use-avatar';
 import { 
   getAttachmentSignedUrl, 
   downloadAttachment, 
@@ -250,7 +251,10 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
 
   // Get agent name and avatar for sent emails
   const agentName = isOutgoing && email.type === 'sent' ? email.agent_name || 'Support Agent' : null;
-  const agentAvatarUrl = isOutgoing && email.type === 'sent' ? email.agent_avatar_url : null;
+  const agentAvatarPath = isOutgoing && email.type === 'sent' ? email.agent_avatar_url : null;
+  
+  // Resolve avatar URL from private storage path
+  const { url: agentAvatarUrl } = useAvatarUrl(agentAvatarPath);
   
   // Generate initials for avatar fallback
   const getInitials = (name: string) => {

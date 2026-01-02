@@ -58,6 +58,8 @@ app.use('/api/groups', require('./routes/groups'));
 
 app.use('/api/inboxes', require('./routes/inboxes'));
 
+app.use('/api/avatars', require('./routes/avatars'));
+
 // Global error handling middleware
 // This catches any unhandled errors from routes and provides consistent error responses
 app.use((err, req, res, next) => {

@@ -1,7 +1,7 @@
 "use client"
  
 import { type ColumnDef } from "@tanstack/react-table"
-import { MoreHorizontal } from "lucide-react"
+import { MoreHorizontal, Shield, ShieldCheck, UserX } from "lucide-react"
 import { useState } from "react"
  
 import { Button } from "@/components/ui/button"
@@ -14,6 +14,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { SimplePrivateAvatar, getInitials } from "@/components/ui/private-avatar"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 import { UserDialog, DeleteUserDialog } from "@/components/UserDialog"
 import { ReassignTicketsDialog } from "@/components/ReassignTicketsDialog"
@@ -25,6 +32,7 @@ export type User = {
   role: string
   email: string
   disabled?: boolean
+  avatar_url?: string | null
 }
 
 interface Role {
@@ -121,29 +129,66 @@ function UserActionsCell({ user, roles }: { user: User, roles: Role[] }) {
 export const createColumns = (roles: Role[]): ColumnDef<User>[] => [
   {
     accessorKey: "name",
-    header: "Name",
+    header: "User",
     cell: ({ row }) => {
       const user = row.original;
       return (
-        <div className="flex items-center gap-2">
-          <span>{user.name}</span>
-          {user.disabled && (
-            <Badge variant="secondary" className="text-xs">Disabled</Badge>
-          )}
+        <div className="flex items-center gap-3 py-1">
+          <SimplePrivateAvatar
+            src={user.avatar_url}
+            name={user.name}
+            className="h-9 w-9 shrink-0"
+            fallbackClassName="text-sm bg-primary/10 text-primary"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="font-medium truncate">{user.name}</span>
+              {user.disabled && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="secondary" className="text-xs gap-1 shrink-0">
+                        <UserX className="h-3 w-3" />
+                        Disabled
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      This user cannot log in
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+          </div>
         </div>
       );
     },
   },
   {
-    accessorKey: "email",
-    header: "E-Mail",
-  },
-  {
     accessorKey: "role",
     header: "Role",
+    cell: ({ row }) => {
+      const role = row.original.role;
+      const isAdmin = role.toLowerCase().includes('admin');
+      
+      return (
+        <div className="flex items-center gap-2">
+          {isAdmin ? (
+            <ShieldCheck className="h-4 w-4 text-amber-500" />
+          ) : (
+            <Shield className="h-4 w-4 text-muted-foreground" />
+          )}
+          <span className={isAdmin ? "font-medium text-amber-700 dark:text-amber-400" : ""}>
+            {role || "—"}
+          </span>
+        </div>
+      );
+    },
   },
   {
     id: "actions",
+    header: () => <span className="sr-only">Actions</span>,
     cell: ({ row }) => {
       const user = row.original;
       return <UserActionsCell user={user} roles={roles} />;

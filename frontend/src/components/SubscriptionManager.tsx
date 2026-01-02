@@ -224,9 +224,9 @@ export default function SubscriptionManager() {
   if (showUpgrade) {
     return (
       <div className="max-w-4xl space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">Upgrade to Pro Plan</h1>
-          <p className="text-muted-foreground mt-2">
+        <div className="space-y-1 mt-2">
+          <h1 className="text-2xl font-semibold tracking-tight">Upgrade to Pro Plan</h1>
+          <p className="text-sm text-muted-foreground">
             Complete your payment to unlock unlimited access
           </p>
         </div>
@@ -243,9 +243,9 @@ export default function SubscriptionManager() {
   return (
     <div className="max-w-4xl space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold">Subscription Management</h1>
-        <p className="text-muted-foreground mt-2">
+      <div className="space-y-1 mt-2">
+        <h1 className="text-2xl font-semibold tracking-tight">Subscription Management</h1>
+        <p className="text-sm text-muted-foreground">
           Manage your subscription plan and billing details
         </p>
       </div>

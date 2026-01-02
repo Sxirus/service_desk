@@ -152,7 +152,7 @@ const updateMyProfile = async (
     );
 
     // 4) Upload avatar if provided
-    let avatarUrl: string | null = null;
+    let avatarPath: string | null = null;
     if (avatarBase64) {
       try {
         // Convert base64 to buffer
@@ -176,23 +176,20 @@ const updateMyProfile = async (
           return { success: false, message: "Failed to upload avatar: " + uploadError.message };
         }
 
-        // Get public URL
-        const { data: urlData } = admin.storage
-          .from("avatars")
-          .getPublicUrl(filePath);
-        
-        avatarUrl = urlData.publicUrl + `?t=${Date.now()}`;
-        console.log("[actions.updateMyProfile] Avatar uploaded:", avatarUrl);
+        // Store the path (not public URL) - avatars bucket is private
+        // Signed URLs will be generated on-demand when displaying avatars
+        avatarPath = filePath;
+        console.log("[actions.updateMyProfile] Avatar uploaded, path stored:", avatarPath);
       } catch (uploadErr: any) {
         console.error("[actions.updateMyProfile] Avatar processing error:", uploadErr?.message);
         return { success: false, message: "Failed to process avatar" };
       }
     }
 
-    // 5) Update employee record with name and avatar URL
+    // 5) Update employee record with name and avatar path
     const updateData: { name: string; avatar_url?: string } = { name };
-    if (avatarUrl) {
-      updateData.avatar_url = avatarUrl;
+    if (avatarPath) {
+      updateData.avatar_url = avatarPath;
     }
     console.log("[actions.updateMyProfile] Update data:", JSON.stringify(updateData));
 

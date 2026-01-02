@@ -81,7 +81,7 @@ const [
   { data: roleAssignments, error: assignmentsErr }
 ] = await Promise.all([
   supabase.from("roles").select("id, name").order("id"),
-  supabase.from("employees").select("id, name, disabled, client_id, user_id").eq("client_id", authContext.employee.client_id).order("name"),
+  supabase.from("employees").select("id, name, disabled, client_id, user_id, avatar_url").eq("client_id", authContext.employee.client_id).order("name"),
   supabase.from("roles-employees").select("employee_id, role_id")
 ]);
 
@@ -194,6 +194,7 @@ const tableData: User[] = ((employees as Employee[]) ?? []).map((employee) => {
     email: emailMap.get(employee.id) ?? "",
     role: roleNames || "—", // Use em dash if no roles assigned
     disabled: (employee as any).disabled || false,
+    avatar_url: (employee as any).avatar_url || null,
   } as User;
 });
 
@@ -207,60 +208,140 @@ const employeesForGroups = ((employees as Employee[]) ?? []).map(emp => ({
   name: emp.name
 }));
 
+// Calculate stats for the page
+const totalUsers = tableData.length;
+const activeUsers = tableData.filter(u => !u.disabled).length;
+const disabledUsers = tableData.filter(u => u.disabled).length;
+const adminUsers = tableData.filter(u => u.role.toLowerCase().includes('admin')).length;
+
 console.log("[user-management] Page setup complete, rendering");
 ---
 
-<Layout title="User Management">
+<Layout title="Users & Groups">
   <AdminShell 
     client:load
     user={sidebarData.user}
     firstTeam={sidebarData.team ?? undefined}
     crumbParentLabel="Administration"
     crumbParentHref="/manage/settings"
-    crumbCurrent="Users"
+    crumbCurrent="Users & Groups"
     isAdmin={authContext.isAdmin}
     currentPath="/manage/users"
     employeeId={sidebarData.employeeId}
     clientId={sidebarData.clientId}
     subscriptionTier={sidebarData.subscriptionTier}
   >
-    <div class="space-y-6">
+    <div class="space-y-8">
       <!-- Page Header -->
-      <div class="flex items-center justify-between">
-        <div>
-          <h1 class="text-3xl font-bold tracking-tight">User Management</h1>
-          <p class="text-muted-foreground mt-1">
-            Manage employee accounts and role assignments for your organization.
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div class="space-y-1 mt-2">
+          <h1 class="text-2xl font-semibold tracking-tight">Users & Groups</h1>
+          <p class="text-sm text-muted-foreground">
+            Manage your team's access, groups, roles, and permissions.
           </p>
         </div>
         
-        <!-- Create User Dialog Button -->
-        <div class="shrink-0">
-          <CreateUserDialog 
-            client:only="react" 
-            roles={roleRows ?? []} 
-          />
+        <!-- Create User Button -->
+        <CreateUserDialog 
+          client:only="react" 
+          roles={roleRows ?? []} 
+        />
+      </div>
+
+      <!-- Stats Cards -->
+      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="rounded-xl border bg-card p-4 shadow-sm">
+          <div class="flex items-center gap-3">
+            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+            </div>
+            <div>
+              <p class="text-2xl font-bold">{totalUsers}</p>
+              <p class="text-xs text-muted-foreground">Total Members</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border bg-card p-4 shadow-sm">
+          <div class="flex items-center gap-3">
+            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22,4 12,14.01 9,11.01"></polyline>
+              </svg>
+            </div>
+            <div>
+              <p class="text-2xl font-bold">{activeUsers}</p>
+              <p class="text-xs text-muted-foreground">Active</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border bg-card p-4 shadow-sm">
+          <div class="flex items-center gap-3">
+            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                <path d="m9 12 2 2 4-4"></path>
+              </svg>
+            </div>
+            <div>
+              <p class="text-2xl font-bold">{adminUsers}</p>
+              <p class="text-xs text-muted-foreground">Administrators</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border bg-card p-4 shadow-sm">
+          <div class="flex items-center gap-3">
+            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-500/10">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+              </svg>
+            </div>
+            <div>
+              <p class="text-2xl font-bold">{disabledUsers}</p>
+              <p class="text-xs text-muted-foreground">Disabled</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Users Table Card -->
-      <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
-        <div class="p-6">
-          <ClientUsersTable 
-            client:only="react" 
-            data={tableData} 
-            roles={roleRows ?? []} 
-          />
+      <!-- Users Table -->
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-medium">All Team Members</h2>
         </div>
+        <ClientUsersTable 
+          client:only="react" 
+          data={tableData} 
+          roles={roleRows ?? []} 
+        />
       </div>
 
       <!-- Employee Groups Section -->
-      <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
-        <div class="p-6">
-          <GroupManagementPanel
-            client:only="react"
-            employees={employeesForGroups}
-          />
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-medium">Groups</h2>
+            <p class="text-sm text-muted-foreground">
+              Organize team members into groups for easier inbox access management.
+            </p>
+          </div>
+        </div>
+        <div class="rounded-xl border bg-card shadow-sm">
+          <div class="p-6">
+            <GroupManagementPanel
+              client:only="react"
+              employees={employeesForGroups}
+            />
+          </div>
         </div>
       </div>
     </div>

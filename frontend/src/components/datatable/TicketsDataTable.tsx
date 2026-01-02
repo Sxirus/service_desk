@@ -36,7 +36,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { SimplePrivateAvatar, getInitials } from "@/components/ui/private-avatar"
 import {
   Tooltip,
   TooltipContent,
@@ -90,16 +90,6 @@ function saveState<T>(tableId: string, key: string, value: T): void {
 }
 
 /**
- * Get initials from a name
- */
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/)
-  const first = parts[0]?.[0] ?? ''
-  const last = parts.length > 1 ? parts[parts.length - 1][0] : ''
-  return (first + last).toUpperCase() || '?'
-}
-
-/**
  * ViewersCell - Shows avatars of users currently viewing this ticket
  */
 function ViewersCell({ customerId }: { customerId: string }) {
@@ -115,12 +105,14 @@ function ViewersCell({ customerId }: { customerId: string }) {
         {viewers.slice(0, 3).map((viewer) => (
           <Tooltip key={viewer.id}>
             <TooltipTrigger asChild>
-              <Avatar className="h-6 w-6 border-2 border-background ring-0 cursor-default">
-                <AvatarImage src={viewer.avatar_url || undefined} alt={viewer.name} />
-                <AvatarFallback className="text-[10px] bg-primary text-primary-foreground">
-                  {getInitials(viewer.name)}
-                </AvatarFallback>
-              </Avatar>
+              <div>
+                <SimplePrivateAvatar
+                  src={viewer.avatar_url}
+                  name={viewer.name}
+                  className="h-6 w-6 border-2 border-background ring-0 cursor-default"
+                  fallbackClassName="text-[10px] bg-primary text-primary-foreground"
+                />
+              </div>
             </TooltipTrigger>
             <TooltipContent side="top" className="text-xs">
               {viewer.name} is viewing

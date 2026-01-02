@@ -107,10 +107,10 @@ export function AnalyticsDashboard({
   return (
     <div className="space-y-6 p-6">
       {/* Page Header with Date Picker */}
-      <header className="flex items-start justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Analytics Dashboard</h1>
-          <p className="text-muted-foreground mt-2">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1 mt-2">
+          <h1 className="text-2xl font-semibold tracking-tight">Analytics Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
             Email statistics for the selected period
           </p>
         </div>
