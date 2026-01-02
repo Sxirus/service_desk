@@ -121,6 +121,19 @@ export const apiClient = {
   },
 
   /**
+   * PATCH request
+   * @param endpoint - The API endpoint
+   * @param data - Request body data
+   * @returns Response JSON
+   */
+  async patch(endpoint: string, data?: any) {
+    return this.request(endpoint, {
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  },
+
+  /**
    * DELETE request
    * @param endpoint - The API endpoint
    * @returns Response JSON

@@ -3,6 +3,7 @@ import {
   ChevronsUpDown,
   LogOut,
   Sparkles,
+  Shield,
 } from "lucide-react"
 import { useState } from "react"
 import { useAvatarUrl } from "@/hooks/use-avatar"
@@ -36,6 +37,7 @@ export function NavUser({
   employeeId,
   clientId,
   subscriptionTier = "free",
+  isPlatformAdmin = false,
 }: {
   user: {
     name: string
@@ -46,6 +48,7 @@ export function NavUser({
   employeeId: number
   clientId: number
   subscriptionTier?: string
+  isPlatformAdmin?: boolean
 }) {
   const { isMobile } = useSidebar()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
@@ -137,6 +140,17 @@ export function NavUser({
                   Account Settings
                 </DropdownMenuItem>
               </DropdownMenuGroup>
+              {isPlatformAdmin && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem onClick={() => window.location.href = '/platform/dashboard'}>
+                      <Shield />
+                      Platform Management
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem 
                 onClick={handleLogout}

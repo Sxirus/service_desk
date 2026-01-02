@@ -15,6 +15,7 @@ import {
   Users,
   Home,
   Inbox,
+  Shield,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -50,6 +51,7 @@ type Props = React.ComponentProps<typeof Sidebar> & {
   userOverride?: UserOverride
   firstTeamOverride?: FirstTeamOverride
   isAdmin?: boolean
+  isPlatformAdmin?: boolean
   currentPath?: string
   accessibleInboxes?: InboxType[]
   employeeId?: number
@@ -61,6 +63,7 @@ export function AppSidebar({
   userOverride, 
   firstTeamOverride, 
   isAdmin = false,
+  isPlatformAdmin = false,
   currentPath = "/",
   accessibleInboxes = [],
   employeeId = 0,
@@ -153,6 +156,38 @@ export function AppSidebar({
       });
     }
 
+    // Platform Management for platform admins
+    if (isPlatformAdmin) {
+      baseItems.push({
+        title: "Platform",
+        url: "/platform",
+        icon: Shield,
+        isActive: currentPath.startsWith("/platform"),
+        items: [
+          {
+            title: "Dashboard",
+            url: "/platform/dashboard"
+          },
+          {
+            title: "Clients",
+            url: "/platform/clients"
+          },
+          {
+            title: "Billing",
+            url: "/platform/billing"
+          },
+          {
+            title: "Analytics",
+            url: "/platform/analytics"
+          },
+          {
+            title: "Platform Admins",
+            url: "/platform/admins"
+          }
+        ],
+      });
+    }
+
     return baseItems;
   };
 
@@ -179,6 +214,7 @@ export function AppSidebar({
           employeeId={employeeId}
           clientId={clientId}
           subscriptionTier={subscriptionTier}
+          isPlatformAdmin={isPlatformAdmin}
         />
       </SidebarFooter>
       <SidebarRail />

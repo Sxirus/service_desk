@@ -29,6 +29,7 @@ type Props = {
   crumbParentHref?: string;
   crumbCurrent?: string;
   isAdmin?: boolean;
+  isPlatformAdmin?: boolean;
   currentPath?: string;
   employeeId?: number;
   clientId?: number;
@@ -43,6 +44,7 @@ export default function AdminShell({
   crumbParentHref = "#",
   crumbCurrent = "Data Fetching",
   isAdmin = false,
+  isPlatformAdmin = false,
   currentPath,
   employeeId = 0,
   clientId = 0,
@@ -87,6 +89,7 @@ export default function AdminShell({
         }}
         firstTeamOverride={firstTeam}
         isAdmin={isAdmin}
+        isPlatformAdmin={isPlatformAdmin}
         currentPath={finalPath}
         accessibleInboxes={accessibleInboxes}
         employeeId={employeeId}

@@ -1,0 +1,100 @@
+---
+/**
+ * Platform Admins Page
+ * Manage platform administrators
+ */
+
+import Layout from "../../layouts/BaseLayout.astro";
+import { createClient } from "../../lib/supabase.ts";
+import { getPlatformOnlyContext, getCompletePageContext } from "../../lib/auth-helpers.ts";
+import PlatformShell from "@/components/platform/PlatformShell";
+import AdminsManagement from "@/components/platform/AdminsManagement";
+
+// Initialize Supabase client
+const supabase = createClient({
+  request: Astro.request,
+  cookies: Astro.cookies,
+});
+
+console.log("[platform-admins] Page accessed");
+
+// Check authentication
+let user: { id: string; email: string } | null = null;
+let platformAdminId: string | null = null;
+let hasClientLink = false;
+let clientName: string | undefined;
+
+const pageContext = await getCompletePageContext(supabase, Astro.cookies);
+if (pageContext && pageContext.isPlatformAdmin) {
+  user = pageContext.authContext.user;
+  hasClientLink = true;
+  clientName = pageContext.sidebarData.team?.name;
+  
+  // Get platform admin ID
+  const { data: admin } = await supabase
+    .from("platform_admins")
+    .select("id")
+    .eq("user_id", user.id)
+    .single();
+  platformAdminId = admin?.id;
+} else {
+  const platformContext = await getPlatformOnlyContext(supabase, Astro.cookies);
+  if (platformContext) {
+    user = platformContext.user;
+    platformAdminId = platformContext.platformAdmin.id;
+    hasClientLink = false;
+  }
+}
+
+if (!user || !platformAdminId) {
+  console.error("[platform-admins] Not a platform admin, redirecting");
+  return Astro.redirect("/");
+}
+
+// Get session for API calls
+const { data: { session } } = await supabase.auth.getSession();
+if (!session) {
+  console.error("[platform-admins] No session, redirecting");
+  return Astro.redirect("/");
+}
+
+// Fetch platform admins from backend API
+let admins: any[] = [];
+try {
+  const response = await fetch("http://localhost:3000/api/platform/admins", {
+    headers: {
+      "Authorization": `Bearer ${session.access_token}`,
+      "Content-Type": "application/json"
+    }
+  });
+
+  if (response.ok) {
+    const result = await response.json();
+    admins = result.data || [];
+    console.log("[platform-admins] Loaded", admins.length, "admins");
+  } else {
+    console.error("[platform-admins] API error:", response.status);
+  }
+} catch (error) {
+  console.error("[platform-admins] Failed to fetch admins:", error);
+}
+---
+
+<Layout title="Platform Admins">
+  <PlatformShell
+    client:load
+    user={{ email: user.email }}
+    crumbParentLabel="Platform"
+    crumbParentHref="/platform/dashboard"
+    crumbCurrent="Platform Admins"
+    currentPath="/platform/admins"
+    hasClientLink={hasClientLink}
+    clientName={clientName}
+  >
+    <AdminsManagement 
+      client:load
+      initialAdmins={admins || []}
+      currentAdminId={platformAdminId}
+    />
+  </PlatformShell>
+</Layout>

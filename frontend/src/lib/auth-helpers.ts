@@ -36,6 +36,13 @@ export interface SidebarData {
   employeeId: number;
   clientId: number;
   subscriptionTier: string;
+  isPlatformAdmin: boolean;
+}
+
+export interface PlatformAdminContext {
+  id: string;
+  userId: string;
+  email: string;
 }
 
 /**
@@ -120,12 +127,44 @@ export async function getAuthContext(
 }
 
 /**
+ * Check if a user is a platform admin
+ * Returns the platform admin record if found, null otherwise
+ */
+export async function checkPlatformAdmin(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<PlatformAdminContext | null> {
+  const { data, error } = await supabase
+    .from("platform_admins")
+    .select("id, user_id, email")
+    .eq("user_id", userId)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  // Update last_login timestamp
+  await supabase
+    .from("platform_admins")
+    .update({ last_login: new Date().toISOString() })
+    .eq("id", data.id);
+
+  return {
+    id: data.id,
+    userId: data.user_id,
+    email: data.email,
+  };
+}
+
+/**
  * Get sidebar data
  * Retrieves user info and team details for the sidebar
  */
 export async function getSidebarData(
   supabase: SupabaseClient,
-  authContext: AuthContext
+  authContext: AuthContext,
+  isPlatformAdmin: boolean = false
 ): Promise<SidebarData> {
   log.info("Loading sidebar data");
 
@@ -166,6 +205,7 @@ export async function getSidebarData(
     employeeId: authContext.employee.id,
     clientId: authContext.employee.client_id,
     subscriptionTier: clientData?.subscription_tier ?? "free",
+    isPlatformAdmin,
   };
 
   log.info("sidebarData.subscriptionTier:", sidebarData.subscriptionTier);
@@ -184,11 +224,50 @@ export async function getCompletePageContext(
 ): Promise<{
   authContext: AuthContext;
   sidebarData: SidebarData;
+  isPlatformAdmin: boolean;
 } | null> {
   const authContext = await getAuthContext(supabase, cookies, preAuthenticatedUser);
   if (!authContext) return null;
   
-  const sidebarData = await getSidebarData(supabase, authContext);
+  // Check if user is a platform admin
+  const platformAdmin = await checkPlatformAdmin(supabase, authContext.user.id);
+  const isPlatformAdmin = platformAdmin !== null;
   
-  return { authContext, sidebarData };
+  const sidebarData = await getSidebarData(supabase, authContext, isPlatformAdmin);
+  
+  return { authContext, sidebarData, isPlatformAdmin };
+}
+
+/**
+ * Get platform-only context for users without a client link
+ * Used for platform admins who are not employees of any client
+ */
+export async function getPlatformOnlyContext(
+  supabase: SupabaseClient,
+  cookies: AstroCookies
+): Promise<{
+  user: { id: string; email: string };
+  platformAdmin: PlatformAdminContext;
+} | null> {
+  // Get authenticated user
+  const { data: userData, error: userErr } = await supabase.auth.getUser();
+  if (userErr || !userData.user) {
+    return null;
+  }
+
+  const user = userData.user;
+
+  // Check if platform admin
+  const platformAdmin = await checkPlatformAdmin(supabase, user.id);
+  if (!platformAdmin) {
+    return null;
+  }
+
+  return {
+    user: {
+      id: user.id,
+      email: user.email ?? "",
+    },
+    platformAdmin,
+  };
 }

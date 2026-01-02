@@ -98,6 +98,7 @@ const currentUserForPresence = {
     crumbParentHref="/inboxes"
     crumbCurrent={inbox ? inbox.name : "Inbox"}
     isAdmin={authContext.isAdmin}
+    isPlatformAdmin={pageContext.isPlatformAdmin}
     currentPath={`/inboxes/${inboxId}`}
     employeeId={sidebarData.employeeId}
     clientId={sidebarData.clientId}

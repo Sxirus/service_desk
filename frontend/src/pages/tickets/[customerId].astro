@@ -491,6 +491,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
     crumbParentHref="/dashboard"
     crumbCurrent={`${customer?.name} - Ticket` || "Ticket"}
     isAdmin={authContext.isAdmin}
+    isPlatformAdmin={pageContext.isPlatformAdmin}
     currentPath={`/tickets/${customerId}`}
     employeeId={sidebarData.employeeId}
     clientId={sidebarData.clientId}

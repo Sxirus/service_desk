@@ -3,6 +3,7 @@ import { Headset } from "lucide-react";
 import { LoginForm } from "@/components/login-form";
 import Layout from "../layouts/BaseLayout.astro";
 import { createClient } from "../lib/supabase.ts";
+import { checkPlatformAdmin } from "../lib/auth-helpers.ts";
 
 // Supabase SSR Client
 const supabase = createClient({
@@ -13,7 +14,27 @@ const supabase = createClient({
 // Redirect wenn schon eingeloggt
 const { data } = await supabase.auth.getUser();
 if (data.user) {
-  return Astro.redirect("/dashboard");
+  // Check if user has an employee record (linked to a client)
+  const { data: employee } = await supabase
+    .from("employees")
+    .select("id")
+    .eq("user_id", data.user.id)
+    .single();
+
+  if (employee) {
+    // User is linked to a client, redirect to regular dashboard
+    return Astro.redirect("/dashboard");
+  } else {
+    // User has no client link - check if they're a platform admin
+    const platformAdmin = await checkPlatformAdmin(supabase, data.user.id);
+    if (platformAdmin) {
+      // Platform admin without client link, redirect to platform dashboard
+      return Astro.redirect("/platform/dashboard");
+    }
+    // User exists but has no employee record and is not a platform admin
+    // This shouldn't normally happen, but redirect to a safe page
+    return Astro.redirect("/dashboard");
+  }
 }
 
 // Turnstile Site Key

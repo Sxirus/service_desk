@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { createClient } from "../lib/supabase.ts";
+import { checkPlatformAdmin } from "../lib/auth-helpers.ts";
 
 // Sidebar Shell
 import AdminShell from "@/components/AdminShell";
@@ -178,6 +179,10 @@ const currentUserForPresence = {
   name: sidebarUser.name || 'Support Agent',
   avatar_url: sidebarUser.avatarUrl || null
 };
+
+// Check if user is a platform admin
+const platformAdminContext = await checkPlatformAdmin(supabase, user.id);
+const isPlatformAdmin = platformAdminContext !== null;
 ---
 
 <BaseLayout title="Service Desk">
@@ -188,6 +193,7 @@ const currentUserForPresence = {
     crumbParentHref="/"
     crumbCurrent="Your assigned Tickets"
     isAdmin={isAdmin}
+    isPlatformAdmin={isPlatformAdmin}
     currentPath="/dashboard"
     employeeId={me.id}
     clientId={me.client_id}

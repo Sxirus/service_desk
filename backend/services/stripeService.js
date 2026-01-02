@@ -317,6 +317,195 @@ async function updateSubscriptionQuantity(subscriptionId, quantity) {
   }
 }
 
+/**
+ * Get MRR for a specific subscription
+ * @param {string} subscriptionId - Stripe subscription ID
+ * @returns {Promise<Object>} Subscription MRR in cents
+ */
+async function getSubscriptionMRR(subscriptionId) {
+  try {
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    
+    // Calculate MRR from subscription items
+    let mrr = 0;
+    for (const item of subscription.items.data) {
+      const price = item.price;
+      const quantity = item.quantity || 1;
+      
+      if (price.recurring) {
+        let monthlyAmount = price.unit_amount * quantity;
+        
+        // Normalize to monthly
+        if (price.recurring.interval === 'year') {
+          monthlyAmount = monthlyAmount / 12;
+        } else if (price.recurring.interval === 'week') {
+          monthlyAmount = monthlyAmount * 4.33;
+        } else if (price.recurring.interval === 'day') {
+          monthlyAmount = monthlyAmount * 30;
+        }
+        
+        mrr += monthlyAmount;
+      }
+    }
+    
+    return {
+      success: true,
+      mrr: Math.round(mrr), // MRR in cents
+      status: subscription.status,
+      currency: subscription.currency
+    };
+  } catch (error) {
+    console.error('[StripeService] Error getting subscription MRR:', error.message);
+    return {
+      success: false,
+      error: error.message,
+      mrr: 0
+    };
+  }
+}
+
+/**
+ * Get total revenue for a customer from Stripe
+ * @param {string} customerId - Stripe customer ID
+ * @returns {Promise<Object>} Total paid amount
+ */
+async function getCustomerTotalRevenue(customerId) {
+  try {
+    // Get all paid invoices for this customer
+    const invoices = await stripe.invoices.list({
+      customer: customerId,
+      status: 'paid',
+      limit: 100, // Get up to 100 invoices
+    });
+    
+    let totalRevenue = 0;
+    for (const invoice of invoices.data) {
+      totalRevenue += invoice.amount_paid;
+    }
+    
+    // If there are more invoices, paginate
+    let hasMore = invoices.has_more;
+    let startingAfter = invoices.data.length > 0 ? invoices.data[invoices.data.length - 1].id : null;
+    
+    while (hasMore && startingAfter) {
+      const moreInvoices = await stripe.invoices.list({
+        customer: customerId,
+        status: 'paid',
+        limit: 100,
+        starting_after: startingAfter,
+      });
+      
+      for (const invoice of moreInvoices.data) {
+        totalRevenue += invoice.amount_paid;
+      }
+      
+      hasMore = moreInvoices.has_more;
+      startingAfter = moreInvoices.data.length > 0 ? moreInvoices.data[moreInvoices.data.length - 1].id : null;
+    }
+    
+    return {
+      success: true,
+      totalRevenue: totalRevenue, // In cents
+      invoiceCount: invoices.data.length
+    };
+  } catch (error) {
+    console.error('[StripeService] Error getting customer revenue:', error.message);
+    return {
+      success: false,
+      error: error.message,
+      totalRevenue: 0
+    };
+  }
+}
+
+/**
+ * Get platform-wide revenue metrics from Stripe
+ * @returns {Promise<Object>} MRR and total revenue across all subscriptions
+ */
+async function getPlatformRevenueMetrics() {
+  try {
+    // Get all active subscriptions
+    const subscriptions = await stripe.subscriptions.list({
+      status: 'active',
+      limit: 100,
+      expand: ['data.items.data.price']
+    });
+    
+    let totalMRR = 0;
+    
+    for (const subscription of subscriptions.data) {
+      for (const item of subscription.items.data) {
+        const price = item.price;
+        const quantity = item.quantity || 1;
+        
+        if (price.recurring) {
+          let monthlyAmount = price.unit_amount * quantity;
+          
+          // Normalize to monthly
+          if (price.recurring.interval === 'year') {
+            monthlyAmount = monthlyAmount / 12;
+          } else if (price.recurring.interval === 'week') {
+            monthlyAmount = monthlyAmount * 4.33;
+          } else if (price.recurring.interval === 'day') {
+            monthlyAmount = monthlyAmount * 30;
+          }
+          
+          totalMRR += monthlyAmount;
+        }
+      }
+    }
+    
+    // Get total revenue from all paid invoices (last 12 months for performance)
+    const twelveMonthsAgo = Math.floor(Date.now() / 1000) - (365 * 24 * 60 * 60);
+    const invoices = await stripe.invoices.list({
+      status: 'paid',
+      limit: 100,
+      created: { gte: twelveMonthsAgo }
+    });
+    
+    let totalRevenue = 0;
+    for (const invoice of invoices.data) {
+      totalRevenue += invoice.amount_paid;
+    }
+    
+    // Paginate if needed
+    let hasMore = invoices.has_more;
+    let startingAfter = invoices.data.length > 0 ? invoices.data[invoices.data.length - 1].id : null;
+    
+    while (hasMore && startingAfter) {
+      const moreInvoices = await stripe.invoices.list({
+        status: 'paid',
+        limit: 100,
+        starting_after: startingAfter,
+        created: { gte: twelveMonthsAgo }
+      });
+      
+      for (const invoice of moreInvoices.data) {
+        totalRevenue += invoice.amount_paid;
+      }
+      
+      hasMore = moreInvoices.has_more;
+      startingAfter = moreInvoices.data.length > 0 ? moreInvoices.data[moreInvoices.data.length - 1].id : null;
+    }
+    
+    return {
+      success: true,
+      mrr: Math.round(totalMRR), // In cents
+      totalRevenue: totalRevenue, // In cents (last 12 months)
+      activeSubscriptions: subscriptions.data.length,
+      currency: 'eur'
+    };
+  } catch (error) {
+    console.error('[StripeService] Error getting platform revenue:', error.message);
+    return {
+      success: false,
+      error: error.message,
+      mrr: 0,
+      totalRevenue: 0
+    };
+  }
+}
+
 module.exports = {
   createStripeCustomer,
   updateStripeCustomer,
@@ -327,4 +516,7 @@ module.exports = {
   createBillingPortalSession,
   getSubscription,
   updateSubscriptionQuantity,
+  getSubscriptionMRR,
+  getCustomerTotalRevenue,
+  getPlatformRevenueMetrics,
 };

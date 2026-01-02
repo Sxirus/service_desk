@@ -1,0 +1,99 @@
+---
+/**
+ * Platform Billing Page
+ * View subscription and billing overview across all clients
+ */
+
+import Layout from "../../layouts/BaseLayout.astro";
+import { createClient } from "../../lib/supabase.ts";
+import { getPlatformOnlyContext, getCompletePageContext } from "../../lib/auth-helpers.ts";
+import PlatformShell from "@/components/platform/PlatformShell";
+import BillingOverview from "@/components/platform/BillingOverview";
+
+// Initialize Supabase client
+const supabase = createClient({
+  request: Astro.request,
+  cookies: Astro.cookies,
+});
+
+console.log("[platform-billing] Page accessed");
+
+// Check authentication
+let user: { id: string; email: string } | null = null;
+let hasClientLink = false;
+let clientName: string | undefined;
+
+const pageContext = await getCompletePageContext(supabase, Astro.cookies);
+if (pageContext && pageContext.isPlatformAdmin) {
+  user = pageContext.authContext.user;
+  hasClientLink = true;
+  clientName = pageContext.sidebarData.team?.name;
+} else {
+  const platformContext = await getPlatformOnlyContext(supabase, Astro.cookies);
+  if (platformContext) {
+    user = platformContext.user;
+    hasClientLink = false;
+  }
+}
+
+if (!user) {
+  console.error("[platform-billing] Not a platform admin, redirecting");
+  return Astro.redirect("/");
+}
+
+// Get session for API calls
+const { data: { session } } = await supabase.auth.getSession();
+if (!session) {
+  console.error("[platform-billing] No session, redirecting");
+  return Astro.redirect("/");
+}
+
+// Fetch billing data from backend API
+let billingData: any[] = [];
+let summary = {
+  totalClients: 0,
+  paidClients: 0,
+  freeClients: 0,
+  withStripe: 0,
+  totalSeats: 0,
+};
+
+try {
+  const response = await fetch("http://localhost:3000/api/platform/billing", {
+    headers: {
+      "Authorization": `Bearer ${session.access_token}`,
+      "Content-Type": "application/json"
+    }
+  });
+
+  if (response.ok) {
+    const result = await response.json();
+    billingData = result.data?.clients || [];
+    summary = result.data?.summary || summary;
+    console.log("[platform-billing] Billing data loaded");
+  } else {
+    console.error("[platform-billing] API error:", response.status);
+  }
+} catch (error) {
+  console.error("[platform-billing] Failed to fetch billing data:", error);
+}
+---
+
+<Layout title="Platform Billing">
+  <PlatformShell
+    client:load
+    user={{ email: user.email }}
+    crumbParentLabel="Platform"
+    crumbParentHref="/platform/dashboard"
+    crumbCurrent="Billing"
+    currentPath="/platform/billing"
+    hasClientLink={hasClientLink}
+    clientName={clientName}
+  >
+    <BillingOverview 
+      client:load
+      billingData={billingData}
+      summary={summary}
+    />
+  </PlatformShell>
+</Layout>
