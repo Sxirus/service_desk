@@ -237,6 +237,71 @@ router.post('/assignGroup',
 );
 
 /**
+ * Unassign employee and group from customer
+ * POST /api/client/unassign
+ * Body: { customer_id }
+ * 
+ * Authentication: Required
+ * Authorization: Customer must belong to user's client
+ */
+router.post('/unassign',
+  authenticate,
+  validateId('customer_id'),
+  async (req, res) => {
+    try {
+      const customer_id = req.sanitized.customer_id;
+      const client_id = req.user.client_id;
+
+      console.log('[CLIENT] Unassigning customer:', {
+        customer_id,
+        client_id
+      });
+
+      // Verify customer belongs to user's client
+      const { data: customer, error: customerError } = await supabase
+        .from('customers')
+        .select('client_id')
+        .eq('id', customer_id)
+        .single();
+
+      if (customerError || !customer) {
+        console.error('[CLIENT] Customer not found:', customer_id);
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+
+      if (customer.client_id !== client_id) {
+        console.warn('[CLIENT] Unauthorized customer access attempt:', {
+          customer_id,
+          customer_client_id: customer.client_id,
+          user_client_id: client_id
+        });
+        return res.status(403).json({ error: 'Customer does not belong to your client' });
+      }
+
+      // Clear both employee_id and group_id
+      const { data, error } = await supabase
+        .from('customers')
+        .update({ 
+          employee_id: null,
+          group_id: null
+        })
+        .eq('id', customer_id);
+
+      if (error) {
+        console.error('[CLIENT] Unassign update failed:', error.message);
+        return res.status(500).json({ error: 'Datenbankfehler' });
+      }
+
+      console.log('[CLIENT] Successfully unassigned customer', customer_id);
+      res.json({ success: true, data });
+    } catch (err) {
+      console.error('[CLIENT] Server error:', err.message);
+      res.status(500).json({ error: 'Serverfehler' });
+    }
+  }
+);
+
+/**
  * Create Stripe customer for a client
  * POST /api/client/createStripeCustomer
  * Body: { client_id, email, name, address_street, address_city, address_zip, address_country, vat }

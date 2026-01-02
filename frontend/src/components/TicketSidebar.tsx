@@ -24,6 +24,7 @@ import { CustomerInfo } from './CustomerInfo';
 import type { TicketSidebarProps } from '@/types/ticket.types';
 import type { ShopifyClientData } from '@/types/shopify.types';
 import { apiClient } from '@/utils/api';
+import { toast } from 'sonner';
 
 /**
  * Intersection Observer hook for lazy loading
@@ -227,11 +228,14 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
             if (assignedEmp) {
               setAssignedName(`👤 ${assignedEmp.title}`);
             }
+            toast.success(assignedEmp ? `Assigned to ${assignedEmp.title}` : 'Employee assigned successfully');
           } else {
             console.error('[TicketSidebar] Employee assignment failed:', response.error);
+            toast.error('Failed to assign employee');
           }
         } catch (error) {
           console.error('[TicketSidebar] Failed to assign employee:', error);
+          toast.error('Failed to assign employee');
         }
       } else if (type === 'group') {
         console.log('[TicketSidebar] Assigning group:', id, 'to customer:', customer.id);
@@ -249,11 +253,34 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
             if (assignedGroup) {
               setAssignedName(`👥 ${assignedGroup.name}`);
             }
+            toast.success(assignedGroup ? `Assigned to ${assignedGroup.name}` : 'Group assigned successfully');
           } else {
             console.error('[TicketSidebar] Group assignment failed:', response.error);
+            toast.error('Failed to assign group');
           }
         } catch (error) {
           console.error('[TicketSidebar] Failed to assign group:', error);
+          toast.error('Failed to assign group');
+        }
+      } else if (type === 'unassign') {
+        console.log('[TicketSidebar] Unassigning customer:', customer.id);
+        
+        try {
+          const response = await apiClient.post('/client/unassign', {
+            customer_id: customer.id
+          });
+          
+          if (response.success) {
+            console.log('[TicketSidebar] Unassigned successfully');
+            setAssignedName(null);
+            toast.success('Assignment removed');
+          } else {
+            console.error('[TicketSidebar] Unassign failed:', response.error);
+            toast.error('Failed to remove assignment');
+          }
+        } catch (error) {
+          console.error('[TicketSidebar] Failed to unassign:', error);
+          toast.error('Failed to remove assignment');
         }
       }
     };

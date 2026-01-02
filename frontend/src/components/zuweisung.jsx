@@ -30,17 +30,36 @@ export function Assign({
   const isAssigned = assigned != null;
   const placeholderClass = isAssigned ? `${placeholderStyleAssigned}` : "placeholder-gray-400";
   const [placeholderClassState, setPlaceholderClassState] = useState(placeholderClass);
+  const [showAssigned, setShowAssigned] = useState(isAssigned);
 
   // Update placeholder when assigned prop changes
   useEffect(() => {
     if (assigned != null) {
       setPlaceholderState(assigned);
       setPlaceholderClassState(placeholderStyleAssigned);
+      setShowAssigned(true);
     } else {
       setPlaceholderState(placeholder);
       setPlaceholderClassState("placeholder-gray-400");
+      setShowAssigned(false);
     }
   }, [assigned, placeholder]);
+
+  // Handle unassign
+  const handleUnassign = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    window.dispatchEvent(
+      new CustomEvent(eventName, {
+        detail: { text: 'unassign:true' }
+      })
+    );
+    
+    setPlaceholderState(placeholder);
+    setPlaceholderClassState("placeholder-gray-400");
+    setShowAssigned(false);
+  }, [eventName, placeholder]);
     
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -128,11 +147,12 @@ export function Assign({
 
     setPlaceholderState(s.title);
     setPlaceholderClassState(placeholderStyleAssigned);
+    setShowAssigned(true);
 
     setOpen(false);
     setQuery("");
     setHovered(-1);
-}, [suggestions]);
+}, [suggestions, eventName]);
 
   const onKeyDown = (e) => {
     if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
@@ -180,7 +200,7 @@ export function Assign({
         <input
           ref={inputRef}
           type="search"
-          className={`w-full bg-white cursor-pointer rounded-2xl border border-gray-300 px-4 py-2 outline-none focus:ring-4 focus:ring-gray-200 shadow-sm ${placeholderClassState}`}
+          className={`w-full bg-white cursor-pointer rounded-2xl border border-gray-300 px-4 py-2 ${showAssigned ? 'pr-10' : ''} outline-none focus:ring-4 focus:ring-gray-200 shadow-sm ${placeholderClassState}`}
           placeholder={placeholderState}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -191,6 +211,21 @@ export function Assign({
           aria-autocomplete="list"
           aria-activedescendant={open && hovered >= 0 ? `${listboxId}-opt-${hovered}` : undefined}
         />
+
+        {/* Unassign button */}
+        {showAssigned && (
+          <button
+            type="button"
+            onClick={handleUnassign}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors p-1 rounded-full hover:bg-gray-100"
+            title="Remove assignment"
+            aria-label="Remove assignment"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+        )}
 
         {open && (
           <ul
