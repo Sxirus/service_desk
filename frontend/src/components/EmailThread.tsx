@@ -241,6 +241,7 @@ interface EmailMessageProps {
 const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPreview }) => {
   const isOutgoing = email.type === 'sent';
   const [showHtml, setShowHtml] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   
   // Check if this email has significant HTML (only for incoming emails)
   const hasHtml = email.type === 'incoming' && hasSignificantHtml(email.html_content);
@@ -256,6 +257,34 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
     const first = parts[0]?.[0] ?? '';
     const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
     return (first + last).toUpperCase() || 'SA';
+  };
+
+  // Check if content is long (more than 1500 characters or 25 lines)
+  const MAX_CHARS = 1500;
+  const MAX_LINES = 25;
+  const textContent = email.text_content || '';
+  const lineCount = (textContent.match(/\n/g) || []).length + 1;
+  const isLongContent = textContent.length > MAX_CHARS || lineCount > MAX_LINES;
+  
+  // Truncate content if needed
+  const getTruncatedContent = () => {
+    if (!isLongContent || isExpanded) return textContent;
+    
+    // Find a good truncation point
+    let truncateAt = MAX_CHARS;
+    const lines = textContent.split('\n');
+    if (lines.length > MAX_LINES) {
+      truncateAt = lines.slice(0, MAX_LINES).join('\n').length;
+    }
+    truncateAt = Math.min(truncateAt, MAX_CHARS);
+    
+    // Try to truncate at a word boundary
+    const truncated = textContent.substring(0, truncateAt);
+    const lastSpace = truncated.lastIndexOf(' ');
+    if (lastSpace > truncateAt - 50) {
+      return truncated.substring(0, lastSpace) + '...';
+    }
+    return truncated + '...';
   };
 
   return (
@@ -325,12 +354,52 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
           className="text-sm text-foreground whitespace-pre-wrap leading-relaxed" 
           style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
           dangerouslySetInnerHTML={{ 
-            __html: DOMPurify.sanitize(email.text_content, {
+            __html: DOMPurify.sanitize(getTruncatedContent(), {
               ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'br', 'p', 'ul', 'ol', 'li'],
               ALLOWED_ATTR: ['href', 'title', 'target']
             })
           }}
         />
+
+        {/* Show More/Less Button for long emails */}
+        {isLongContent && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="mt-2 text-xs text-muted-foreground hover:text-foreground p-0 h-auto"
+          >
+            {isExpanded ? (
+              <>
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  className="h-3 w-3 mr-1"
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor" 
+                  strokeWidth="2"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7"/>
+                </svg>
+                Show less
+              </>
+            ) : (
+              <>
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  className="h-3 w-3 mr-1"
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor" 
+                  strokeWidth="2"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
+                </svg>
+                Show more
+              </>
+            )}
+          </Button>
+        )}
 
         {/* HTML View Toggle Button - Only show if email has significant HTML */}
         {hasHtml && (

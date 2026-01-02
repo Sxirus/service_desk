@@ -104,7 +104,7 @@ export function AppSidebar({
         title: "Inbox",
         url: "/",
         icon: Home,
-        isActive: currentPath === "/" || currentPath === "/dashboard" || currentPath.startsWith("/inboxes"),
+        isActive: currentPath === "/" || currentPath === "/dashboard" || currentPath.startsWith("/inboxes") || currentPath.startsWith("/tickets"),
         items: inboxItems,
       },
     ];
