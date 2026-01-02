@@ -17,6 +17,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { MacroSearch } from './macroSearch.jsx';
 import { Assign } from './zuweisung.jsx';
 import { ShopifyOrders } from './ShopifyOrders';
@@ -111,6 +112,7 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
   assignedEmployeeName,
   macroContext
 }) => {
+  const { t } = useTranslation('dashboard');
   const shopifyRef = useRef<HTMLDivElement>(null);
   const isShopifyVisible = useIntersectionObserver(shopifyRef, {
     threshold: 0.1,
@@ -228,14 +230,14 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
             if (assignedEmp) {
               setAssignedName(`👤 ${assignedEmp.title}`);
             }
-            toast.success(assignedEmp ? `Assigned to ${assignedEmp.title}` : 'Employee assigned successfully');
+            toast.success(assignedEmp ? t('tickets.assignedToEmployee', { name: assignedEmp.title }) : t('tickets.employeeAssignedSuccess'));
           } else {
             console.error('[TicketSidebar] Employee assignment failed:', response.error);
-            toast.error('Failed to assign employee');
+            toast.error(t('tickets.failedToAssignEmployee'));
           }
         } catch (error) {
           console.error('[TicketSidebar] Failed to assign employee:', error);
-          toast.error('Failed to assign employee');
+          toast.error(t('tickets.failedToAssignEmployee'));
         }
       } else if (type === 'group') {
         console.log('[TicketSidebar] Assigning group:', id, 'to customer:', customer.id);
@@ -253,14 +255,14 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
             if (assignedGroup) {
               setAssignedName(`👥 ${assignedGroup.name}`);
             }
-            toast.success(assignedGroup ? `Assigned to ${assignedGroup.name}` : 'Group assigned successfully');
+            toast.success(assignedGroup ? t('tickets.assignedToGroup', { name: assignedGroup.name }) : t('tickets.groupAssignedSuccess'));
           } else {
             console.error('[TicketSidebar] Group assignment failed:', response.error);
-            toast.error('Failed to assign group');
+            toast.error(t('tickets.failedToAssignGroup'));
           }
         } catch (error) {
           console.error('[TicketSidebar] Failed to assign group:', error);
-          toast.error('Failed to assign group');
+          toast.error(t('tickets.failedToAssignGroup'));
         }
       } else if (type === 'unassign') {
         console.log('[TicketSidebar] Unassigning customer:', customer.id);
@@ -273,14 +275,14 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
           if (response.success) {
             console.log('[TicketSidebar] Unassigned successfully');
             setAssignedName(null);
-            toast.success('Assignment removed');
+            toast.success(t('tickets.assignmentRemoved'));
           } else {
             console.error('[TicketSidebar] Unassign failed:', response.error);
-            toast.error('Failed to remove assignment');
+            toast.error(t('tickets.failedToRemoveAssignment'));
           }
         } catch (error) {
           console.error('[TicketSidebar] Failed to unassign:', error);
-          toast.error('Failed to remove assignment');
+          toast.error(t('tickets.failedToRemoveAssignment'));
         }
       }
     };
@@ -293,7 +295,7 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
     <aside 
       className="w-80 shrink-0 border-l bg-muted/30 flex flex-col overflow-hidden"
       role="complementary"
-      aria-label="Ticket information sidebar"
+      aria-label={t('tickets.ticketInfoSidebar')}
     >
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         
@@ -313,13 +315,13 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
                   clientData={legacyClientData}
                 />
               ) : (
-                <SidebarCard title="Shopify Orders" id="shopify-orders">
+                <SidebarCard title={t('tickets.shopifyOrders')} id="shopify-orders">
                   <div 
                     className="text-sm text-muted-foreground py-4 text-center"
                     role="status"
                     aria-live="polite"
                   >
-                    Loading orders...
+                    {t('tickets.loadingOrders')}
                   </div>
                 </SidebarCard>
               )
@@ -327,11 +329,11 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
         </div>
 
         {/* Quick Responses / Macros */}
-        <SidebarCard title="Quick Responses" id="quick-responses">
+        <SidebarCard title={t('tickets.quickResponses')} id="quick-responses">
           <MacroSearch
             items={macros}
             groups={macroGroups}
-            placeholder="Search macros..."
+            placeholder={t('tickets.searchMacros')}
             eventName="MacroChoosen"
             customerID={customer.id}
             ctx={macroContext}
@@ -339,10 +341,10 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
         </SidebarCard>
 
         {/* Assignment (Employee or Group) */}
-        <SidebarCard title="Assign To" id="assign-to">
+        <SidebarCard title={t('tickets.assignTo')} id="assign-to">
           <Assign
             items={combinedAssignments}
-            placeholder="Search employee or group..."
+            placeholder={t('tickets.searchEmployeeOrGroup')}
             eventName="Zuweisung"
             customerId={customer.id}
             assigned={assignedName}

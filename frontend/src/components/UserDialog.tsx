@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -64,6 +65,7 @@ interface DeleteUserDialogProps {
 
 // Delete Dialog Component
 export function DeleteUserDialog({ user, isOpen, onOpenChange, mode = 'delete' }: DeleteUserDialogProps) {
+  const { t } = useTranslation('manage');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleAction = async () => {
@@ -91,32 +93,32 @@ export function DeleteUserDialog({ user, isOpen, onOpenChange, mode = 'delete' }
       
     } catch (err) {
       console.error('Error:', err);
-      alert(`Error ${mode === 'delete' ? 'deleting' : mode === 'disable' ? 'disabling' : 'enabling'} user`);
+      alert(t(`users.${mode}Error`));
     } finally {
       setIsLoading(false);
     }
   };
 
   const getTitle = () => {
-    if (mode === 'delete') return 'Delete User';
-    if (mode === 'disable') return 'Disable User';
-    return 'Enable User';
+    if (mode === 'delete') return t('users.deleteUser');
+    if (mode === 'disable') return t('users.disableUser');
+    return t('users.enableUser');
   };
 
   const getDescription = () => {
     if (mode === 'delete') {
-      return `Are you sure you want to delete the user "${user.name}" (${user.email})? This action cannot be undone.`;
+      return t('users.deleteConfirmation', { name: user.name, email: user.email });
     }
     if (mode === 'disable') {
-      return `Are you sure you want to disable the user "${user.name}" (${user.email})? They will not be able to log in, and won't count towards your subscription.`;
+      return t('users.disableConfirmation', { name: user.name, email: user.email });
     }
-    return `Are you sure you want to enable the user "${user.name}" (${user.email})? They will be able to log in again and will count towards your subscription.`;
+    return t('users.enableConfirmation', { name: user.name, email: user.email });
   };
 
   const getButtonText = () => {
-    if (mode === 'delete') return isLoading ? 'Deleting...' : 'Delete';
-    if (mode === 'disable') return isLoading ? 'Disabling...' : 'Disable';
-    return isLoading ? 'Enabling...' : 'Enable';
+    if (mode === 'delete') return isLoading ? t('users.deleting') : t('common.delete');
+    if (mode === 'disable') return isLoading ? t('users.disabling') : t('users.disable');
+    return isLoading ? t('users.enabling') : t('users.enable');
   };
 
   return (
@@ -129,7 +131,7 @@ export function DeleteUserDialog({ user, isOpen, onOpenChange, mode = 'delete' }
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isLoading}>{t('common.cancel')}</AlertDialogCancel>
           <AlertDialogAction 
             onClick={handleAction} 
             disabled={isLoading}
@@ -145,6 +147,7 @@ export function DeleteUserDialog({ user, isOpen, onOpenChange, mode = 'delete' }
 
 // Main User Dialog (Create/Edit)
 export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenChange }: UserDialogProps) {
+  const { t } = useTranslation('manage');
   const [dialogOpen, setDialogOpen] = useState(isOpen);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -188,7 +191,7 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
     e.preventDefault();
     
     if (!formData.email || !formData.name || !formData.role_id) {
-      alert('Please fill in all fields.');
+      alert(t('users.fillAllFields'));
       return;
     }
 
@@ -204,14 +207,14 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
         formDataObj.append('id', user.id);
         const result = await actions.updateEmployee(formDataObj);
         if (!result?.data?.success) {
-            alert(result?.data?.message ?? "Error updating user");
+            alert(result?.data?.message ?? t('users.updateError'));
             return;
         }
 
       } else {
         const result = await actions.createEmployee(formDataObj);
         if (!result?.data?.success) {
-          alert(result?.data?.message ?? "Error creating user");
+          alert(result?.data?.message ?? t('users.createError'));
           return;
         }
       }
@@ -226,7 +229,7 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
       
     } catch (err) {
       console.error(err);
-      alert("Unexpected error");
+      alert(t('common.unexpectedError'));
       
       const url = new URL(location.href);
       url.search = "";
@@ -255,12 +258,12 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
       <form onSubmit={handleSubmit}>
         <DialogHeader>
           <DialogTitle>
-            {mode === 'create' ? 'Add Team Member' : 'Edit Team Member'}
+            {mode === 'create' ? t('users.addTeamMember') : t('users.editTeamMember')}
           </DialogTitle>
           <DialogDescription>
             {mode === 'create' 
-              ? 'Add a new member to your team. They will receive an email invitation.'
-              : 'Update team member details and role.'
+              ? t('users.addMemberDescription')
+              : t('users.editMemberDescription')
             }
           </DialogDescription>
         </DialogHeader>
@@ -279,11 +282,11 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
           )}
           
           <div className="grid gap-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">{t('users.email')}</Label>
             <Input
               id="email"
               type="email"
-              placeholder="example@company.com"
+              placeholder={t('users.emailPlaceholder')}
               value={formData.email}
               onChange={(e) => handleInputChange('email', e.target.value)}
               required
@@ -292,11 +295,11 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
           </div>
           
           <div className="grid gap-2">
-            <Label htmlFor="name">Name</Label>
+            <Label htmlFor="name">{t('users.name')}</Label>
             <Input
               id="name"
               type="text"
-              placeholder="John Doe"
+              placeholder={t('users.namePlaceholder')}
               value={formData.name}
               onChange={(e) => handleInputChange('name', e.target.value)}
               required
@@ -305,7 +308,7 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
           </div>
           
           <div className="grid gap-2">
-            <Label htmlFor="role">Role</Label>
+            <Label htmlFor="role">{t('users.role')}</Label>
             <Select 
               value={formData.role_id} 
               onValueChange={(value) => handleInputChange('role_id', value)}
@@ -313,7 +316,7 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
               disabled={isLoading}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select role" />
+                <SelectValue placeholder={t('users.selectRole')} />
               </SelectTrigger>
               <SelectContent>
                 {roles.map((role) => (
@@ -333,15 +336,15 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
             onClick={() => setDialogOpen(false)}
             disabled={isLoading}
           >
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button 
             type="submit" 
             disabled={isLoading}
           >
             {isLoading 
-              ? (mode === 'create' ? "Creating..." : "Saving...") 
-              : (mode === 'create' ? "Create User" : "Save Changes")
+              ? (mode === 'create' ? t('users.creating') : t('users.saving')) 
+              : (mode === 'create' ? t('users.createUser') : t('common.saveChanges'))
             }
           </Button>
         </DialogFooter>
@@ -377,6 +380,7 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
 
 // Create User Dialog (for compatibility with existing implementation)
 export default function CreateUserDialog({ roles }: { roles: Role[] }) {
+  const { t } = useTranslation('manage');
   return (
     <UserDialog 
       roles={roles} 
@@ -384,7 +388,7 @@ export default function CreateUserDialog({ roles }: { roles: Role[] }) {
       trigger={
         <Button size="sm" className="gap-2">
           <IconPlus className="w-4 h-4" />
-          Add Member
+          {t('users.addMember')}
         </Button>
       }
     />

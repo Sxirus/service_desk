@@ -2,6 +2,7 @@
 "use client"
 
 import * as React from "react"
+import { useTranslation } from 'react-i18next'
 import {
   Building2,
   Users,
@@ -103,6 +104,7 @@ interface Props {
 }
 
 export default function ClientDetail({ clientData }: Props) {
+  const { t } = useTranslation('platform')
   const [client, setClient] = React.useState(clientData)
   const [isEditing, setIsEditing] = React.useState(false)
   const [isSaving, setIsSaving] = React.useState(false)
@@ -149,13 +151,13 @@ export default function ClientDetail({ clientData }: Props) {
           ...editForm
         })
         setIsEditing(false)
-        toast.success("Client updated successfully")
+        toast.success(t('clientDetail.updateSuccess'))
       } else {
-        throw new Error(response.error || "Failed to update")
+        throw new Error(response.error || t('clientDetail.updateFailed'))
       }
     } catch (error) {
       console.error("Failed to update client:", error)
-      toast.error("Failed to update client")
+      toast.error(t('clientDetail.updateFailed'))
     } finally {
       setIsSaving(false)
     }

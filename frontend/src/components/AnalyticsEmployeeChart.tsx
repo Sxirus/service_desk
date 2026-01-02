@@ -7,6 +7,8 @@
 "use client"
 
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
+import { useTranslation } from "react-i18next"
+import { formatDate } from "@/i18n/utils"
 import {
   Card,
   CardContent,
@@ -49,12 +51,14 @@ export function AnalyticsEmployeeChart({
   data, 
   dateRange 
 }: AnalyticsEmployeeChartProps) {
+  const { t } = useTranslation('dashboard');
+  
   // Group by date and pivot by employee
   const dateMap = new Map<string, any>();
   const employeeSet = new Set<string>();
   
   data.forEach(item => {
-    const dateKey = new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const dateKey = formatDate(new Date(item.date), { month: 'short', day: 'numeric' });
     const employeeName = item.employee_name;
     employeeSet.add(employeeName);
     
@@ -80,7 +84,7 @@ export function AnalyticsEmployeeChart({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Employee Email Activity Over Time</CardTitle>
+        <CardTitle>{t('charts.employeeActivityOverTime')}</CardTitle>
         <CardDescription>{dateRange}</CardDescription>
       </CardHeader>
       <CardContent>

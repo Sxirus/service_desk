@@ -19,4 +19,7 @@ export default defineConfig({
   vite: {
     plugins: [tailwindcss()],
   },
+
+  // Note: i18n is handled by react-i18next in React components
+  // Astro's i18n config is only used for HTML lang attribute
 });

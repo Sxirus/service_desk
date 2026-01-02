@@ -1,0 +1,66 @@
+{
+  "required": "此字段为必填项",
+  "email": {
+    "invalid": "请输入有效的电子邮件地址",
+    "required": "电子邮件为必填项"
+  },
+  "password": {
+    "required": "密码为必填项",
+    "minLength": "密码必须至少 {{min}} 个字符",
+    "maxLength": "密码最多 {{max}} 个字符",
+    "weak": "密码太弱",
+    "uppercase": "密码必须包含至少一个大写字母",
+    "lowercase": "密码必须包含至少一个小写字母",
+    "number": "密码必须包含至少一个数字",
+    "special": "密码必须包含至少一个特殊字符",
+    "mismatch": "密码不匹配"
+  },
+  "name": {
+    "required": "名称为必填项",
+    "minLength": "名称必须至少 {{min}} 个字符",
+    "maxLength": "名称最多 {{max}} 个字符"
+  },
+  "phone": {
+    "invalid": "请输入有效的电话号码"
+  },
+  "url": {
+    "invalid": "请输入有效的URL"
+  },
+  "number": {
+    "invalid": "请输入有效的数字",
+    "min": "值必须至少为 {{min}}",
+    "max": "值最多为 {{max}}",
+    "positive": "值必须为正数",
+    "integer": "值必须为整数"
+  },
+  "date": {
+    "invalid": "请输入有效的日期",
+    "past": "日期必须是过去的",
+    "future": "日期必须是将来的",
+    "before": "日期必须在 {{date}} 之前",
+    "after": "日期必须在 {{date}} 之后"
+  },
+  "file": {
+    "required": "请选择一个文件",
+    "size": "文件大小必须小于 {{size}}",
+    "type": "不支持的文件类型",
+    "maxFiles": "最多允许 {{max}} 个文件"
+  },
+  "select": {
+    "required": "请选择一个选项"
+  },
+  "checkbox": {
+    "required": "此复选框为必选"
+  },
+  "textarea": {
+    "minLength": "文本必须至少 {{min}} 个字符",
+    "maxLength": "文本最多 {{max}} 个字符"
+  },
+  "array": {
+    "minItems": "至少需要 {{min}} 个项目",
+    "maxItems": "最多允许 {{max}} 个项目"
+  },
+  "captcha": {
+    "required": "请完成验证码"
+  }
+}

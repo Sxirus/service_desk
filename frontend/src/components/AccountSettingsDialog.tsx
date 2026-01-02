@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useTranslation } from "react-i18next"
 import { Camera, Key, Loader2, Save } from "lucide-react"
 import { toast } from "sonner"
 import { actions } from "astro:actions"
@@ -39,6 +40,7 @@ export function AccountSettingsDialog({
   employeeId,
   clientId,
 }: AccountSettingsDialogProps) {
+  const { t } = useTranslation('auth')
   const [name, setName] = React.useState(user.name)
   const [avatarUrl, setAvatarUrl] = React.useState(user.avatar || "")
   const [avatarPreview, setAvatarPreview] = React.useState(user.avatar || "")
@@ -93,12 +95,12 @@ export function AccountSettingsDialog({
       })
 
       if (!result?.data?.success) {
-        toast.error(result?.data?.message || "Failed to update profile")
+        toast.error(result?.data?.message || t('errors.requiredField'))
         setIsSaving(false)
         return
       }
 
-      toast.success("Profile updated successfully")
+      toast.success(t('accountSettings.saved'))
       setPendingAvatarBlob(null)
       
       // Clear avatar cache to ensure fresh signed URL on reload
@@ -141,9 +143,9 @@ export function AccountSettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Account Settings</DialogTitle>
+          <DialogTitle>{t('accountSettings.title')}</DialogTitle>
           <DialogDescription>
-            Update your name and avatar
+            {t('accountSettings.personalInfo')}
           </DialogDescription>
         </DialogHeader>
 
@@ -172,38 +174,35 @@ export function AccountSettingsDialog({
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Click the camera icon to change your avatar
+                {t('accountSettings.uploadAvatar')}
               </p>
             </div>
 
             {/* Name Input */}
             <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
+              <Label htmlFor="name">{t('accountSettings.firstName')}</Label>
               <Input
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Your name"
+                placeholder={t('accountSettings.firstName')}
               />
             </div>
 
             {/* Email (Read-only) */}
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t('accountSettings.email')}</Label>
               <Input
                 id="email"
                 value={user.email}
                 disabled
                 className="bg-muted"
               />
-              <p className="text-xs text-muted-foreground">
-                Contact your administrator to change your email address
-              </p>
             </div>
 
             {/* Password Section */}
             <div className="space-y-2">
-              <Label>Password</Label>
+              <Label>{t('accountSettings.changePassword')}</Label>
               <Button
                 type="button"
                 variant="outline"
@@ -216,11 +215,8 @@ export function AccountSettingsDialog({
                 ) : (
                   <Key className="mr-2 h-4 w-4" />
                 )}
-                Send Password Reset Email
+                {t('accountSettings.changePassword')}
               </Button>
-              <p className="text-xs text-muted-foreground">
-                A password reset link will be sent to {user.email}
-              </p>
             </div>
 
             {/* Save Button */}
@@ -230,7 +226,7 @@ export function AccountSettingsDialog({
                 onClick={() => onOpenChange(false)}
                 disabled={isSaving}
               >
-                Cancel
+                {t('common:cancel', { ns: 'common' })}
               </Button>
               <Button
                 onClick={handleSave}
@@ -241,7 +237,7 @@ export function AccountSettingsDialog({
                 ) : (
                   <Save className="mr-2 h-4 w-4" />
                 )}
-                Save Changes
+                {t('accountSettings.saveChanges')}
               </Button>
             </div>
           </div>

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useTranslation } from 'react-i18next'
 import {
   type ColumnDef,
   type ColumnFiltersState,
@@ -93,6 +94,7 @@ function saveState<T>(tableId: string, key: string, value: T): void {
  * ViewersCell - Shows avatars of users currently viewing this ticket
  */
 function ViewersCell({ customerId }: { customerId: string }) {
+  const { t } = useTranslation('dashboard')
   const viewers = useTicketViewers(customerId)
   
   if (viewers.length === 0) {
@@ -115,7 +117,7 @@ function ViewersCell({ customerId }: { customerId: string }) {
               </div>
             </TooltipTrigger>
             <TooltipContent side="top" className="text-xs">
-              {viewer.name} is viewing
+              {t('table.isViewing', { name: viewer.name })}
             </TooltipContent>
           </Tooltip>
         ))}
@@ -142,6 +144,8 @@ export function TicketsDataTable({
   onBulkAction,
   tableId = 'default'
 }: TicketsDataTableProps) {
+  const { t } = useTranslation('dashboard')
+  
   // Initialize state from localStorage or defaults
   const [sorting, setSorting] = React.useState<SortingState>(() => 
     getSavedState(tableId, 'sorting', [{ id: "send_at", desc: true }])
@@ -206,7 +210,7 @@ export function TicketsDataTable({
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             className="-ml-4"
           >
-            Subject
+            {t('tickets.subject')}
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         )
@@ -218,7 +222,7 @@ export function TicketsDataTable({
         return (
           <div className="flex items-center justify-between gap-3">
             <div className={`max-w-md truncate ${!read ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
-              {subject || "(No Subject)"}
+              {subject || t('table.noSubject')}
             </div>
             <ViewersCell customerId={customerId} />
           </div>
@@ -234,7 +238,7 @@ export function TicketsDataTable({
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             className="-ml-4"
           >
-            From
+            {t('table.from')}
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         )
@@ -250,22 +254,22 @@ export function TicketsDataTable({
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             className="-ml-4"
           >
-            Customer
+            {t('tickets.customer')}
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         )
       },
-      cell: ({ row }) => <div className="text-gray-600">{row.getValue("customer_name") || "Unknown"}</div>,
+      cell: ({ row }) => <div className="text-gray-600">{row.getValue("customer_name") || t('table.unknown')}</div>,
     },
     {
       accessorKey: "assigned_to",
-      header: "Assigned To",
+      header: t('tickets.assignedTo'),
       cell: ({ row }) => {
         const assignedTo = row.original.assigned_to
         const assignedType = row.original.assigned_type
         
         if (!assignedTo) {
-          return <span className="text-gray-400">Unassigned</span>
+          return <span className="text-gray-400">{t('tickets.unassigned')}</span>
         }
         
         return (
@@ -285,7 +289,7 @@ export function TicketsDataTable({
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             className="-ml-4"
           >
-            Date
+            {t('table.date')}
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         )
@@ -297,12 +301,12 @@ export function TicketsDataTable({
     },
     {
       accessorKey: "read",
-      header: "Status",
+      header: t('tickets.status'),
       cell: ({ row }) => {
         const read = row.getValue("read") as boolean
         return (
           <Badge variant={read ? "secondary" : "default"}>
-            {read ? 'Read' : 'Unread'}
+            {read ? t('table.read') : t('table.unread')}
           </Badge>
         )
       },
@@ -317,22 +321,22 @@ export function TicketsDataTable({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="h-8 w-8 p-0">
-                <span className="sr-only">Open menu</span>
+                <span className="sr-only">{t('table.openMenu')}</span>
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuLabel>{t('table.actions')}</DropdownMenuLabel>
               <DropdownMenuItem
                 onClick={() => window.location.href = `/tickets/${ticket.customer_id}`}
               >
-                View Ticket
+                {t('table.viewTicket')}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => navigator.clipboard.writeText(ticket.email_address)}
               >
-                Copy Email Address
+                {t('table.copyEmailAddress')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -380,7 +384,7 @@ export function TicketsDataTable({
       <div className="flex items-center justify-between py-4">
         <div className="flex items-center gap-2">
           <Input
-            placeholder="Filter by subject..."
+            placeholder={t('table.filterBySubject')}
             value={(table.getColumn("subject")?.getFilterValue() as string) ?? ""}
             onChange={(event) =>
               table.getColumn("subject")?.setFilterValue(event.target.value)
@@ -391,20 +395,20 @@ export function TicketsDataTable({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline">
-                  Actions ({selectedRows.length} selected)
+                  {t('table.actionsSelected', { count: selectedRows.length })}
                   <ChevronDown className="ml-2 h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
                 <DropdownMenuItem onClick={() => onBulkAction('mark_read', selectedIds)}>
-                  Mark as Read
+                  {t('table.markAsRead')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onBulkAction('mark_unread', selectedIds)}>
-                  Mark as Unread
+                  {t('table.markAsUnread')}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => onBulkAction('assign', selectedIds)}>
-                  Assign To...
+                  {t('table.assignTo')}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -413,7 +417,7 @@ export function TicketsDataTable({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline">
-              Columns <ChevronDown className="ml-2 h-4 w-4" />
+              {t('table.columns')} <ChevronDown className="ml-2 h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -430,10 +434,10 @@ export function TicketsDataTable({
                       column.toggleVisibility(!!value)
                     }
                   >
-                    {column.id === 'email_address' ? 'From' : 
-                     column.id === 'customer_name' ? 'Customer' :
-                     column.id === 'assigned_to' ? 'Assigned To' :
-                     column.id === 'send_at' ? 'Date' :
+                    {column.id === 'email_address' ? t('table.from') : 
+                     column.id === 'customer_name' ? t('tickets.customer') :
+                     column.id === 'assigned_to' ? t('tickets.assignedTo') :
+                     column.id === 'send_at' ? t('table.date') :
                      column.id}
                   </DropdownMenuCheckboxItem>
                 )
@@ -497,8 +501,8 @@ export function TicketsDataTable({
                     <svg className="h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
-                    <h3 className="text-lg font-medium text-gray-900">No emails found</h3>
-                    <p className="text-gray-500 mt-1">There are currently no emails available.</p>
+                    <h3 className="text-lg font-medium text-gray-900">{t('table.noEmailsFound')}</h3>
+                    <p className="text-gray-500 mt-1">{t('table.noEmailsAvailable')}</p>
                   </div>
                 </TableCell>
               </TableRow>
@@ -508,8 +512,7 @@ export function TicketsDataTable({
       </div>
       <div className="flex items-center justify-between space-x-2 py-4">
         <div className="flex-1 text-sm text-muted-foreground">
-          {table.getFilteredSelectedRowModel().rows.length} of{" "}
-          {table.getFilteredRowModel().rows.length} row(s) selected.
+          {t('table.rowsSelected', { selected: table.getFilteredSelectedRowModel().rows.length, total: table.getFilteredRowModel().rows.length })}
         </div>
         <div className="flex items-center space-x-2">
           <Button
@@ -518,11 +521,10 @@ export function TicketsDataTable({
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
           >
-            Previous
+            {t('table.previous')}
           </Button>
           <div className="text-sm text-muted-foreground">
-            Page {table.getState().pagination.pageIndex + 1} of{" "}
-            {table.getPageCount()}
+            {t('table.pageOf', { current: table.getState().pagination.pageIndex + 1, total: table.getPageCount() })}
           </div>
           <Button
             variant="outline"
@@ -530,7 +532,7 @@ export function TicketsDataTable({
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
           >
-            Next
+            {t('table.next')}
           </Button>
         </div>
       </div>

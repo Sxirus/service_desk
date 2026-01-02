@@ -4,9 +4,13 @@ import {
   LogOut,
   Sparkles,
   Shield,
+  Globe,
+  Check,
 } from "lucide-react"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { useAvatarUrl } from "@/hooks/use-avatar"
+import { supportedLanguages, type SupportedLanguage, setLanguageCookie } from "@/i18n/config"
 
 import {
   Avatar,
@@ -21,6 +25,10 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu"
 import {
   SidebarMenu,
@@ -50,6 +58,7 @@ export function NavUser({
   subscriptionTier?: string
   isPlatformAdmin?: boolean
 }) {
+  const { t, i18n } = useTranslation(['common', 'auth', 'manage'])
   const { isMobile } = useSidebar()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -60,6 +69,12 @@ export function NavUser({
   console.log("[NavUser] subscriptionTier:", subscriptionTier)
   const isPro = subscriptionTier === "paid"
 
+  const handleLanguageChange = (languageCode: SupportedLanguage) => {
+    localStorage.setItem('i18nextLng', languageCode)
+    setLanguageCookie(languageCode)
+    i18n.changeLanguage(languageCode)
+  }
+
   const handleLogout = async () => {
     setIsLoggingOut(true)
     
@@ -68,7 +83,7 @@ export function NavUser({
       
       if (!result?.data?.success) {
         console.error('Logout failed:', result?.data?.message)
-        alert(result?.data?.message ?? "Fehler beim Abmelden")
+        alert(result?.data?.message ?? t('errors.generic'))
         return
       }
       
@@ -77,7 +92,7 @@ export function NavUser({
       
     } catch (err) {
       console.error('Logout error:', err)
-      alert("Unerwarteter Fehler beim Abmelden")
+      alert(t('errors.generic'))
     } finally {
       setIsLoggingOut(false)
     }
@@ -128,7 +143,7 @@ export function NavUser({
                   <DropdownMenuGroup>
                     <DropdownMenuItem onClick={() => window.location.href = '/manage/subscription'}>
                       <Sparkles />
-                      Upgrade to Pro
+                      {t('manage:subscription.upgrade')}
                     </DropdownMenuItem>
                   </DropdownMenuGroup>
                   <DropdownMenuSeparator />
@@ -137,7 +152,7 @@ export function NavUser({
               <DropdownMenuGroup>
                 <DropdownMenuItem onClick={() => setShowSettings(true)}>
                   <BadgeCheck />
-                  Account Settings
+                  {t('auth:accountSettings.title')}
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               {isPlatformAdmin && (
@@ -146,11 +161,36 @@ export function NavUser({
                   <DropdownMenuGroup>
                     <DropdownMenuItem onClick={() => window.location.href = '/platform/dashboard'}>
                       <Shield />
-                      Platform Management
+                      {t('platform:title', { ns: 'platform' })}
                     </DropdownMenuItem>
                   </DropdownMenuGroup>
                 </>
               )}
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <Globe className="mr-2 h-4 w-4" />
+                    {t('common:language')}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuPortal>
+                    <DropdownMenuSubContent>
+                      {supportedLanguages.map((language) => (
+                        <DropdownMenuItem
+                          key={language.code}
+                          onClick={() => handleLanguageChange(language.code as SupportedLanguage)}
+                        >
+                          <span className="mr-2">{language.flag}</span>
+                          {language.name}
+                          {i18n.language === language.code && (
+                            <Check className="ml-auto h-4 w-4" />
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuPortal>
+                </DropdownMenuSub>
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem 
                 onClick={handleLogout}
@@ -158,7 +198,7 @@ export function NavUser({
                 className="text-red-600 focus:text-red-600 focus:bg-red-50"
               >
                 <LogOut />
-                {isLoggingOut ? "Wird abgemeldet..." : "Log out"}
+                {isLoggingOut ? t('auth:logout.message') : t('auth:logout.button')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

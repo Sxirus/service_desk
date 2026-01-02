@@ -3,6 +3,7 @@
 import { type ColumnDef } from "@tanstack/react-table"
 import { MoreHorizontal, Shield, ShieldCheck, UserX } from "lucide-react"
 import { useState } from "react"
+import { useTranslation } from 'react-i18next'
  
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -42,6 +43,7 @@ interface Role {
 
 // Actions Cell Component für bessere Trennung der Logik
 function UserActionsCell({ user, roles }: { user: User, roles: Role[] }) {
+  const { t } = useTranslation('manage')
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [disableDialogOpen, setDisableDialogOpen] = useState(false);
@@ -53,32 +55,32 @@ function UserActionsCell({ user, roles }: { user: User, roles: Role[] }) {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="h-8 w-8 p-0">
-            <span className="sr-only">Open Menu</span>
+            <span className="sr-only">{t('table.openMenu')}</span>
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+          <DropdownMenuLabel>{t('table.actions')}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setEditDialogOpen(true)}>
-            Edit User
+            {t('users.editUser')}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setDisableDialogOpen(true)}>
-            {user.disabled ? 'Enable User' : 'Disable User'}
+            {user.disabled ? t('users.enableUser') : t('users.disableUser')}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setReassignDialogOpen(true)}>
-            Reassign All Tickets
+            {t('users.reassignAllTickets')}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setUnassignDialogOpen(true)}>
-            Unassign All Tickets
+            {t('users.unassignAllTickets')}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem 
             onClick={() => setDeleteDialogOpen(true)}
             className="text-red-600 focus:text-red-600"
           >
-            Delete User
+            {t('users.deleteUser')}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -126,6 +128,23 @@ function UserActionsCell({ user, roles }: { user: User, roles: Role[] }) {
   );
 }
 
+// Helper component to render localized "Disabled" badge
+function DisabledBadge() {
+  const { t } = useTranslation('manage')
+  return (
+    <Badge variant="secondary" className="text-xs gap-1 shrink-0">
+      <UserX className="h-3 w-3" />
+      {t('table.disabled')}
+    </Badge>
+  )
+}
+
+// Helper component for tooltip content
+function DisabledTooltipContent() {
+  const { t } = useTranslation('manage')
+  return <>{t('table.cannotLogin')}</>
+}
+
 export const createColumns = (roles: Role[]): ColumnDef<User>[] => [
   {
     accessorKey: "name",
@@ -147,13 +166,10 @@ export const createColumns = (roles: Role[]): ColumnDef<User>[] => [
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Badge variant="secondary" className="text-xs gap-1 shrink-0">
-                        <UserX className="h-3 w-3" />
-                        Disabled
-                      </Badge>
+                      <span><DisabledBadge /></span>
                     </TooltipTrigger>
                     <TooltipContent>
-                      This user cannot log in
+                      <DisabledTooltipContent />
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -197,6 +213,7 @@ export const createColumns = (roles: Role[]): ColumnDef<User>[] => [
 ];
 
 // Für Rückwärtskompatibilität - falls Sie die Rollen nicht zur Verfügung haben
+// Note: This fallback uses hardcoded strings for backward compatibility
 export const columns: ColumnDef<User>[] = [
   {
     accessorKey: "name",

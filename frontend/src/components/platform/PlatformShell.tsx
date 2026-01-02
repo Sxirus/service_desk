@@ -2,6 +2,7 @@
 "use client"
 
 import * as React from "react";
+import { useTranslation } from 'react-i18next';
 import { PlatformSidebar } from "./PlatformSidebar";
 import {
   Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList,

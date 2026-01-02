@@ -8,6 +8,8 @@
 
 import { TrendingUp, TrendingDown } from "lucide-react"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
+import { useTranslation } from "react-i18next"
+import { formatDate } from "@/i18n/utils"
 
 import {
   Card,
@@ -54,9 +56,11 @@ export function AnalyticsEmailChart({
   totalIncoming, 
   totalSent 
 }: AnalyticsEmailChartProps) {
+  const { t } = useTranslation('dashboard');
+  
   // Format data for the chart
   const chartData = data.map(item => ({
-    date: new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    date: formatDate(new Date(item.date), { month: 'short', day: 'numeric' }),
     incoming: Number(item.incoming) || 0,
     sent: Number(item.sent) || 0,
   }))
@@ -77,7 +81,7 @@ export function AnalyticsEmailChart({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Email Volume Over Time</CardTitle>
+        <CardTitle>{t('charts.emailVolumeOverTime')}</CardTitle>
         <CardDescription>{dateRange}</CardDescription>
       </CardHeader>
       <CardContent>
@@ -126,18 +130,18 @@ export function AnalyticsEmailChart({
         <div className="flex gap-2 leading-none font-medium">
           {isPositiveTrend ? (
             <>
-              Trending up by {Math.abs(parseFloat(percentChange))}% 
+              {t('charts.trendingUp', { percent: Math.abs(parseFloat(percentChange)) })}
               <TrendingUp className="h-4 w-4" />
             </>
           ) : (
             <>
-              Trending down by {Math.abs(parseFloat(percentChange))}% 
+              {t('charts.trendingDown', { percent: Math.abs(parseFloat(percentChange)) })}
               <TrendingDown className="h-4 w-4" />
             </>
           )}
         </div>
         <div className="text-muted-foreground leading-none">
-          Total: {totalIncoming} received, {totalSent} sent
+          {t('charts.totalEmailsSummary', { received: totalIncoming, sent: totalSent })}
         </div>
       </CardFooter>
     </Card>

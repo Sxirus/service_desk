@@ -3,10 +3,35 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import { createClient } from "../lib/supabase.ts";
 import { checkPlatformAdmin } from "../lib/auth-helpers.ts";
 
+// Import translations directly for server-side use
+import enCommon from "../i18n/locales/en/common.json";
+import deCommon from "../i18n/locales/de/common.json";
+import zhCommon from "../i18n/locales/zh/common.json";
+
 // Sidebar Shell
 import AdminShell from "@/components/AdminShell";
 import LimitBanner from "@/components/LimitBanner";
 import { TicketsDataTableWithPresence } from "@/components/datatable/TicketsDataTableWithPresence";
+
+// Get language from cookie for server-side translation
+const supportedLangs = ['en', 'de', 'zh'] as const;
+const langCookie = Astro.cookies.get('i18nextLng')?.value;
+const currentLang = (langCookie && supportedLangs.includes(langCookie as any)) ? langCookie : 'en';
+
+// Simple server-side translation helper
+const translations: Record<string, any> = {
+  en: enCommon,
+  de: deCommon,
+  zh: zhCommon,
+};
+const t = (key: string) => {
+  const keys = key.split('.');
+  let value: any = translations[currentLang];
+  for (const k of keys) {
+    value = value?.[k];
+  }
+  return value || key;
+};
 
 // Create Supabase client with server-side rendering support
 const supabase = createClient({
@@ -151,7 +176,7 @@ const sidebarUser = {
 
 // Team Eintrag
 let firstTeam = null as null | { name: string; plan?: string | null };
-let subscriptionTier = 'free';
+let subscriptionTier = 'Free Version';
 try {
   const { data: clientRow, error: clientErr } = await supabase
     .from("clients")
@@ -162,7 +187,7 @@ try {
   console.log("[dashboard] Client query result:", { clientRow, clientErr });
   
   if (clientRow?.name) {
-    firstTeam = { name: clientRow.name, plan: "Enterprise" };
+    firstTeam = { name: clientRow.name, plan: "" };
   }
   if (clientRow?.subscription_tier) {
     subscriptionTier = clientRow.subscription_tier;
@@ -185,13 +210,13 @@ const platformAdminContext = await checkPlatformAdmin(supabase, user.id);
 const isPlatformAdmin = platformAdminContext !== null;
 ---
 
-<BaseLayout title="Service Desk">
+<BaseLayout title={t('appName') + " - Dashboard"}>
   <AdminShell client:load
     user={sidebarUser}
     firstTeam={firstTeam ?? undefined}
-    crumbParentLabel="Service Desk"
+    crumbParentLabel={t('serviceDesk')}
     crumbParentHref="/"
-    crumbCurrent="Your assigned Tickets"
+    crumbCurrent={t('yourAssignedTickets')}
     isAdmin={isAdmin}
     isPlatformAdmin={isPlatformAdmin}
     currentPath="/dashboard"

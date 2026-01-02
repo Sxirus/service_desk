@@ -2,6 +2,7 @@
 "use client"
 
 import * as React from "react"
+import { useTranslation } from 'react-i18next'
 import {
   Building2,
   CreditCard,
@@ -36,6 +37,8 @@ interface Props {
 }
 
 export default function PlatformDashboard({ stats }: Props) {
+  const { t } = useTranslation('platform')
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
@@ -49,9 +52,9 @@ export default function PlatformDashboard({ stats }: Props) {
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Platform Dashboard</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('dashboard.title')}</h1>
           <p className="text-sm text-muted-foreground">
-            Overview of your platform metrics and recent activity
+            {t('dashboard.description')}
           </p>
         </div>
       </div>
@@ -60,28 +63,28 @@ export default function PlatformDashboard({ stats }: Props) {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Clients</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.totalClients')}</CardTitle>
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalClients}</div>
             <p className="text-xs text-muted-foreground">
-              {stats.paidClients} paid, {stats.freeClients} free
+              {t('dashboard.paidFreeBreakdown', { paid: stats.paidClients, free: stats.freeClients })}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Paid Subscriptions</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.paidSubscriptions')}</CardTitle>
             <CreditCard className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.paidClients}</div>
             <p className="text-xs text-muted-foreground">
               {stats.totalClients > 0 
-                ? `${Math.round((stats.paidClients / stats.totalClients) * 100)}% conversion`
-                : '0% conversion'
+                ? t('dashboard.conversionRate', { rate: Math.round((stats.paidClients / stats.totalClients) * 100) })
+                : t('dashboard.conversionRate', { rate: 0 })
               }
             </p>
           </CardContent>
@@ -89,39 +92,39 @@ export default function PlatformDashboard({ stats }: Props) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Employees</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.totalEmployees')}</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalEmployees}</div>
             <p className="text-xs text-muted-foreground">
-              Across all clients
+              {t('dashboard.acrossAllClients')}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.totalCustomers')}</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalCustomers}</div>
             <p className="text-xs text-muted-foreground">
-              Email contacts managed
+              {t('dashboard.emailContactsManaged')}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Emails</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.totalEmails')}</CardTitle>
             <Mail className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalEmails?.toLocaleString() || 0}</div>
             <p className="text-xs text-muted-foreground">
-              Incoming emails processed
+              {t('dashboard.incomingEmailsProcessed')}
             </p>
           </CardContent>
         </Card>
@@ -132,14 +135,14 @@ export default function PlatformDashboard({ stats }: Props) {
         <Card className="md:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Recent Clients</CardTitle>
+              <CardTitle>{t('dashboard.recentClients')}</CardTitle>
               <CardDescription>
-                Latest organizations that signed up
+                {t('dashboard.recentClientsDescription')}
               </CardDescription>
             </div>
             <Button variant="outline" size="sm" asChild>
               <a href="/platform/clients">
-                View All
+                {t('dashboard.viewAll')}
                 <ArrowUpRight className="ml-1 h-4 w-4" />
               </a>
             </Button>
@@ -147,7 +150,7 @@ export default function PlatformDashboard({ stats }: Props) {
           <CardContent>
             {stats.recentClients.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">
-                No clients yet
+                {t('dashboard.noClientsYet')}
               </p>
             ) : (
               <div className="space-y-4">
@@ -164,12 +167,12 @@ export default function PlatformDashboard({ stats }: Props) {
                       <div>
                         <p className="font-medium hover:underline">{client.name}</p>
                         <p className="text-sm text-muted-foreground">
-                          Joined {formatDate(client.created_at)}
+                          {t('dashboard.joined', { date: formatDate(client.created_at) })}
                         </p>
                       </div>
                     </div>
                     <Badge variant={client.subscription_tier === 'paid' ? 'default' : 'secondary'}>
-                      {client.subscription_tier === 'paid' ? 'Pro' : 'Free'}
+                      {client.subscription_tier === 'paid' ? t('dashboard.pro') : t('dashboard.free')}
                     </Badge>
                   </a>
                 ))}
@@ -187,8 +190,8 @@ export default function PlatformDashboard({ stats }: Props) {
               <Building2 className="h-6 w-6 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <CardTitle className="text-base">Manage Clients</CardTitle>
-              <CardDescription>View and edit client details</CardDescription>
+              <CardTitle className="text-base">{t('dashboard.manageClients')}</CardTitle>
+              <CardDescription>{t('dashboard.manageClientsDescription')}</CardDescription>
             </div>
           </CardHeader>
         </Card>
@@ -199,8 +202,8 @@ export default function PlatformDashboard({ stats }: Props) {
               <CreditCard className="h-6 w-6 text-green-600 dark:text-green-400" />
             </div>
             <div>
-              <CardTitle className="text-base">Billing Overview</CardTitle>
-              <CardDescription>Review subscriptions and revenue</CardDescription>
+              <CardTitle className="text-base">{t('dashboard.billingOverview')}</CardTitle>
+              <CardDescription>{t('dashboard.billingOverviewDescription')}</CardDescription>
             </div>
           </CardHeader>
         </Card>
@@ -211,8 +214,8 @@ export default function PlatformDashboard({ stats }: Props) {
               <TrendingUp className="h-6 w-6 text-purple-600 dark:text-purple-400" />
             </div>
             <div>
-              <CardTitle className="text-base">Platform Analytics</CardTitle>
-              <CardDescription>Usage metrics and trends</CardDescription>
+              <CardTitle className="text-base">{t('analytics.title')}</CardTitle>
+              <CardDescription>{t('dashboard.analyticsDescription')}</CardDescription>
             </div>
           </CardHeader>
         </Card>

@@ -18,6 +18,7 @@ import {
 import { CalendarIcon } from "lucide-react"
 import { format, subDays } from "date-fns"
 import { cn } from "@/lib/utils"
+import { useTranslation } from "react-i18next"
 
 interface AnalyticsDatePickerProps {
   onDateRangeChange: (range: DateRange | undefined) => void;
@@ -30,6 +31,7 @@ export function AnalyticsDatePicker({
   initialFrom, 
   initialTo 
 }: AnalyticsDatePickerProps) {
+  const { t } = useTranslation('dashboard');
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>({
     from: initialFrom || subDays(new Date(), 30),
     to: initialTo || new Date(),
@@ -82,7 +84,7 @@ export function AnalyticsDatePicker({
                 format(dateRange.from, "LLL dd, y")
               )
             ) : (
-              <span>Pick a date range</span>
+              <span>{t('datePicker.pickRange')}</span>
             )}
           </Button>
         </PopoverTrigger>
@@ -90,7 +92,7 @@ export function AnalyticsDatePicker({
           <div className="flex">
             {/* Presets Column */}
             <div className="border-r p-3 space-y-2">
-                <div className="text-sm font-semibold mb-2">Quick Select</div>
+                <div className="text-sm font-semibold mb-2">{t('datePicker.quickSelect')}</div>
                 <div className="flex flex-col space-y-1">
                     <Button
                         variant="ghost"
@@ -98,7 +100,7 @@ export function AnalyticsDatePicker({
                         className=" justify-start font-normal"
                         onClick={() => handlePreset(7)}
                     >
-                        Last 7 days
+                        {t('datePicker.last7Days')}
                     </Button>
                     <Button
                         variant="ghost"
@@ -106,7 +108,7 @@ export function AnalyticsDatePicker({
                         className=" justify-start font-normal"
                         onClick={() => handlePreset(14)}
                     >
-                        Last 14 days
+                        {t('datePicker.last14Days')}
                     </Button>
                     <Button
                         variant="ghost"
@@ -114,7 +116,7 @@ export function AnalyticsDatePicker({
                         className=" justify-start font-normal"
                         onClick={() => handlePreset(30)}
                     >
-                        Last 30 days
+                        {t('datePicker.last30Days')}
                     </Button>
                     <Button
                         variant="ghost"
@@ -122,7 +124,7 @@ export function AnalyticsDatePicker({
                         className=" justify-start font-normal"
                         onClick={() => handlePreset(60)}
                     >
-                        Last 60 days
+                        {t('datePicker.last60Days')}
                     </Button>
                     <Button
                         variant="ghost"
@@ -130,7 +132,7 @@ export function AnalyticsDatePicker({
                         className="justify-start font-normal"
                         onClick={() => handlePreset(90)}
                     >
-                        Last 90 days
+                        {t('datePicker.last90Days')}
                     </Button>
                 </div>
             </div>
@@ -151,7 +153,7 @@ export function AnalyticsDatePicker({
                   disabled={!tempDateRange?.from || !tempDateRange?.to}
                   size="sm"
                 >
-                  Apply Date Range
+                  {t('datePicker.apply')}
                 </Button>
               </div>
             </div>

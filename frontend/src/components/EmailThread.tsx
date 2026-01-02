@@ -11,6 +11,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import DOMPurify from 'isomorphic-dompurify';
 import { formatDate } from '@/utils/formatDate.js';
 import { useAvatarUrl } from '@/hooks/use-avatar';
@@ -41,6 +42,7 @@ const AttachmentButton: React.FC<AttachmentButtonProps> = ({
   mailType,
   onPreview 
 }) => {
+  const { t } = useTranslation('dashboard');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,7 +63,7 @@ const AttachmentButton: React.FC<AttachmentButtonProps> = ({
         window.open(url, '_blank', 'noopener,noreferrer');
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load attachment';
+      const message = err instanceof Error ? err.message : t('tickets.failedToLoadAttachment');
       setError(message);
       console.error('[AttachmentButton] Error:', err);
     } finally {
@@ -99,6 +101,8 @@ interface ImagePreviewProps {
 }
 
 const ImagePreview: React.FC<ImagePreviewProps> = ({ url, filename, onClose }) => {
+  const { t } = useTranslation('dashboard');
+
   /**
    * Handles download of the previewed image
    */
@@ -107,7 +111,7 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({ url, filename, onClose }) =
       await downloadAttachment(url, filename);
     } catch (err) {
       console.error('[ImagePreview] Download failed:', err);
-      alert('Download failed. Please try again.');
+      alert(t('tickets.downloadFailed'));
     }
   };
 
@@ -158,7 +162,7 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({ url, filename, onClose }) =
               >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M20 20H4"/>
               </svg>
-              Download
+              {t('tickets.download')}
             </Button>
             <Button
               size="sm"
@@ -242,6 +246,7 @@ interface EmailMessageProps {
 }
 
 const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPreview }) => {
+  const { t } = useTranslation('dashboard');
   const isOutgoing = email.type === 'sent';
   const [showHtml, setShowHtml] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -250,7 +255,7 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
   const hasHtml = email.type === 'incoming' && hasSignificantHtml(email.html_content);
 
   // Get agent name and avatar for sent emails
-  const agentName = isOutgoing && email.type === 'sent' ? email.agent_name || 'Support Agent' : null;
+  const agentName = isOutgoing && email.type === 'sent' ? email.agent_name || t('tickets.supportAgent') : null;
   const agentAvatarPath = isOutgoing && email.type === 'sent' ? email.agent_avatar_url : null;
   
   // Resolve avatar URL from private storage path
@@ -303,7 +308,7 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
           : 'bg-card border-border'
       }`}
       id={email.id}
-      aria-label={`${isOutgoing ? 'Sent' : 'Received'} message from ${isOutgoing ? agentName : customerName}`}
+      aria-label={`${isOutgoing ? t('tickets.sentMessage') : t('tickets.receivedMessage')} ${isOutgoing ? agentName : customerName}`}
     >
       <div className="p-4">
         {/* Message Header */}
@@ -348,7 +353,7 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
                 {isOutgoing ? agentName : customerName}
               </p>
               <p className="text-xs text-muted-foreground">
-                {isOutgoing ? 'Support Agent' : 'Customer'}
+                {isOutgoing ? t('tickets.supportAgent') : t('tickets.customer')}
               </p>
             </div>
           </div>
@@ -380,7 +385,7 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7"/>
                 </svg>
-                Show less
+                {t('tickets.showLess')}
               </>
             ) : (
               <>
@@ -394,7 +399,7 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
                 </svg>
-                Show more
+                {t('tickets.showMore')}
               </>
             )}
           </Button>
@@ -423,7 +428,7 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
                 </svg>
-                {showHtml ? 'Hide' : 'Show'} HTML Version
+                {showHtml ? t('tickets.hideHtmlVersion') : t('tickets.showHtmlVersion')}
               </>
             </Button>
             
@@ -433,7 +438,7 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
                 id={`html-content-${email.id}`}
                 className="mt-3 p-4 border rounded-md bg-white overflow-auto max-h-96"
                 role="region"
-                aria-label="HTML version of email"
+                aria-label={t('tickets.htmlVersionOfEmail')}
                 dangerouslySetInnerHTML={{ 
                   __html: DOMPurify.sanitize(email.html_content, {
                     ALLOWED_TAGS: [
@@ -482,6 +487,7 @@ export const EmailThread: React.FC<EmailThreadProps> = ({
   emails, 
   customer
 }) => {
+  const { t } = useTranslation('dashboard');
   const threadRef = useRef<HTMLDivElement>(null);
   const [previewImage, setPreviewImage] = useState<{ url: string; filename: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -519,7 +525,7 @@ export const EmailThread: React.FC<EmailThreadProps> = ({
     return (
       <Alert>
         <AlertDescription>
-          No messages found in this conversation.
+          {t('tickets.noMessagesFound')}
         </AlertDescription>
       </Alert>
     );
@@ -531,7 +537,7 @@ export const EmailThread: React.FC<EmailThreadProps> = ({
         ref={threadRef}
         className="flex-1 px-6 overflow-y-auto overflow-x-hidden"
         role="log"
-        aria-label="Email conversation thread"
+        aria-label={t('tickets.emailConversationThread')}
         aria-live="polite"
       >
         <div className="space-y-4 pb-4">

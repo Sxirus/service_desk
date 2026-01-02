@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { apiClient } from '@/utils/api';
 import { FileUploadManager } from '@/utils/attachmentManager';
 import type { ReplyAreaProps, FileUploadState } from '@/types/ticket.types';
@@ -36,6 +37,7 @@ const AttachmentPreviewItem: React.FC<AttachmentPreviewItemProps> = ({
   index, 
   onRemove 
 }) => {
+  const { t } = useTranslation('dashboard');
   return (
     <div 
       className="border rounded p-2 w-32 text-xs flex flex-col gap-1 bg-card"
@@ -58,10 +60,10 @@ const AttachmentPreviewItem: React.FC<AttachmentPreviewItemProps> = ({
           console.log('Remove clicked for index', index);
         }}
         className="self-end text-[10px] text-red-500 hover:text-red-700 font-bold"
-        aria-label={`Remove ${fileState.file.name}`}
+        aria-label={`${t('tickets.removeAttachment')} ${fileState.file.name}`}
         type="button"
       >
-        ✕ Remove
+        ✕ {t('tickets.remove')}
       </button>
     </div>
   );
@@ -78,6 +80,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
   threadEmailAddress,
   onEmailSent
 }) => {
+  const { t } = useTranslation('dashboard');
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -284,21 +287,21 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
 
       // Validate email address format
       if (!emailAddress || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailAddress)) {
-        setError('Invalid recipient email address');
+        setError(t('tickets.invalidRecipientEmail'));
         setIsSending(false);
         return;
       }
 
       // Validate subject
       if (!subject || subject.trim().length === 0) {
-        setError('Email subject is required');
+        setError(t('tickets.subjectRequired'));
         setIsSending(false);
         return;
       }
 
       // Validate body/attachments
       if (body === '' && files.length === 0) {
-        setError('Please enter a message or attach a file');
+        setError(t('tickets.enterMessageOrAttach'));
         setIsSending(false);
         return;
       }
@@ -327,9 +330,9 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       if (response && typeof response === 'object' && 'limitReached' in response) {
         const limitType = response.limitType || 'emails';
         if (limitType === 'users') {
-          setError('User limit exceeded. You have more than 1 active user on the Free plan. Please upgrade to Pro or disable users to continue.');
+          setError(t('tickets.userLimitExceeded'));
         } else {
-          setError('Email limit reached. You have sent 50 emails this month on the Free plan. Please upgrade to Pro to send unlimited emails.');
+          setError(t('tickets.emailLimitReached'));
         }
         setIsSending(false);
         return;
@@ -356,7 +359,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       }
     } catch (err) {
       console.error('[ReplyArea] Send failed:', err);
-      setError(err instanceof Error ? err.message : 'Failed to send email. Please try again.');
+      setError(err instanceof Error ? err.message : t('tickets.failedToSendEmail'));
       setIsSending(false);
       // Don't clear form on error so user doesn't lose their message
     }
@@ -370,16 +373,16 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       className="border-t bg-card flex flex-col"
       style={{ minHeight: `${COLLAPSED_HEIGHT}px`, height: `${effectiveHeight}px` }}
       role="region"
-      aria-label="Email reply area"
+      aria-label={t('tickets.emailReplyArea')}
     >
       {/* Resize Handle */}
       <div
         className="h-1.5 bg-border hover:bg-primary cursor-ns-resize transition-colors relative group shrink-0"
         onMouseDown={handleResizeStart}
-        title="Drag to resize"
+        title={t('tickets.dragToResize')}
         role="separator"
         aria-orientation="horizontal"
-        aria-label="Resize reply area"
+        aria-label={t('tickets.resizeReplyArea')}
         tabIndex={0}
         onKeyDown={(e) => {
           if (e.key === 'ArrowUp' && !isCollapsed) {
@@ -395,14 +398,14 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       {/* Header with Collapse Button */}
       <div className="flex items-center justify-between px-6 pt-3 pb-2 shrink-0">
         <label htmlFor="reply-textarea" className="text-sm font-medium leading-none">
-          Your Reply
+          {t('tickets.yourReply')}
         </label>
         <button
           type="button"
           onClick={handleToggleCollapse}
           className="inline-flex cursor-pointer items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors"
-          title={isCollapsed ? 'Expand reply area' : 'Collapse reply area'}
-          aria-label={isCollapsed ? 'Expand reply area' : 'Collapse reply area'}
+          title={isCollapsed ? t('tickets.expandReplyArea') : t('tickets.collapseReplyArea')}
+          aria-label={isCollapsed ? t('tickets.expandReplyArea') : t('tickets.collapseReplyArea')}
           aria-expanded={!isCollapsed}
         >
           <svg
@@ -440,9 +443,9 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
                 className="w-full h-full min-h-0 rounded-md border border-input bg-background px-3 py-2 pb-12 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-                placeholder="Type your reply..."
+                placeholder={t('tickets.typeYourReply')}
                 disabled={isSending}
-                aria-label="Reply message"
+                aria-label={t('tickets.replyMessage')}
               />
               
               {/* Floating Attachment Button */}
@@ -451,8 +454,8 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isSending}
                 className="absolute cursor-pointer bottom-2 left-2 h-8 w-8 rounded-full bg-primary/70 hover:bg-primary text-primary-foreground flex items-center justify-center transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="Add attachments"
-                title="Attach files"
+                aria-label={t('tickets.addAttachments')}
+                title={t('tickets.attachFiles')}
               >
                 <svg
                   className="h-4 w-4"
@@ -485,7 +488,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
               onClick={handleSend}
               disabled={isSending}
               className="shrink-0 cursor-pointer"
-              aria-label="Send reply"
+              aria-label={t('tickets.sendReply')}
             >
               {isSending ? (
                 <>
@@ -499,7 +502,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  Sending...
+                  {t('tickets.sending')}
                 </>
               ) : (
                 <>
@@ -518,7 +521,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                       d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
                     />
                   </svg>
-                  Send Reply
+                  {t('tickets.sendReply')}
                 </>
               )}
             </Button>
@@ -530,7 +533,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
               <div 
                 className="flex gap-3 flex-wrap"
                 role="list"
-                aria-label="Selected attachments"
+                aria-label={t('tickets.selectedAttachments')}
               >
                 {attachments.map((fileState, index) => (
                   <AttachmentPreviewItem

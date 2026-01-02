@@ -20,13 +20,19 @@ const {
   overflowHidden = false 
 } = Astro.props;
 
+// Get language from cookie for SSR consistency
+const supportedLangs = ['en', 'de', 'zh'];
+const langCookie = Astro.cookies.get('i18nextLng')?.value;
+const initialLanguage = (langCookie && supportedLangs.includes(langCookie)) ? langCookie : 'en';
+
 import { Toaster } from "sonner";
 import { MobileWarning } from "../components/mobile-warning";
+import { I18nProvider } from "../i18n/I18nProvider";
 import '../styles/global.css';
 ---
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang={initialLanguage}>
   <head>
     <meta charset="utf-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -46,10 +52,12 @@ import '../styles/global.css';
     "min-h-screen", 
     overflowHidden && "overflow-hidden"
   ]}>
-    <!-- Page content -->
-    <slot />
-	<!-- Mobile Usage Warning -->
-    <MobileWarning client:load />
+    <!-- Page content wrapped in I18nProvider -->
+    <I18nProvider client:load initialLanguage={initialLanguage}>
+      <slot />
+      <!-- Mobile Usage Warning -->
+      <MobileWarning client:load />
+    </I18nProvider>
     <!-- Toast notifications -->
     <Toaster client:load />
   </body>
