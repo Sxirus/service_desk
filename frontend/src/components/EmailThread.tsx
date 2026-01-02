@@ -21,6 +21,8 @@ import {
 import type { EmailThreadProps, ThreadEmail, EmailAttachment } from '@/types/ticket.types';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { ParsedEmailContent } from '@/components/ParsedEmailContent';
+import { hasQuotedContent } from '@/utils/emailQuoteParser';
 
 /**
  * Individual attachment button component
@@ -260,15 +262,17 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
   };
 
   // Check if content is long (more than 1500 characters or 25 lines)
+  // Skip truncation for emails with quoted content (quotes are already collapsible)
   const MAX_CHARS = 1500;
   const MAX_LINES = 25;
   const textContent = email.text_content || '';
   const lineCount = (textContent.match(/\n/g) || []).length + 1;
-  const isLongContent = textContent.length > MAX_CHARS || lineCount > MAX_LINES;
+  const emailHasQuotes = hasQuotedContent(textContent);
+  const isLongContent = !emailHasQuotes && (textContent.length > MAX_CHARS || lineCount > MAX_LINES);
   
-  // Truncate content if needed
+  // Truncate content if needed (never truncate emails with quotes)
   const getTruncatedContent = () => {
-    if (!isLongContent || isExpanded) return textContent;
+    if (emailHasQuotes || !isLongContent || isExpanded) return textContent;
     
     // Find a good truncation point
     let truncateAt = MAX_CHARS;
@@ -349,17 +353,8 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
           </time>
         </header>
 
-        {/* Message Body - Sanitized for XSS protection */}
-        <div 
-          className="text-sm text-foreground whitespace-pre-wrap leading-relaxed" 
-          style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
-          dangerouslySetInnerHTML={{ 
-            __html: DOMPurify.sanitize(getTruncatedContent(), {
-              ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'br', 'p', 'ul', 'ol', 'li'],
-              ALLOWED_ATTR: ['href', 'title', 'target']
-            })
-          }}
-        />
+        {/* Message Body - With collapsible quoted replies */}
+        <ParsedEmailContent textContent={getTruncatedContent()} />
 
         {/* Show More/Less Button for long emails */}
         {isLongContent && (
