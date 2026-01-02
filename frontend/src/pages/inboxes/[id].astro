@@ -3,7 +3,7 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import AdminShell from "../../components/AdminShell";
 import { createClient } from "../../lib/supabase";
 import { getCompletePageContext } from "../../lib/auth-helpers";
-import { TicketsDataTable } from "@/components/datatable/TicketsDataTable";
+import { TicketsDataTableWithPresence } from "@/components/datatable/TicketsDataTableWithPresence";
 
 // Initialize Supabase client
 const supabase = createClient({
@@ -80,6 +80,13 @@ try {
   console.error("Error loading inbox:", err);
   error = "Failed to load inbox data";
 }
+
+// Current user info for presence tracking
+const currentUserForPresence = {
+  id: String(sidebarData.employeeId),
+  name: sidebarData.user.name || 'Support Agent',
+  avatar_url: sidebarData.user.avatarUrl || null
+};
 ---
 
 <BaseLayout title={inbox ? inbox.name : "Inbox"}>
@@ -110,7 +117,7 @@ try {
           </p>
         </div>
 
-        <TicketsDataTable 
+        <TicketsDataTableWithPresence 
           client:load
           data={emails.map((email: any) => ({
             id: email.id,
@@ -125,6 +132,7 @@ try {
           }))}
           showAssignedColumn={true}
           tableId={`inbox-${inboxId}`}
+          currentUser={currentUserForPresence}
         />
       </div>
     ) : (

@@ -5,7 +5,7 @@ import { createClient } from "../lib/supabase.ts";
 // Sidebar Shell
 import AdminShell from "@/components/AdminShell";
 import LimitBanner from "@/components/LimitBanner";
-import { TicketsDataTable } from "@/components/datatable/TicketsDataTable";
+import { TicketsDataTableWithPresence } from "@/components/datatable/TicketsDataTableWithPresence";
 
 // Create Supabase client with server-side rendering support
 const supabase = createClient({
@@ -171,6 +171,13 @@ try {
 } catch (err) {
   console.error("[dashboard] Client fetch error:", err);
 }
+
+// Current user info for presence tracking
+const currentUserForPresence = {
+  id: String(me.id),
+  name: sidebarUser.name || 'Support Agent',
+  avatar_url: sidebarUser.avatarUrl || null
+};
 ---
 
 <BaseLayout title="Service Desk">
@@ -197,11 +204,12 @@ try {
           <p class="text-sm text-gray-600 mt-1">{mails.length} ticket{mails.length !== 1 ? "s" : ""} assigned to you</p>
         </div>
         
-        <TicketsDataTable 
+        <TicketsDataTableWithPresence 
           client:load
           data={mails}
           showAssignedColumn={false}
           tableId="dashboard"
+          currentUser={currentUserForPresence}
         />
       </div>
     </div>

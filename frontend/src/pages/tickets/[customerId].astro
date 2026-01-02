@@ -29,6 +29,7 @@ import { EmailThread } from "@/components/EmailThread";
 import { ReplyArea } from "@/components/ReplyArea";
 import { TicketSidebar } from "@/components/TicketSidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { PresenceIndicator } from "@/components/PresenceIndicator";
 import type { 
   ThreadEmail, 
   IncomingEmail, 
@@ -455,6 +456,15 @@ const macroContext: MacroContext = {
   customerEmail: emailAddress
 };
 
+/**
+ * Current user info for presence tracking
+ */
+const currentUserForPresence = {
+  id: String(sidebarData.employeeId),
+  name: sidebarData.user.name || 'Support Agent',
+  avatar_url: sidebarData.user.avatarUrl || null
+};
+
 perf.end(processingTimer, {
   emailCount: emailArray.length,
   hasShopify: shopifyConfig.connected
@@ -494,6 +504,11 @@ log.info("[customer-ticket] Page setup complete, rendering");
           <h1 class="text-2xl font-bold tracking-tight">
             Conversation with {customer?.name}
           </h1>
+          <PresenceIndicator 
+            client:load
+            customerId={customerId as string}
+            currentUser={currentUserForPresence}
+          />
         </header>
 
         <!-- Email Thread Component -->

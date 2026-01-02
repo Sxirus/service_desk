@@ -36,6 +36,14 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { useTicketViewers } from "@/components/TicketPresenceProvider"
 
 // Type for ticket/email data
 export type TicketEmail = {
@@ -79,6 +87,61 @@ function saveState<T>(tableId: string, key: string, value: T): void {
   } catch (e) {
     console.error('Error saving table state to localStorage:', e)
   }
+}
+
+/**
+ * Get initials from a name
+ */
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/)
+  const first = parts[0]?.[0] ?? ''
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : ''
+  return (first + last).toUpperCase() || '?'
+}
+
+/**
+ * ViewersCell - Shows avatars of users currently viewing this ticket
+ */
+function ViewersCell({ customerId }: { customerId: string }) {
+  const viewers = useTicketViewers(customerId)
+  
+  if (viewers.length === 0) {
+    return null
+  }
+
+  return (
+    <TooltipProvider>
+      <div className="flex -space-x-1.5">
+        {viewers.slice(0, 3).map((viewer) => (
+          <Tooltip key={viewer.id}>
+            <TooltipTrigger asChild>
+              <Avatar className="h-6 w-6 border-2 border-background ring-0 cursor-default">
+                <AvatarImage src={viewer.avatar_url || undefined} alt={viewer.name} />
+                <AvatarFallback className="text-[10px] bg-primary text-primary-foreground">
+                  {getInitials(viewer.name)}
+                </AvatarFallback>
+              </Avatar>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              {viewer.name} is viewing
+            </TooltipContent>
+          </Tooltip>
+        ))}
+        {viewers.length > 3 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-muted text-[10px] font-medium cursor-default">
+                +{viewers.length - 3}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              {viewers.slice(3).map(v => v.name).join(', ')}
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+    </TooltipProvider>
+  )
 }
 
 export function TicketsDataTable({ 
@@ -159,9 +222,13 @@ export function TicketsDataTable({
       cell: ({ row }) => {
         const subject = row.getValue("subject") as string
         const read = row.original.read
+        const customerId = String(row.original.customer_id)
         return (
-          <div className={`max-w-md truncate ${!read ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
-            {subject || "(No Subject)"}
+          <div className="flex items-center justify-between gap-3">
+            <div className={`max-w-md truncate ${!read ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
+              {subject || "(No Subject)"}
+            </div>
+            <ViewersCell customerId={customerId} />
           </div>
         )
       },
