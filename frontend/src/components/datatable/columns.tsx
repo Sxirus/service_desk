@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 import { UserDialog, DeleteUserDialog } from "@/components/UserDialog"
+import { ReassignTicketsDialog } from "@/components/ReassignTicketsDialog"
 
 // This type is used to define the shape of our data.
 export type User = {
@@ -36,6 +37,8 @@ function UserActionsCell({ user, roles }: { user: User, roles: Role[] }) {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [disableDialogOpen, setDisableDialogOpen] = useState(false);
+  const [reassignDialogOpen, setReassignDialogOpen] = useState(false);
+  const [unassignDialogOpen, setUnassignDialogOpen] = useState(false);
 
   return (
     <>
@@ -55,6 +58,14 @@ function UserActionsCell({ user, roles }: { user: User, roles: Role[] }) {
           <DropdownMenuItem onClick={() => setDisableDialogOpen(true)}>
             {user.disabled ? 'Enable User' : 'Disable User'}
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setReassignDialogOpen(true)}>
+            Reassign All Tickets
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setUnassignDialogOpen(true)}>
+            Unassign All Tickets
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem 
             onClick={() => setDeleteDialogOpen(true)}
             className="text-red-600 focus:text-red-600"
@@ -86,6 +97,22 @@ function UserActionsCell({ user, roles }: { user: User, roles: Role[] }) {
         isOpen={disableDialogOpen}
         onOpenChange={setDisableDialogOpen}
         mode={user.disabled ? 'enable' : 'disable'}
+      />
+
+      {/* Reassign Tickets Dialog */}
+      <ReassignTicketsDialog
+        open={reassignDialogOpen}
+        onOpenChange={setReassignDialogOpen}
+        user={user}
+        mode="reassign"
+      />
+
+      {/* Unassign Tickets Dialog */}
+      <ReassignTicketsDialog
+        open={unassignDialogOpen}
+        onOpenChange={setUnassignDialogOpen}
+        user={user}
+        mode="unassign"
       />
     </>
   );

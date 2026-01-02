@@ -1738,6 +1738,265 @@ const registerTestSupportMailbox = async (
 
 /* ----------------------- EXPORTS ----------------------- */
 
+/* ----------------------- UNASSIGN ALL TICKETS FROM EMPLOYEE ----------------------- */
+
+// Schema for unassigning all tickets
+const unassignAllTicketsSchema = z.object({
+  employeeId: z.number(),
+});
+
+type UnassignAllTicketsInput = z.infer<typeof unassignAllTicketsSchema>;
+
+/**
+ * Admin-only: Unassign all customers/tickets from an employee
+ * Sets employee_id to NULL for all customers assigned to this employee
+ */
+const unassignAllTickets = async (
+  { employeeId }: UnassignAllTicketsInput,
+  context: ActionAPIContext
+) => {
+  console.log("[actions.unassignAllTickets] start, employeeId:", employeeId);
+  try {
+    // 1) Verify the current user is authenticated
+    const ssr = createSSR({ request: context.request, cookies: context.cookies });
+    const { data: { user }, error: userErr } = await ssr.auth.getUser();
+    if (userErr || !user) {
+      console.error("[actions.unassignAllTickets] getUser error:", userErr?.message);
+      return { success: false, message: "Unauthorized" };
+    }
+
+    // 2) Verify the user is an admin
+    const { data: me, error: meErr } = await ssr
+      .from("employees")
+      .select("id, client_id")
+      .eq("user_id", user.id)
+      .single();
+
+    if (meErr || !me) {
+      console.error("[actions.unassignAllTickets] employee lookup:", meErr?.message);
+      return { success: false, message: "Employee not found" };
+    }
+
+    const { data: roles } = await ssr
+      .from("roles-employees")
+      .select("role_id")
+      .eq("employee_id", me.id);
+
+    const amIAdmin = roles?.some((r) => r.role_id === 1);
+    if (!amIAdmin) {
+      console.error("[actions.unassignAllTickets] User is not admin");
+      return { success: false, message: "Forbidden" };
+    }
+
+    // 3) Verify target employee belongs to same client
+    const admin = createAdmin(
+      import.meta.env.SUPABASE_URL!,
+      import.meta.env.SUPABASE_KEY!,
+      { auth: { persistSession: false } }
+    );
+
+    const { data: targetEmployee, error: targetErr } = await admin
+      .from("employees")
+      .select("id, client_id, name")
+      .eq("id", employeeId)
+      .single();
+
+    if (targetErr || !targetEmployee) {
+      console.error("[actions.unassignAllTickets] target lookup:", targetErr?.message);
+      return { success: false, message: "Target employee not found" };
+    }
+
+    if (targetEmployee.client_id !== me.client_id) {
+      console.error("[actions.unassignAllTickets] Client mismatch");
+      return { success: false, message: "Cannot modify employees from other clients" };
+    }
+
+    // 4) Count affected customers first
+    const { count: affectedCount } = await admin
+      .from("customers")
+      .select("*", { count: "exact", head: true })
+      .eq("employee_id", employeeId)
+      .eq("client_id", me.client_id);
+
+    // 5) Unassign all customers from this employee
+    const { error: updateErr } = await admin
+      .from("customers")
+      .update({ employee_id: null })
+      .eq("employee_id", employeeId)
+      .eq("client_id", me.client_id);
+
+    if (updateErr) {
+      console.error("[actions.unassignAllTickets] update error:", updateErr.message);
+      return { success: false, message: "Failed to unassign tickets" };
+    }
+
+    console.log("[actions.unassignAllTickets] Unassigned", affectedCount, "customers from employee", employeeId);
+    return { 
+      success: true, 
+      message: `Successfully unassigned ${affectedCount || 0} ticket(s) from ${targetEmployee.name}`,
+      count: affectedCount || 0
+    };
+  } catch (err: any) {
+    console.error("[actions.unassignAllTickets] unexpected:", err?.message ?? err);
+    return { success: false, message: "Unexpected error" };
+  }
+};
+
+/* ----------------------- REASSIGN ALL TICKETS TO ANOTHER EMPLOYEE ----------------------- */
+
+// Schema for reassigning all tickets
+const reassignAllTicketsSchema = z.object({
+  fromEmployeeId: z.number(),
+  toEmployeeId: z.number(),
+});
+
+type ReassignAllTicketsInput = z.infer<typeof reassignAllTicketsSchema>;
+
+/**
+ * Admin-only: Reassign all customers/tickets from one employee to another
+ */
+const reassignAllTickets = async (
+  { fromEmployeeId, toEmployeeId }: ReassignAllTicketsInput,
+  context: ActionAPIContext
+) => {
+  console.log("[actions.reassignAllTickets] start, from:", fromEmployeeId, "to:", toEmployeeId);
+  try {
+    // 1) Verify the current user is authenticated
+    const ssr = createSSR({ request: context.request, cookies: context.cookies });
+    const { data: { user }, error: userErr } = await ssr.auth.getUser();
+    if (userErr || !user) {
+      console.error("[actions.reassignAllTickets] getUser error:", userErr?.message);
+      return { success: false, message: "Unauthorized" };
+    }
+
+    // 2) Verify the user is an admin
+    const { data: me, error: meErr } = await ssr
+      .from("employees")
+      .select("id, client_id")
+      .eq("user_id", user.id)
+      .single();
+
+    if (meErr || !me) {
+      console.error("[actions.reassignAllTickets] employee lookup:", meErr?.message);
+      return { success: false, message: "Employee not found" };
+    }
+
+    const { data: roles } = await ssr
+      .from("roles-employees")
+      .select("role_id")
+      .eq("employee_id", me.id);
+
+    const amIAdmin = roles?.some((r) => r.role_id === 1);
+    if (!amIAdmin) {
+      console.error("[actions.reassignAllTickets] User is not admin");
+      return { success: false, message: "Forbidden" };
+    }
+
+    // 3) Use admin client
+    const admin = createAdmin(
+      import.meta.env.SUPABASE_URL!,
+      import.meta.env.SUPABASE_KEY!,
+      { auth: { persistSession: false } }
+    );
+
+    // 4) Verify both employees belong to same client
+    const { data: fromEmployee, error: fromErr } = await admin
+      .from("employees")
+      .select("id, client_id, name")
+      .eq("id", fromEmployeeId)
+      .single();
+
+    if (fromErr || !fromEmployee || fromEmployee.client_id !== me.client_id) {
+      console.error("[actions.reassignAllTickets] from employee invalid");
+      return { success: false, message: "Source employee not found or access denied" };
+    }
+
+    const { data: toEmployee, error: toErr } = await admin
+      .from("employees")
+      .select("id, client_id, name")
+      .eq("id", toEmployeeId)
+      .single();
+
+    if (toErr || !toEmployee || toEmployee.client_id !== me.client_id) {
+      console.error("[actions.reassignAllTickets] to employee invalid");
+      return { success: false, message: "Target employee not found or access denied" };
+    }
+
+    // 5) Count affected customers first
+    const { count: affectedCount } = await admin
+      .from("customers")
+      .select("*", { count: "exact", head: true })
+      .eq("employee_id", fromEmployeeId)
+      .eq("client_id", me.client_id);
+
+    // 6) Reassign all customers
+    const { error: updateErr } = await admin
+      .from("customers")
+      .update({ employee_id: toEmployeeId })
+      .eq("employee_id", fromEmployeeId)
+      .eq("client_id", me.client_id);
+
+    if (updateErr) {
+      console.error("[actions.reassignAllTickets] update error:", updateErr.message);
+      return { success: false, message: "Failed to reassign tickets" };
+    }
+
+    console.log("[actions.reassignAllTickets] Reassigned", affectedCount, "customers from", fromEmployeeId, "to", toEmployeeId);
+    return { 
+      success: true, 
+      message: `Successfully reassigned ${affectedCount || 0} ticket(s) from ${fromEmployee.name} to ${toEmployee.name}`,
+      count: affectedCount || 0
+    };
+  } catch (err: any) {
+    console.error("[actions.reassignAllTickets] unexpected:", err?.message ?? err);
+    return { success: false, message: "Unexpected error" };
+  }
+};
+
+/* ----------------------- GET EMPLOYEES FOR REASSIGNMENT ----------------------- */
+
+/**
+ * Get list of employees for reassignment dropdown
+ */
+const getEmployeesForReassignment = async (
+  _input: {},
+  context: ActionAPIContext
+) => {
+  console.log("[actions.getEmployeesForReassignment] start");
+  try {
+    const ssr = createSSR({ request: context.request, cookies: context.cookies });
+    const { data: { user }, error: userErr } = await ssr.auth.getUser();
+    if (userErr || !user) {
+      return { success: false, message: "Unauthorized", employees: [] };
+    }
+
+    const { data: me } = await ssr
+      .from("employees")
+      .select("id, client_id")
+      .eq("user_id", user.id)
+      .single();
+
+    if (!me) {
+      return { success: false, message: "Employee not found", employees: [] };
+    }
+
+    const { data: employees } = await ssr
+      .from("employees")
+      .select("id, name")
+      .eq("client_id", me.client_id)
+      .or("disabled.is.null,disabled.eq.false")
+      .order("name");
+
+    return { 
+      success: true, 
+      employees: employees || [] 
+    };
+  } catch (err: any) {
+    console.error("[actions.getEmployeesForReassignment] error:", err?.message);
+    return { success: false, message: "Unexpected error", employees: [] };
+  }
+};
+
 export const server = {
   // User sign-in with email/password and CAPTCHA
   signIn: defineAction({
@@ -1867,6 +2126,27 @@ export const server = {
     accept: "json",
     input: z.object({}),
     handler: (input, context) => sendPasswordResetEmail(input, context),
+  }),
+
+  // Admin-only: Unassign all tickets from an employee
+  unassignAllTickets: defineAction({
+    accept: "json",
+    input: unassignAllTicketsSchema,
+    handler: (input, context) => unassignAllTickets(input, context),
+  }),
+
+  // Admin-only: Reassign all tickets from one employee to another
+  reassignAllTickets: defineAction({
+    accept: "json",
+    input: reassignAllTicketsSchema,
+    handler: (input, context) => reassignAllTickets(input, context),
+  }),
+
+  // Get employees list for reassignment dropdown
+  getEmployeesForReassignment: defineAction({
+    accept: "json",
+    input: z.object({}),
+    handler: (input, context) => getEmployeesForReassignment(input, context),
   }),
 
 };
