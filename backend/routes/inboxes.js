@@ -203,6 +203,7 @@ router.get('/getInboxEmails',
           send_at,
           email_address,
           read,
+          status,
           customer_id,
           customers!inner (
             id,
@@ -226,11 +227,26 @@ router.get('/getInboxEmails',
       for (const filter of filters) {
         const config = filter.filter_config;
 
+        // Support both legacy 'read_status' and new 'status' filter types
         if (filter.filter_type === 'read_status') {
+          // Legacy filter - map to new status system
           if (config.show === 'read') {
-            query = query.eq('read', true);
+            query = query.eq('status', 'resolved');
           } else if (config.show === 'unread') {
-            query = query.eq('read', false);
+            query = query.in('status', ['new', 'open']);
+          }
+          // 'all' means no filter
+        }
+
+        if (filter.filter_type === 'status') {
+          // New status filter
+          if (config.show && config.show !== 'all') {
+            // Can be a single status or array of statuses
+            if (Array.isArray(config.show)) {
+              query = query.in('status', config.show);
+            } else {
+              query = query.eq('status', config.show);
+            }
           }
           // 'all' means no filter
         }
@@ -585,13 +601,13 @@ router.get('/getCounts',
 
       console.log('[INBOXES] Fetching email counts for employee:', employee_id);
 
-      // Get count for "Dashboard" (unread emails from customers assigned to this employee)
+      // Get count for "Dashboard" (new/open emails from customers assigned to this employee)
       const { count: dashboardCount, error: dashboardError } = await supabase
         .from('incoming-mails')
         .select('id, customers!inner(employee_id)', { count: 'exact', head: true })
         .eq('client_id', client_id)
         .eq('customers.employee_id', employee_id)
-        .eq('read', false);
+        .in('status', ['new', 'open']);
 
       if (dashboardError) {
         console.error('[INBOXES] Error counting dashboard mails:', dashboardError.message);
@@ -668,11 +684,24 @@ router.get('/getCounts',
         for (const filter of filters) {
           const config = filter.filter_config;
 
+          // Support both legacy 'read_status' and new 'status' filter types
           if (filter.filter_type === 'read_status') {
+            // Legacy filter - map to new status system
             if (config.show === 'read') {
-              query = query.eq('read', true);
+              query = query.eq('status', 'resolved');
             } else if (config.show === 'unread') {
-              query = query.eq('read', false);
+              query = query.in('status', ['new', 'open']);
+            }
+          }
+
+          if (filter.filter_type === 'status') {
+            // New status filter
+            if (config.show && config.show !== 'all') {
+              if (Array.isArray(config.show)) {
+                query = query.in('status', config.show);
+              } else {
+                query = query.eq('status', config.show);
+              }
             }
           }
 

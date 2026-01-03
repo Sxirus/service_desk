@@ -133,7 +133,7 @@ const currentUserForPresence = {
             assigned_to: email.customers?.employees?.name || email.customers?.employee_groups?.name || null,
             assigned_type: email.customers?.employees?.name ? 'employee' : email.customers?.employee_groups?.name ? 'group' : null,
             send_at: email.send_at,
-            read: email.read
+            status: email.status || 'new'
           }))}
           showAssignedColumn={true}
           tableId={`inbox-${inboxId}`}

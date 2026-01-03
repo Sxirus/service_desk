@@ -55,7 +55,7 @@ router.get('/getMails',
         .select('*')
         .eq('client_id', client_id)
         .in('customer_id', ids)
-        .eq('read', false)
+        .in('status', ['new', 'open'])
         .order('send_at', { ascending: true })
         .limit(100);
 
@@ -391,6 +391,23 @@ router.post('/sendMail',
           sentVia: smtpConfig.auth.user
         });
       }
+
+      // 6. Update ticket status (default to 'resolved' if not specified)
+      const ticketStatus = req.body.ticketStatus || 'resolved';
+      const validStatuses = ['new', 'open', 'waiting', 'resolved'];
+      const finalStatus = validStatuses.includes(ticketStatus) ? ticketStatus : 'resolved';
+      
+      const { error: statusError } = await supabase
+        .from('incoming-mails')
+        .update({ status: finalStatus })
+        .eq('customer_id', customerId);
+
+      if (statusError) {
+        console.warn('[EMAILS] Failed to update ticket status:', statusError.message);
+        // Non-critical, continue
+      } else {
+        console.log('[EMAILS] Ticket status updated to:', finalStatus);
+      }
       
       if (attachments.length > 0) {
         storeOutgoingAttachmentsInDB(attachments, client_id, data.id);
@@ -417,7 +434,130 @@ router.post('/sendMail',
 );
 
 /**
- * Mark all emails from a customer as read
+ * Update ticket status for a customer
+ * POST /api/emails/updateStatus?customerId=123
+ * Body: { status: 'new' | 'open' | 'waiting' | 'resolved' }
+ * 
+ * Authentication: Required
+ * Authorization: Customer must belong to user's client
+ */
+router.post('/updateStatus', 
+  authenticate,
+  validateId('customerId'),
+  authorizeCustomerAccess,
+  async (req, res) => {
+    try {
+      const customerId = req.sanitized.customerId;
+      const { status } = req.body;
+
+      // Validate status value
+      const validStatuses = ['new', 'open', 'waiting', 'resolved'];
+      if (!status || !validStatuses.includes(status)) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` 
+        });
+      }
+
+      console.log('[EMAILS] Updating status to', status, 'for customer:', customerId);
+
+      const { data, error } = await supabase
+        .from('incoming-mails')
+        .update({ status: status })
+        .eq('customer_id', customerId);
+
+      if (error) {
+        console.error('[EMAILS] Supabase error:', error.message);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+
+      console.log('[EMAILS] Status updated to:', status);
+      res.json({ success: true, status });
+    } catch (err) {
+      console.error('[EMAILS] Server error:', err.message);
+      res.status(500).json({ success: false, error: 'Servererror' });
+    } 
+  }
+);
+
+/**
+ * Bulk update ticket status
+ * POST /api/emails/bulkUpdateStatus
+ * Body: { customerIds: number[], status: 'new' | 'open' | 'waiting' | 'resolved' }
+ * 
+ * Authentication: Required
+ * Authorization: All customers must belong to user's client
+ */
+router.post('/bulkUpdateStatus',
+  authenticate,
+  async (req, res) => {
+    try {
+      const client_id = req.user.client_id;
+      const { customerIds, status } = req.body;
+
+      // Validate status value
+      const validStatuses = ['new', 'open', 'waiting', 'resolved'];
+      if (!status || !validStatuses.includes(status)) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` 
+        });
+      }
+
+      // Validate customerIds
+      if (!Array.isArray(customerIds) || customerIds.length === 0) {
+        return res.status(400).json({ success: false, error: 'customerIds must be a non-empty array' });
+      }
+
+      const ids = customerIds.map(Number).filter(id => !isNaN(id));
+      if (ids.length === 0) {
+        return res.status(400).json({ success: false, error: 'No valid customer IDs provided' });
+      }
+
+      console.log('[EMAILS] Bulk updating status to', status, 'for customers:', ids);
+
+      // Verify all customers belong to user's client
+      const { data: customers, error: customerError } = await supabase
+        .from('customers')
+        .select('id, client_id')
+        .in('id', ids);
+
+      if (customerError) {
+        console.error('[EMAILS] Customer verification error:', customerError);
+        return res.status(500).json({ error: 'Datenbankfehler' });
+      }
+
+      const unauthorizedCustomer = customers.find(c => c.client_id !== client_id);
+      if (unauthorizedCustomer) {
+        console.warn('[EMAILS] Unauthorized bulk status update attempt for customer:', unauthorizedCustomer.id);
+        return res.status(403).json({ error: 'Access denied to one or more customers' });
+      }
+
+      const authorizedIds = customers.map(c => c.id);
+
+      // Update status for all authorized customers
+      const { error } = await supabase
+        .from('incoming-mails')
+        .update({ status: status })
+        .in('customer_id', authorizedIds);
+
+      if (error) {
+        console.error('[EMAILS] Bulk status update error:', error.message);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+
+      console.log('[EMAILS] Bulk status updated to', status, 'for', authorizedIds.length, 'customers');
+      res.json({ success: true, updated: authorizedIds.length, status });
+    } catch (err) {
+      console.error('[EMAILS] Server error:', err.message);
+      res.status(500).json({ success: false, error: 'Servererror' });
+    }
+  }
+);
+
+/**
+ * @deprecated Use updateStatus instead. Kept for backwards compatibility.
+ * Mark all emails from a customer as read (sets status to 'resolved')
  * POST /api/emails/makeRead?customerId=123
  * 
  * Authentication: Required
@@ -431,11 +571,12 @@ router.post('/makeRead',
     try {
       const customerId = req.sanitized.customerId;
 
-      console.log('[EMAILS] Marking emails as read for customer:', customerId);
+      console.log('[EMAILS] [DEPRECATED] Marking emails as read for customer:', customerId);
 
+      // Update both read flag (for backwards compat) and new status
       const { data, error } = await supabase
         .from('incoming-mails')
-        .update({ read: true })
+        .update({ read: true, status: 'resolved' })
         .eq('customer_id', customerId);
 
       if (error) {
@@ -443,7 +584,7 @@ router.post('/makeRead',
         return res.status(500).json({ success: false, error: error.message });
       }
 
-      console.log('[EMAILS] Emails marked as read');
+      console.log('[EMAILS] Emails marked as read (status: resolved)');
       res.json({ success: true });
     } catch (err) {
       console.error('[EMAILS] Server error:', err.message);
@@ -499,7 +640,7 @@ router.get('/getMailsbyCustomerIds',
         .from('incoming-mails') 
         .select('*, customers(id, name)')
         .in('customer_id', authorizedIds)
-        .eq('read', false)
+        .in('status', ['new', 'open', 'waiting'])
         .order('send_at', { ascending: false })
         .limit(100);
 

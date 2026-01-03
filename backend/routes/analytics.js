@@ -399,6 +399,116 @@ router.get('/response-times',
 );
 
 /**
+ * Get ticket status distribution statistics
+ * GET /api/analytics/status-stats?from=<ISO_DATE>&to=<ISO_DATE>
+ * 
+ * Authentication: Required
+ * Authorization: Automatically filtered by user's client_id
+ * 
+ * Returns:
+ * {
+ *   statusDistribution: { new: number, open: number, waiting: number, resolved: number },
+ *   dailyStatus: Array<{ date: string, new: number, open: number, waiting: number, resolved: number }>
+ * }
+ */
+router.get('/status-stats',
+  authenticate,
+  async (req, res) => {
+    try {
+      const client_id = req.user.client_id;
+      const { from, to } = req.query;
+
+      // Validate date parameters
+      if (!from || !to) {
+        return res.status(400).json({ 
+          error: 'Bad Request',
+          message: 'Missing required parameters: from and to dates' 
+        });
+      }
+
+      const startDate = new Date(from);
+      const endDate = new Date(to);
+
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        return res.status(400).json({ 
+          error: 'Bad Request',
+          message: 'Invalid date format. Use ISO 8601 format' 
+        });
+      }
+
+      console.log('[ANALYTICS] Fetching status stats for client:', client_id, 'from:', from, 'to:', to);
+
+      // Fetch all emails with their current status
+      const { data: emails, error: emailsError } = await supabase
+        .from('incoming-mails')
+        .select('status, send_at')
+        .eq('client_id', client_id)
+        .gte('send_at', from)
+        .lte('send_at', to);
+
+      if (emailsError) {
+        console.error('[ANALYTICS] Error fetching emails:', emailsError.message);
+        return res.status(500).json({ 
+          error: 'Database Error',
+          message: 'Failed to fetch email data' 
+        });
+      }
+
+      // Calculate status distribution
+      const statusDistribution = {
+        new: 0,
+        open: 0,
+        waiting: 0,
+        resolved: 0
+      };
+
+      // Initialize daily stats map
+      const dailyStatusMap = new Map();
+      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+        const dateKey = d.toISOString().split('T')[0];
+        dailyStatusMap.set(dateKey, {
+          date: dateKey,
+          new: 0,
+          open: 0,
+          waiting: 0,
+          resolved: 0
+        });
+      }
+
+      // Process emails
+      if (emails) {
+        for (const email of emails) {
+          const status = email.status || 'new';
+          if (statusDistribution.hasOwnProperty(status)) {
+            statusDistribution[status]++;
+          }
+
+          const dateKey = email.send_at.split('T')[0];
+          const dailyStats = dailyStatusMap.get(dateKey);
+          if (dailyStats && dailyStats.hasOwnProperty(status)) {
+            dailyStats[status]++;
+          }
+        }
+      }
+
+      const dailyStatus = Array.from(dailyStatusMap.values()).sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
+      console.log('[ANALYTICS] Returning status stats:', statusDistribution);
+
+      res.json({ statusDistribution, dailyStatus });
+    } catch (err) {
+      console.error('[ANALYTICS] Server error:', err.message);
+      res.status(500).json({ 
+        error: 'Internal Server Error',
+        message: 'Failed to fetch status analytics data' 
+      });
+    }
+  }
+);
+
+/**
  * Get agent performance statistics (placeholder for future implementation)
  * GET /api/analytics/agent-performance?from=<ISO_DATE>&to=<ISO_DATE>
  * 

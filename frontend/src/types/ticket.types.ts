@@ -28,6 +28,11 @@ interface BaseEmail {
 }
 
 /**
+ * Ticket status lifecycle states
+ */
+export type TicketStatus = 'new' | 'open' | 'waiting' | 'resolved';
+
+/**
  * Incoming email from customer
  */
 export interface IncomingEmail extends BaseEmail {
@@ -35,7 +40,8 @@ export interface IncomingEmail extends BaseEmail {
   subject: string;
   html_content?: string;
   email_address: string;
-  read: boolean;
+  status: TicketStatus;
+  read?: boolean; // Deprecated, kept for backwards compatibility
   received_by?: string;
   to_email_address?: string;
 }

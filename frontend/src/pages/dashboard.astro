@@ -90,7 +90,8 @@ if (customers.length > 0) {
       const mailResponse = await mailresult.json();
       mails = (mailResponse.data || []).map((mail: any) => ({
         ...mail,
-        customer_name: mail.customers?.name || 'Unknown'
+        customer_name: mail.customers?.name || 'Unknown',
+        status: mail.status || 'new' // Fallback for backwards compatibility
       }));
     }
   } catch (err) {

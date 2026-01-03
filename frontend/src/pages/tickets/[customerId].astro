@@ -153,6 +153,7 @@ const [
       html_content,
       email_address,
       read,
+      status,
       attachments
     `)
     .eq("customer_id", customerId)
@@ -357,6 +358,9 @@ let lastMail = incomingMails && incomingMails.length > 0
   ? incomingMails[incomingMails.length - 1] 
   : null;
 
+// Get current ticket status from the most recent incoming email
+const ticketStatus = lastMail?.status || 'new';
+
 if (!lastMail && !isComposeMode) {
   log.error("No incoming emails found in thread");
   perf.end(processingTimer, { result: 'no-emails' });
@@ -539,9 +543,24 @@ log.info("[customer-ticket] Page setup complete, rendering");
       <main class="flex-1 flex flex-col min-w-0 overflow-hidden" role="main">
         <!-- Page Header -->
         <header class="px-6 mt-2 pt-0 py-2">
-          <h1 class="text-2xl font-bold tracking-tight">
-            Conversation with {customer?.name}
-          </h1>
+          <div class="flex items-center gap-3">
+            <h1 class="text-2xl font-bold tracking-tight">
+              Conversation with {customer?.name}
+            </h1>
+            <!-- Status Badge -->
+            <span class:list={[
+              "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
+              ticketStatus === 'new' && "bg-green-100 text-green-800",
+              ticketStatus === 'open' && "bg-orange-100 text-orange-800",
+              ticketStatus === 'waiting' && "bg-blue-100 text-blue-800",
+              ticketStatus === 'resolved' && "bg-gray-100 text-gray-600",
+            ]}>
+              {ticketStatus === 'new' && 'New'}
+              {ticketStatus === 'open' && 'Open'}
+              {ticketStatus === 'waiting' && 'Waiting'}
+              {ticketStatus === 'resolved' && 'Resolved'}
+            </span>
+          </div>
           <PresenceIndicator 
             client:load
             customerId={customerId as string}

@@ -45,6 +45,9 @@ import {
 } from "@/components/ui/tooltip"
 import { useTicketViewers } from "@/components/TicketPresenceProvider"
 
+// Ticket status type - lifecycle states
+export type TicketStatus = 'new' | 'open' | 'waiting' | 'resolved'
+
 // Type for ticket/email data
 export type TicketEmail = {
   id: number
@@ -55,7 +58,16 @@ export type TicketEmail = {
   assigned_to?: string
   assigned_type?: 'employee' | 'group' | null
   send_at: string
-  read: boolean
+  status: TicketStatus
+  read?: boolean // Deprecated, kept for backwards compatibility
+}
+
+// Status configuration for display
+const STATUS_CONFIG: Record<TicketStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; className?: string }> = {
+  new: { label: 'New', variant: 'default', className: 'bg-green-500 hover:bg-green-600' },
+  open: { label: 'Open', variant: 'default', className: 'bg-orange-500 hover:bg-orange-600' },
+  waiting: { label: 'Waiting', variant: 'default', className: 'bg-blue-500 hover:bg-blue-600' },
+  resolved: { label: 'Resolved', variant: 'secondary' }
 }
 
 interface TicketsDataTableProps {
@@ -76,8 +88,10 @@ function getComparableValue(ticket: TicketEmail, key: string): ComparableValue {
   switch (key) {
     case 'send_at':
       return new Date(ticket.send_at).getTime()
-    case 'read':
-      return ticket.read
+    case 'status':
+      // Sort order: new (highest priority), open, waiting, resolved (lowest)
+      const statusOrder: Record<TicketStatus, number> = { new: 0, open: 1, waiting: 2, resolved: 3 }
+      return statusOrder[ticket.status] ?? 4
     case 'subject':
       return ticket.subject
     case 'customer_name':
@@ -286,11 +300,13 @@ export function TicketsDataTable({
       },
       cell: ({ row }) => {
         const subject = row.getValue("subject") as string
-        const read = row.original.read
+        const status = row.original.status
         const customerId = String(row.original.customer_id)
+        // Bold for new/open tickets, normal for waiting/resolved
+        const isBold = status === 'new' || status === 'open'
         return (
           <div className="flex items-center justify-between gap-3">
-            <div className={`max-w-md truncate ${!read ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
+            <div className={`max-w-md truncate ${isBold ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
               {subject || "(No Subject)"}
             </div>
             <ViewersCell customerId={customerId} />
@@ -369,13 +385,14 @@ export function TicketsDataTable({
       },
     },
     {
-      accessorKey: "read",
+      accessorKey: "status",
       header: "Status",
       cell: ({ row }) => {
-        const read = row.getValue("read") as boolean
+        const status = row.original.status as TicketStatus
+        const config = STATUS_CONFIG[status] || STATUS_CONFIG.new
         return (
-          <Badge variant={read ? "secondary" : "default"}>
-            {read ? 'Read' : 'Unread'}
+          <Badge variant={config.variant} className={config.className}>
+            {config.label}
           </Badge>
         )
       },
@@ -469,11 +486,22 @@ export function TicketsDataTable({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
-                <DropdownMenuItem onClick={() => onBulkAction('mark_read', selectedIds)}>
-                  Mark as Read
+                <DropdownMenuLabel>Set Status</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => onBulkAction('set_status_new', selectedIds)}>
+                  <span className="w-2 h-2 rounded-full bg-green-500 mr-2" />
+                  New
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onBulkAction('mark_unread', selectedIds)}>
-                  Mark as Unread
+                <DropdownMenuItem onClick={() => onBulkAction('set_status_open', selectedIds)}>
+                  <span className="w-2 h-2 rounded-full bg-orange-500 mr-2" />
+                  Open
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onBulkAction('set_status_waiting', selectedIds)}>
+                  <span className="w-2 h-2 rounded-full bg-blue-500 mr-2" />
+                  Waiting
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onBulkAction('set_status_resolved', selectedIds)}>
+                  <span className="w-2 h-2 rounded-full bg-gray-400 mr-2" />
+                  Resolved
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => onBulkAction('assign', selectedIds)}>
