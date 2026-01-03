@@ -118,11 +118,18 @@ router.get('/clients/:id', async (req, res) => {
       return res.status(404).json({ error: 'Client not found' });
     }
 
+    // First get customer IDs for this client (needed for email counts)
+    const { data: clientCustomers } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('client_id', clientId);
+    
+    const customerIds = clientCustomers?.map(c => c.id) || [];
+
     // Fetch related data in parallel
     const [
       { data: employees, error: empError },
-      { count: customerCount },
-      { count: emailsSentCount }
+      { count: customerCount }
     ] = await Promise.all([
       supabase
         .from('employees')
@@ -132,10 +139,6 @@ router.get('/clients/:id', async (req, res) => {
       supabase
         .from('customers')
         .select('id', { count: 'exact', head: true })
-        .eq('client_id', clientId),
-      supabase
-        .from('sent-mail')
-        .select('id', { count: 'exact', head: true })
         .eq('client_id', clientId)
     ]);
     
@@ -143,13 +146,17 @@ router.get('/clients/:id', async (req, res) => {
       console.error('[PLATFORM] Error fetching employees:', empError);
     }
 
-    // Get emails received count - first get customer IDs for this client
-    const { data: clientCustomers } = await supabase
-      .from('customers')
-      .select('id')
-      .eq('client_id', clientId);
-    
-    const customerIds = clientCustomers?.map(c => c.id) || [];
+    // Get emails sent count via customer_ids
+    let emailsSentCount = 0;
+    if (customerIds.length > 0) {
+      const { count } = await supabase
+        .from('sent-mail')
+        .select('id', { count: 'exact', head: true })
+        .in('customer_id', customerIds);
+      emailsSentCount = count || 0;
+    }
+
+    // Get emails received count
     let emailsReceivedCount = 0;
     if (customerIds.length > 0) {
       const { count } = await supabase
@@ -262,10 +269,10 @@ router.patch('/clients/:id', async (req, res) => {
       return res.status(400).json({ error: 'No valid fields to update' });
     }
 
-    // Get current client data for change tracking
+    // Get current client data for change tracking and Stripe update
     const { data: oldClient } = await supabase
       .from('clients')
-      .select('name, subscription_tier')
+      .select('name, subscription_tier, stripe_customer_id, address_street, address_city, address_zip, address_country')
       .eq('id', clientId)
       .single();
 
@@ -279,6 +286,36 @@ router.patch('/clients/:id', async (req, res) => {
     if (error) {
       console.error('[PLATFORM] Failed to update client:', error);
       return res.status(500).json({ error: 'Failed to update client' });
+    }
+
+    // Sync changes to Stripe customer profile
+    if (oldClient?.stripe_customer_id) {
+      try {
+        const stripeUpdates = {};
+        
+        if (filteredUpdates.name) {
+          stripeUpdates.name = filteredUpdates.name;
+        }
+        
+        // Build address object for Stripe
+        const addressFields = ['address_street', 'address_city', 'address_zip', 'address_country'];
+        if (addressFields.some(field => filteredUpdates[field] !== undefined)) {
+          stripeUpdates.address = {
+            line1: filteredUpdates.address_street ?? oldClient.address_street ?? '',
+            city: filteredUpdates.address_city ?? oldClient.address_city ?? '',
+            postal_code: filteredUpdates.address_zip ?? oldClient.address_zip ?? '',
+            country: filteredUpdates.address_country ?? oldClient.address_country ?? ''
+          };
+        }
+
+        if (Object.keys(stripeUpdates).length > 0) {
+          console.log('[PLATFORM] Syncing client updates to Stripe:', stripeUpdates);
+          await stripeService.updateStripeCustomer(oldClient.stripe_customer_id, stripeUpdates);
+        }
+      } catch (stripeErr) {
+        console.warn('[PLATFORM] Failed to sync to Stripe:', stripeErr.message);
+        // Don't fail the request if Stripe sync fails
+      }
     }
 
     // Build detailed log info
@@ -342,7 +379,7 @@ router.patch('/clients/:clientId/employees/:employeeId', async (req, res) => {
     // Verify employee belongs to client and get current data
     const { data: employee, error: checkError } = await supabase
       .from('employees')
-      .select('id, client_id, name, disabled')
+      .select('id, client_id, name, disabled, user_id')
       .eq('id', employeeId)
       .eq('client_id', clientId)
       .single();
@@ -351,10 +388,10 @@ router.patch('/clients/:clientId/employees/:employeeId', async (req, res) => {
       return res.status(404).json({ error: 'Employee not found in this client' });
     }
     
-    // Get client name for audit log
+    // Get client data for audit log and subscription update
     const { data: clientData } = await supabase
       .from('clients')
-      .select('name')
+      .select('name, stripe_subscription_id, subscription_tier')
       .eq('id', clientId)
       .single();
     
@@ -369,6 +406,38 @@ router.patch('/clients/:clientId/employees/:employeeId', async (req, res) => {
     if (error) {
       console.error('[PLATFORM] Failed to update employee:', error);
       return res.status(500).json({ error: 'Failed to update employee' });
+    }
+
+    // Handle disabled status change - update Stripe billing
+    if (disabled !== undefined && disabled !== employee.disabled) {
+      // Ban/unban user in Supabase Auth
+      try {
+        if (disabled) {
+          await supabase.auth.admin.updateUserById(employee.user_id, { ban_duration: '876000h' });
+        } else {
+          await supabase.auth.admin.updateUserById(employee.user_id, { ban_duration: 'none' });
+        }
+      } catch (authErr) {
+        console.warn('[PLATFORM] Auth ban/unban warning:', authErr.message);
+      }
+
+      // Update Stripe subscription quantity
+      if (clientData?.subscription_tier === 'paid' && clientData?.stripe_subscription_id) {
+        try {
+          const { count: activeCount } = await supabase
+            .from('employees')
+            .select('*', { count: 'exact', head: true })
+            .eq('client_id', clientId)
+            .or('disabled.is.null,disabled.eq.false');
+
+          const newQuantity = Math.max(activeCount || 1, 1);
+          console.log('[PLATFORM] Updating subscription quantity to:', newQuantity);
+
+          await stripeService.updateSubscriptionQuantity(clientData.stripe_subscription_id, newQuantity);
+        } catch (stripeErr) {
+          console.warn('[PLATFORM] Stripe quantity update warning:', stripeErr.message);
+        }
+      }
     }
     
     // Build detailed log info
@@ -432,12 +501,18 @@ router.delete('/clients/:clientId/employees/:employeeId', async (req, res) => {
       return res.status(404).json({ error: 'Employee not found in this client' });
     }
     
-    // Get client name for audit log
+    // Get client data for audit log and subscription update
     const { data: clientData } = await supabase
       .from('clients')
-      .select('name')
+      .select('name, stripe_subscription_id, subscription_tier')
       .eq('id', clientId)
       .single();
+
+    // Delete role assignments first (foreign key constraint)
+    await supabase
+      .from('roles-employees')
+      .delete()
+      .eq('employee_id', employeeId);
     
     // Delete the employee record
     const { error } = await supabase
@@ -448,6 +523,24 @@ router.delete('/clients/:clientId/employees/:employeeId', async (req, res) => {
     if (error) {
       console.error('[PLATFORM] Failed to delete employee:', error);
       return res.status(500).json({ error: 'Failed to delete employee' });
+    }
+
+    // Update Stripe subscription quantity
+    if (clientData?.subscription_tier === 'paid' && clientData?.stripe_subscription_id) {
+      try {
+        const { count: activeCount } = await supabase
+          .from('employees')
+          .select('*', { count: 'exact', head: true })
+          .eq('client_id', clientId)
+          .or('disabled.is.null,disabled.eq.false');
+
+        const newQuantity = Math.max(activeCount || 1, 1);
+        console.log('[PLATFORM] Updating subscription quantity after delete to:', newQuantity);
+
+        await stripeService.updateSubscriptionQuantity(clientData.stripe_subscription_id, newQuantity);
+      } catch (stripeErr) {
+        console.warn('[PLATFORM] Stripe quantity update warning:', stripeErr.message);
+      }
     }
     
     // Note: This doesn't delete the auth.users record - just removes them from this client
@@ -678,7 +771,7 @@ router.get('/admins', async (req, res) => {
 /**
  * POST /api/platform/admins
  * Add a new platform administrator
- * Requires the user to already exist in auth.users
+ * Can add existing users or invite new users by email
  */
 router.post('/admins', async (req, res) => {
   try {
@@ -688,35 +781,56 @@ router.post('/admins', async (req, res) => {
       return res.status(400).json({ error: 'Email is required' });
     }
 
-    // Find the user by email in auth.users
-    // Note: This requires service role access
-    const { data: users, error: userError } = await supabase
-      .from('employees')
-      .select('user_id')
-      .eq('email', email)
-      .limit(1);
+    // Normalize email
+    const normalizedEmail = email.toLowerCase().trim();
 
-    // Try to find user_id through auth
-    let userId = users?.[0]?.user_id;
-
-    if (!userId) {
-      // Alternative: Look up via Supabase Admin API if available
-      // For now, require the email to match an existing employee
-      return res.status(404).json({ 
-        error: 'User not found',
-        message: 'The email must belong to an existing user in the system' 
-      });
-    }
-
-    // Check if already a platform admin
-    const { data: existing } = await supabase
+    // First check if this email is already a platform admin
+    const { data: existingAdmin } = await supabase
       .from('platform_admins')
       .select('id')
-      .eq('user_id', userId)
+      .eq('email', normalizedEmail)
       .single();
 
-    if (existing) {
-      return res.status(409).json({ error: 'User is already a platform admin' });
+    if (existingAdmin) {
+      return res.status(409).json({ error: 'This email is already a platform admin' });
+    }
+
+    // Try to find the user by email using Supabase Admin API
+    const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers({
+      perPage: 1000
+    });
+
+    let userId = null;
+    
+    if (!authError && authUsers?.users) {
+      const foundUser = authUsers.users.find(u => u.email?.toLowerCase() === normalizedEmail);
+      if (foundUser) {
+        userId = foundUser.id;
+        console.log('[PLATFORM] Found existing user by email:', userId);
+      }
+    }
+
+    // If no existing user found, create an invite for them
+    if (!userId) {
+      console.log('[PLATFORM] User not found, creating invite for:', normalizedEmail);
+      
+      // Create the user with an invite (they'll need to set password via email)
+      const { data: newUser, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(normalizedEmail, {
+        data: {
+          invited_as_platform_admin: true
+        }
+      });
+
+      if (inviteError) {
+        console.error('[PLATFORM] Failed to invite user:', inviteError);
+        return res.status(500).json({ 
+          error: 'Failed to invite user',
+          message: inviteError.message 
+        });
+      }
+
+      userId = newUser.user.id;
+      console.log('[PLATFORM] Invited new user, ID:', userId);
     }
 
     // Create platform admin record
@@ -724,7 +838,7 @@ router.post('/admins', async (req, res) => {
       .from('platform_admins')
       .insert({
         user_id: userId,
-        email: email,
+        email: normalizedEmail,
         created_by: req.platformAdmin.id
       })
       .select()
@@ -741,7 +855,7 @@ router.post('/admins', async (req, res) => {
       'add_platform_admin',
       'platform_admin',
       newAdmin.id,
-      { email },
+      { email: normalizedEmail },
       req
     );
 
