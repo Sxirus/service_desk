@@ -65,6 +65,68 @@ interface TicketsDataTableProps {
   tableId?: string // Unique ID to persist state per table instance
 }
 
+type ComparableValue = string | number | boolean | null | undefined
+
+function buildTicketUrl(customerId: number | string, fromTableId: string) {
+  const from = encodeURIComponent(fromTableId)
+  return `/tickets/${customerId}?from=${from}`
+}
+
+function getComparableValue(ticket: TicketEmail, key: string): ComparableValue {
+  switch (key) {
+    case 'send_at':
+      return new Date(ticket.send_at).getTime()
+    case 'read':
+      return ticket.read
+    case 'subject':
+      return ticket.subject
+    case 'customer_name':
+      return ticket.customer_name
+    case 'email_address':
+      return ticket.email_address
+    case 'assigned_to':
+      return ticket.assigned_to ?? ''
+    default:
+      return (ticket as unknown as Record<string, ComparableValue>)[key]
+  }
+}
+
+function getTicketOrder(
+  data: TicketEmail[],
+  sorting: SortingState,
+  columnFilters: ColumnFiltersState
+): string[] {
+  let filtered = data
+
+  // Minimal filter support: subject text filter (matches the table UI).
+  const subjectFilter = columnFilters.find((f) => f.id === 'subject')
+  if (subjectFilter && typeof subjectFilter.value === 'string' && subjectFilter.value.trim() !== '') {
+    const needle = subjectFilter.value.toLowerCase()
+    filtered = filtered.filter((t) => (t.subject || '').toLowerCase().includes(needle))
+  }
+
+  if (!sorting || sorting.length === 0) {
+    return filtered.map((t) => String(t.customer_id))
+  }
+
+  const sorted = [...filtered].sort((a, b) => {
+    for (const s of sorting) {
+      const aVal = getComparableValue(a, s.id)
+      const bVal = getComparableValue(b, s.id)
+
+      if (aVal == null && bVal == null) continue
+      if (aVal == null) return s.desc ? 1 : -1
+      if (bVal == null) return s.desc ? -1 : 1
+
+      if (aVal < bVal) return s.desc ? 1 : -1
+      if (aVal > bVal) return s.desc ? -1 : 1
+    }
+    return 0
+  })
+
+  return sorted.map((t) => String(t.customer_id))
+}
+
 // Helper to get saved state from localStorage
 function getSavedState<T>(tableId: string, key: string, defaultValue: T): T {
   if (typeof window === 'undefined') return defaultValue
@@ -156,6 +218,17 @@ export function TicketsDataTable({
   const [pageSize, setPageSize] = React.useState<number>(() =>
     getSavedState(tableId, 'pageSize', 20)
   )
+
+  const navigateToTicket = React.useCallback((customerId: number) => {
+    try {
+      const order = getTicketOrder(data, sorting, columnFilters)
+      saveState(tableId, 'ticketOrder', order)
+      saveState(tableId, 'lastOpenedCustomerId', String(customerId))
+    } catch (e) {
+      console.warn('[TicketsDataTable] Failed to persist ticket order:', e)
+    }
+    window.location.href = buildTicketUrl(customerId, tableId)
+  }, [tableId, data, sorting, columnFilters])
 
   // Save state to localStorage when it changes
   React.useEffect(() => {
@@ -324,7 +397,7 @@ export function TicketsDataTable({
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Actions</DropdownMenuLabel>
               <DropdownMenuItem
-                onClick={() => window.location.href = `/tickets/${ticket.customer_id}`}
+                onClick={() => navigateToTicket(ticket.customer_id)}
               >
                 View Ticket
               </DropdownMenuItem>
@@ -474,7 +547,7 @@ export function TicketsDataTable({
                     if (target.closest('button') || target.closest('[role="checkbox"]')) {
                       return
                     }
-                    window.location.href = `/tickets/${row.original.customer_id}`
+                    navigateToTicket(row.original.customer_id)
                   }}
                 >
                   {row.getVisibleCells().map((cell) => (

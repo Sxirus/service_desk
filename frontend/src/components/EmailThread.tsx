@@ -483,6 +483,7 @@ export const EmailThread: React.FC<EmailThreadProps> = ({
   customer
 }) => {
   const threadRef = useRef<HTMLDivElement>(null);
+  const [threadEmails, setThreadEmails] = useState<ThreadEmail[]>(emails || []);
   const [previewImage, setPreviewImage] = useState<{ url: string; filename: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -490,16 +491,35 @@ export const EmailThread: React.FC<EmailThreadProps> = ({
    * Auto-scroll to bottom on mount to show latest messages
    */
   useEffect(() => {
-    if (threadRef.current) {
-      // Use requestAnimationFrame to ensure DOM is fully rendered
-      requestAnimationFrame(() => {
-        if (threadRef.current) {
-          threadRef.current.scrollTop = threadRef.current.scrollHeight;
-          console.log('[EmailThread] Auto-scrolled to bottom');
-        }
-      });
-    }
-  }, []);
+    setThreadEmails(emails || []);
+  }, [emails]);
+
+  /**
+   * Auto-scroll to bottom when the thread grows
+   */
+  useEffect(() => {
+    if (!threadRef.current) return;
+    requestAnimationFrame(() => {
+      if (!threadRef.current) return;
+      threadRef.current.scrollTop = threadRef.current.scrollHeight;
+    });
+  }, [threadEmails.length]);
+
+  /**
+   * Listen for optimistic “sent email” events
+   */
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const evt = e as CustomEvent;
+      const detail = evt?.detail as { customerId?: string; email?: ThreadEmail } | undefined;
+      if (!detail?.customerId || !detail?.email) return;
+      if (String(detail.customerId) !== String(customer.id)) return;
+      setThreadEmails((prev) => [...prev, detail.email]);
+    };
+
+    window.addEventListener('TicketEmailSent', handler);
+    return () => window.removeEventListener('TicketEmailSent', handler);
+  }, [customer.id]);
 
   /**
    * Handle image preview
@@ -515,7 +535,7 @@ export const EmailThread: React.FC<EmailThreadProps> = ({
     setPreviewImage(null);
   };
 
-  if (!emails || emails.length === 0) {
+  if (!threadEmails || threadEmails.length === 0) {
     return (
       <Alert>
         <AlertDescription>
@@ -535,7 +555,7 @@ export const EmailThread: React.FC<EmailThreadProps> = ({
         aria-live="polite"
       >
         <div className="space-y-4 pb-4">
-          {emails.map((email) => (
+          {threadEmails.map((email) => (
             <EmailMessage
               key={email.id}
               email={email}

@@ -530,6 +530,8 @@ log.info("[customer-ticket] Page setup complete, rendering");
             customerId={customerId as string}
             signature={signature}
             threadEmailAddress={threadEmailAddress}
+            agentName={sidebarData.user.name}
+            agentAvatarUrl={sidebarData.user.avatarUrl}
           />
         </ErrorBoundary>
       </main>

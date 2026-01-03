@@ -162,6 +162,8 @@ export interface ReplyAreaProps {
   customerId: string;
   signature: string;
   threadEmailAddress: string | null;
+  agentName?: string;
+  agentAvatarUrl?: string | null;
   onEmailSent?: () => void;
 }
 

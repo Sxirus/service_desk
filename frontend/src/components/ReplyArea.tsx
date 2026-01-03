@@ -16,11 +16,60 @@ import { FileUploadManager } from '@/utils/attachmentManager';
 import type { ReplyAreaProps, FileUploadState } from '@/types/ticket.types';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const MIN_HEIGHT = 150;
 const MAX_HEIGHT = 600;
 const COLLAPSED_HEIGHT = 52;
 const DEFAULT_HEIGHT = 180;
+
+type PostSendBehavior = 'stay' | 'next' | 'back';
+
+const AFTER_SEND_KEY = 'replyAfterSendBehavior';
+
+function getOriginFromLocation(): string | null {
+  try {
+    const url = new URL(window.location.href);
+    const from = url.searchParams.get('from');
+    return from;
+  } catch {
+    return null;
+  }
+}
+
+function getBackHref(fromTableId: string | null): string {
+  if (!fromTableId) return '/dashboard';
+  if (fromTableId === 'dashboard') return '/dashboard';
+  if (fromTableId.startsWith('inbox-')) {
+    const inboxId = fromTableId.slice('inbox-'.length);
+    if (inboxId) return `/inboxes/${inboxId}`;
+  }
+  return '/dashboard';
+}
+
+function getNextTicketHref(fromTableId: string, currentCustomerId: string): string | null {
+  try {
+    const raw = localStorage.getItem(`table_${fromTableId}_ticketOrder`);
+    if (!raw) return null;
+    const order = JSON.parse(raw) as string[];
+    if (!Array.isArray(order) || order.length === 0) return null;
+
+    const currentIndex = order.findIndex((id) => String(id) === String(currentCustomerId));
+    if (currentIndex < 0) return null;
+    const nextId = order[currentIndex + 1];
+    if (!nextId) return null;
+    const from = encodeURIComponent(fromTableId);
+    return `/tickets/${nextId}?from=${from}`;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * File attachment preview item component
@@ -76,6 +125,8 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
   customerId,
   signature,
   threadEmailAddress,
+  agentName,
+  agentAvatarUrl,
   onEmailSent
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -91,6 +142,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<FileUploadState[]>([]);
+  const [postSendBehavior, setPostSendBehavior] = useState<PostSendBehavior>('back');
 
   // Refs for resize functionality
   const resizeStateRef = useRef({
@@ -104,14 +156,33 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
   useEffect(() => {
     const savedCollapsed = localStorage.getItem('replyAreaCollapsed') === 'true';
     const savedHeight = localStorage.getItem('replyAreaHeight');
+    const savedBehavior = localStorage.getItem(AFTER_SEND_KEY) as PostSendBehavior | null;
 
     setIsCollapsed(savedCollapsed);
+
+    if (savedBehavior === 'stay' || savedBehavior === 'next' || savedBehavior === 'back') {
+      setPostSendBehavior(savedBehavior);
+    } else {
+      setPostSendBehavior('back');
+      localStorage.setItem(AFTER_SEND_KEY, 'back');
+    }
 
     if (savedHeight) {
       const height = parseInt(savedHeight);
       if (height >= MIN_HEIGHT && height <= MAX_HEIGHT) {
         setContainerHeight(height);
       }
+    }
+  }, []);
+
+  const handleChangeBehavior = useCallback((value: string) => {
+    const next = (value as PostSendBehavior);
+    if (next !== 'stay' && next !== 'next' && next !== 'back') return;
+    setPostSendBehavior(next);
+    try {
+      localStorage.setItem(AFTER_SEND_KEY, next);
+    } catch {
+      // ignore
     }
   }, []);
 
@@ -360,7 +431,44 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       if (onEmailSent) {
         onEmailSent();
       } else {
-        window.location.href = '/dashboard';
+        const fromTableId = getOriginFromLocation();
+        if (postSendBehavior === 'stay') {
+          // Optimistically add the sent message to the current thread.
+          try {
+            const optimisticSentEmail = {
+              id: `temp-sent-${Date.now()}`,
+              type: 'sent' as const,
+              send_at: new Date().toISOString(),
+              text_content: fullBody,
+              attachments: [],
+              has_attachments: false,
+              employee_id: 'me',
+              agent_name: agentName || 'Support Agent',
+              agent_avatar_url: agentAvatarUrl ?? null,
+            };
+            window.dispatchEvent(
+              new CustomEvent('TicketEmailSent', {
+                detail: { customerId: String(customerId), email: optimisticSentEmail },
+              })
+            );
+          } catch {
+            // ignore
+          }
+          // do nothing
+          setIsSending(false);
+          return;
+        }
+
+        if (postSendBehavior === 'next' && fromTableId) {
+          const nextHref = getNextTicketHref(fromTableId, String(customerId));
+          if (nextHref) {
+            window.location.href = nextHref;
+            return;
+          }
+          // fall back to back if no next
+        }
+
+        window.location.href = getBackHref(fromTableId);
       }
     } catch (err) {
       console.error('[ReplyArea] Send failed:', err);
@@ -489,12 +597,29 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
               />
             </div>
 
-            <Button
-              onClick={handleSend}
-              disabled={isSending}
-              className="shrink-0 cursor-pointer"
-              aria-label="Send reply"
-            >
+            <div className="shrink-0 flex flex-col gap-2">
+              <div className="w-56">
+                <label className="block text-xs text-muted-foreground mb-1">
+                  After sending
+                </label>
+                <Select value={postSendBehavior} onValueChange={handleChangeBehavior}>
+                  <SelectTrigger aria-label="After sending behavior">
+                    <SelectValue placeholder="Choose..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="stay">Stay in ticket</SelectItem>
+                    <SelectItem value="next">Go to next ticket</SelectItem>
+                    <SelectItem value="back">Go back to inbox</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button
+                onClick={handleSend}
+                disabled={isSending}
+                className="shrink-0 cursor-pointer"
+                aria-label="Send reply"
+              >
               {isSending ? (
                 <>
                   <svg 
@@ -529,7 +654,8 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                   Send Reply
                 </>
               )}
-            </Button>
+              </Button>
+            </div>
           </div>
 
           {/* File Upload Section - Attachments List */}
