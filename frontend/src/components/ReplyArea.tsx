@@ -123,18 +123,26 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       const customEvent = e as CustomEvent;
       const text = customEvent?.detail?.text || '';
 
-      if (!text || !textareaRef.current) return;
+      if (!text) return;
 
-      // Append macro text to textarea
-      const currentValue = textareaRef.current.value;
-      const newValue = currentValue + (currentValue ? '\n\n' : '') + text;
-      
-      setReplyText(newValue);
-      textareaRef.current.value = newValue;
-      
-      // Focus and move cursor to end
-      textareaRef.current.focus();
-      textareaRef.current.setSelectionRange(newValue.length, newValue.length);
+      // If reply area is collapsed, expand it first so the textarea is mounted.
+      setIsCollapsed(false);
+      localStorage.setItem('replyAreaCollapsed', 'false');
+
+      // Append macro text to current reply text.
+      setReplyText((prev) => {
+        const currentValue = prev || '';
+        return currentValue + (currentValue ? '\n\n' : '') + text;
+      });
+
+      // Focus and move cursor to end (after render)
+      setTimeout(() => {
+        const el = textareaRef.current;
+        if (!el) return;
+        const newValue = el.value;
+        el.focus();
+        el.setSelectionRange(newValue.length, newValue.length);
+      }, 0);
     };
 
     window.addEventListener('MacroChoosen', handleMacroChosen);
