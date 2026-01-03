@@ -2,6 +2,7 @@
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { createClient } from "../lib/supabase.ts";
 import { checkPlatformAdmin } from "../lib/auth-helpers.ts";
+import { NewEmailPopover } from "@/components/NewEmailPopover";
 
 // Import translations directly for server-side use
 import enCommon from "../i18n/locales/en/common.json";
@@ -114,7 +115,8 @@ if (customers.length > 0) {
       const mailResponse = await mailresult.json();
       mails = (mailResponse.data || []).map((mail: any) => ({
         ...mail,
-        customer_name: mail.customers?.name || 'Unknown'
+        customer_name: mail.customers?.name || 'Unknown',
+        status: mail.status || 'new' // Fallback for backwards compatibility
       }));
     }
   } catch (err) {
@@ -230,9 +232,12 @@ const isPlatformAdmin = platformAdminContext !== null;
 
       <!-- My Tickets Section -->
       <div class="bg-white mt-4 rounded-lg shadow-sm border p-6">
-        <div class="mb-4">
-          <h2 class="text-xl font-semibold">Assigned Tickets</h2>
-          <p class="text-sm text-gray-600 mt-1">{mails.length} ticket{mails.length !== 1 ? "s" : ""} assigned to you</p>
+        <div class="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h2 class="text-xl font-semibold">Assigned Tickets</h2>
+            <p class="text-sm text-gray-600 mt-1">{mails.length} ticket{mails.length !== 1 ? "s" : ""} assigned to you</p>
+          </div>
+          <NewEmailPopover client:load from="dashboard" />
         </div>
         
         <TicketsDataTableWithPresence 

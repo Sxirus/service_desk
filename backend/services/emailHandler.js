@@ -75,6 +75,43 @@ async function saveEmail(parsedEmail, clientId, InboxEmail, confirmation) {
         subject: subject
     });
 
+    // Determine initial status based on ticket lifecycle:
+    // - If there's no prior agent response (no sent-mail), status is 'new'
+    // - If agent has responded before and ticket was 'resolved', this is a re-open -> 'open'
+    // - Otherwise for follow-ups during active conversation -> 'open'
+    let initialStatus = 'new';
+    
+    // Check if there are any sent emails to this customer (agent has responded before)
+    const { data: sentEmails, error: sentError } = await supabase
+        .from('sent-mail')
+        .select('id')
+        .eq('customer_id', customerId)
+        .limit(1);
+    
+    if (!sentError && sentEmails && sentEmails.length > 0) {
+        // Agent has responded before, this is a follow-up or re-open
+        // Check the most recent email status for this customer
+        const { data: lastEmail } = await supabase
+            .from('incoming-mails')
+            .select('status')
+            .eq('customer_id', customerId)
+            .order('send_at', { ascending: false })
+            .limit(1)
+            .single();
+        
+        if (lastEmail?.status === 'resolved') {
+            // Ticket was resolved, customer is re-opening it
+            initialStatus = 'open';
+            console.log(`[${InboxEmail}] Customer re-opening resolved ticket, setting status to 'open'`);
+        } else {
+            // Active conversation, customer follow-up
+            initialStatus = 'open';
+            console.log(`[${InboxEmail}] Customer follow-up on active ticket, setting status to 'open'`);
+        }
+    } else {
+        console.log(`[${InboxEmail}] New ticket (no prior agent response), setting status to 'new'`);
+    }
+
     // Insert the email into the incoming-mails table with customer association
     const { data: email, error: emailError } = await supabase.from('incoming-mails').insert([
         {
@@ -86,7 +123,8 @@ async function saveEmail(parsedEmail, clientId, InboxEmail, confirmation) {
             html_content: html,                      // HTML version of email content
             email_address: senderEmailAddress,       // Sender's email address for quick reference
             to_email_address: toEmailAddress,        // NEU: Empfänger-Email-Adresse
-            received_by: receivedBy                  // NEU: Welche unserer Emails hat die Nachricht empfangen
+            received_by: receivedBy,                 // NEU: Welche unserer Emails hat die Nachricht empfangen
+            status: initialStatus                    // Ticket lifecycle status
         }
     ]).select().single();
 

@@ -46,6 +46,9 @@ import {
 } from "@/components/ui/tooltip"
 import { useTicketViewers } from "@/components/TicketPresenceProvider"
 
+// Ticket status type - lifecycle states
+export type TicketStatus = 'new' | 'open' | 'waiting' | 'resolved'
+
 // Type for ticket/email data
 export type TicketEmail = {
   id: number
@@ -56,7 +59,16 @@ export type TicketEmail = {
   assigned_to?: string
   assigned_type?: 'employee' | 'group' | null
   send_at: string
-  read: boolean
+  status: TicketStatus
+  read?: boolean // Deprecated, kept for backwards compatibility
+}
+
+// Status configuration for display
+const STATUS_CONFIG: Record<TicketStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; className?: string }> = {
+  new: { label: 'New', variant: 'default', className: 'bg-green-500 hover:bg-green-600' },
+  open: { label: 'Open', variant: 'default', className: 'bg-orange-500 hover:bg-orange-600' },
+  waiting: { label: 'Waiting', variant: 'default', className: 'bg-blue-500 hover:bg-blue-600' },
+  resolved: { label: 'Resolved', variant: 'secondary' }
 }
 
 interface TicketsDataTableProps {
@@ -64,6 +76,70 @@ interface TicketsDataTableProps {
   showAssignedColumn?: boolean
   onBulkAction?: (action: string, selectedIds: number[]) => void
   tableId?: string // Unique ID to persist state per table instance
+}
+
+type ComparableValue = string | number | boolean | null | undefined
+
+function buildTicketUrl(customerId: number | string, fromTableId: string) {
+  const from = encodeURIComponent(fromTableId)
+  return `/tickets/${customerId}?from=${from}`
+}
+
+function getComparableValue(ticket: TicketEmail, key: string): ComparableValue {
+  switch (key) {
+    case 'send_at':
+      return new Date(ticket.send_at).getTime()
+    case 'status':
+      // Sort order: new (highest priority), open, waiting, resolved (lowest)
+      const statusOrder: Record<TicketStatus, number> = { new: 0, open: 1, waiting: 2, resolved: 3 }
+      return statusOrder[ticket.status] ?? 4
+    case 'subject':
+      return ticket.subject
+    case 'customer_name':
+      return ticket.customer_name
+    case 'email_address':
+      return ticket.email_address
+    case 'assigned_to':
+      return ticket.assigned_to ?? ''
+    default:
+      return (ticket as unknown as Record<string, ComparableValue>)[key]
+  }
+}
+
+function getTicketOrder(
+  data: TicketEmail[],
+  sorting: SortingState,
+  columnFilters: ColumnFiltersState
+): string[] {
+  let filtered = data
+
+  // Minimal filter support: subject text filter (matches the table UI).
+  const subjectFilter = columnFilters.find((f) => f.id === 'subject')
+  if (subjectFilter && typeof subjectFilter.value === 'string' && subjectFilter.value.trim() !== '') {
+    const needle = subjectFilter.value.toLowerCase()
+    filtered = filtered.filter((t) => (t.subject || '').toLowerCase().includes(needle))
+  }
+
+  if (!sorting || sorting.length === 0) {
+    return filtered.map((t) => String(t.customer_id))
+  }
+
+  const sorted = [...filtered].sort((a, b) => {
+    for (const s of sorting) {
+      const aVal = getComparableValue(a, s.id)
+      const bVal = getComparableValue(b, s.id)
+
+      if (aVal == null && bVal == null) continue
+      if (aVal == null) return s.desc ? 1 : -1
+      if (bVal == null) return s.desc ? -1 : 1
+
+      if (aVal < bVal) return s.desc ? 1 : -1
+      if (aVal > bVal) return s.desc ? -1 : 1
+    }
+    return 0
+  })
+
+  return sorted.map((t) => String(t.customer_id))
 }
 
 // Helper to get saved state from localStorage
@@ -161,6 +237,17 @@ export function TicketsDataTable({
     getSavedState(tableId, 'pageSize', 20)
   )
 
+  const navigateToTicket = React.useCallback((customerId: number) => {
+    try {
+      const order = getTicketOrder(data, sorting, columnFilters)
+      saveState(tableId, 'ticketOrder', order)
+      saveState(tableId, 'lastOpenedCustomerId', String(customerId))
+    } catch (e) {
+      console.warn('[TicketsDataTable] Failed to persist ticket order:', e)
+    }
+    window.location.href = buildTicketUrl(customerId, tableId)
+  }, [tableId, data, sorting, columnFilters])
+
   // Save state to localStorage when it changes
   React.useEffect(() => {
     saveState(tableId, 'sorting', sorting)
@@ -217,12 +304,14 @@ export function TicketsDataTable({
       },
       cell: ({ row }) => {
         const subject = row.getValue("subject") as string
-        const read = row.original.read
+        const status = row.original.status
         const customerId = String(row.original.customer_id)
+        // Bold for new/open tickets, normal for waiting/resolved
+        const isBold = status === 'new' || status === 'open'
         return (
           <div className="flex items-center justify-between gap-3">
-            <div className={`max-w-md truncate ${!read ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
-              {subject || t('table.noSubject')}
+            <div className={`max-w-md truncate ${isBold ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
+              {subject || "(No Subject)"}
             </div>
             <ViewersCell customerId={customerId} />
           </div>
@@ -300,13 +389,14 @@ export function TicketsDataTable({
       },
     },
     {
-      accessorKey: "read",
-      header: t('tickets.status'),
+      accessorKey: "status",
+      header: "Status",
       cell: ({ row }) => {
-        const read = row.getValue("read") as boolean
+        const status = row.original.status as TicketStatus
+        const config = STATUS_CONFIG[status] || STATUS_CONFIG.new
         return (
-          <Badge variant={read ? "secondary" : "default"}>
-            {read ? t('table.read') : t('table.unread')}
+          <Badge variant={config.variant} className={config.className}>
+            {config.label}
           </Badge>
         )
       },
@@ -328,7 +418,7 @@ export function TicketsDataTable({
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>{t('table.actions')}</DropdownMenuLabel>
               <DropdownMenuItem
-                onClick={() => window.location.href = `/tickets/${ticket.customer_id}`}
+                onClick={() => navigateToTicket(ticket.customer_id)}
               >
                 {t('table.viewTicket')}
               </DropdownMenuItem>
@@ -400,11 +490,22 @@ export function TicketsDataTable({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
-                <DropdownMenuItem onClick={() => onBulkAction('mark_read', selectedIds)}>
-                  {t('table.markAsRead')}
+                <DropdownMenuLabel>Set Status</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => onBulkAction('set_status_new', selectedIds)}>
+                  <span className="w-2 h-2 rounded-full bg-green-500 mr-2" />
+                  New
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onBulkAction('mark_unread', selectedIds)}>
-                  {t('table.markAsUnread')}
+                <DropdownMenuItem onClick={() => onBulkAction('set_status_open', selectedIds)}>
+                  <span className="w-2 h-2 rounded-full bg-orange-500 mr-2" />
+                  Open
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onBulkAction('set_status_waiting', selectedIds)}>
+                  <span className="w-2 h-2 rounded-full bg-blue-500 mr-2" />
+                  Waiting
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onBulkAction('set_status_resolved', selectedIds)}>
+                  <span className="w-2 h-2 rounded-full bg-gray-400 mr-2" />
+                  Resolved
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => onBulkAction('assign', selectedIds)}>
@@ -478,7 +579,7 @@ export function TicketsDataTable({
                     if (target.closest('button') || target.closest('[role="checkbox"]')) {
                       return
                     }
-                    window.location.href = `/tickets/${row.original.customer_id}`
+                    navigateToTicket(row.original.customer_id)
                   }}
                 >
                   {row.getVisibleCells().map((cell) => (

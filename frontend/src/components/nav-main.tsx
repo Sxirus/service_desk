@@ -56,8 +56,8 @@ function EmailCount({ count, loading }: { count: number | undefined; loading: bo
       </span>
     );
   }
-  
-  if (count === undefined || count === 0) {
+
+  if (count === undefined) {
     return null;
   }
 
@@ -90,11 +90,11 @@ export function NavMain({
     if (!counts) return undefined;
     
     if (subItem.url === '/dashboard') {
-      return counts.dashboard;
+      return counts.dashboard ?? 0;
     }
     
     if (subItem.inboxId) {
-      return counts.inboxes[subItem.inboxId];
+      return counts.inboxes[subItem.inboxId] ?? 0;
     }
     
     return undefined;

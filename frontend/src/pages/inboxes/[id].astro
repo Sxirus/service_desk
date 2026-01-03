@@ -4,6 +4,7 @@ import AdminShell from "../../components/AdminShell";
 import { createClient } from "../../lib/supabase";
 import { getCompletePageContext } from "../../lib/auth-helpers";
 import { TicketsDataTableWithPresence } from "@/components/datatable/TicketsDataTableWithPresence";
+import { NewEmailPopover } from "@/components/NewEmailPopover";
 
 // Initialize Supabase client
 const supabase = createClient({
@@ -111,11 +112,14 @@ const currentUserForPresence = {
       </div>
     ) : inbox ? (
       <div class="bg-white mt-4 rounded-lg shadow-sm border p-6">
-        <div class="mb-4">
-          <h2 class="text-xl font-semibold">{inbox.name}</h2>
-          <p class="text-sm text-gray-600 mt-1">
-            {inbox.description ? `${inbox.description} • ` : ""}{emails.length} email{emails.length !== 1 ? "s" : ""}
-          </p>
+        <div class="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h2 class="text-xl font-semibold">{inbox.name}</h2>
+            <p class="text-sm text-gray-600 mt-1">
+              {inbox.description ? `${inbox.description} • ` : ""}{emails.length} email{emails.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+          <NewEmailPopover client:load from={`inbox-${inboxId}`} />
         </div>
 
         <TicketsDataTableWithPresence 
@@ -129,7 +133,7 @@ const currentUserForPresence = {
             assigned_to: email.customers?.employees?.name || email.customers?.employee_groups?.name || null,
             assigned_type: email.customers?.employees?.name ? 'employee' : email.customers?.employee_groups?.name ? 'group' : null,
             send_at: email.send_at,
-            read: email.read
+            status: email.status || 'new'
           }))}
           showAssignedColumn={true}
           tableId={`inbox-${inboxId}`}

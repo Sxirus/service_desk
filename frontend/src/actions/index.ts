@@ -1089,6 +1089,13 @@ const updateCompany = async (
     );
     console.log("[actions.updateCompany] Admin client created");
 
+    // 5.5) Get current client data for Stripe sync
+    const { data: currentClient } = await admin
+      .from("clients")
+      .select("stripe_customer_id, address_street, address_city, address_zip, address_country")
+      .eq("id", id)
+      .single();
+
     // 6) Update vorbereiten
     // Nur definierte Keys in das Update-Payload übernehmen
     const payload: Record<string, any> = {
@@ -1126,6 +1133,47 @@ const updateCompany = async (
       return { success: false, message: "Company not found or update failed" };
     }
     console.log("[actions.updateCompany] Company updated:", data);
+
+    // 8) Sync changes to Stripe customer profile
+    if (currentClient?.stripe_customer_id) {
+      try {
+        const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
+        const { data: { session: userSession } } = await ssr.auth.getSession();
+        
+        if (userSession?.access_token) {
+          const stripeUpdates: Record<string, any> = { name };
+          
+          // Build address object for Stripe
+          stripeUpdates.address = {
+            line1: address_street ?? currentClient.address_street ?? '',
+            city: address_city ?? currentClient.address_city ?? '',
+            postal_code: address_zip ?? currentClient.address_zip ?? '',
+            country: address_country ?? currentClient.address_country ?? ''
+          };
+
+          console.log("[actions.updateCompany] Syncing to Stripe:", stripeUpdates);
+          
+          const response = await fetch(`${apiUrl}/client/sync-stripe-customer`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${userSession.access_token}`
+            },
+            body: JSON.stringify(stripeUpdates)
+          });
+
+          const result = await response.json();
+          if (result.success) {
+            console.log("[actions.updateCompany] Stripe customer synced");
+          } else {
+            console.warn("[actions.updateCompany] Failed to sync Stripe:", result.error);
+          }
+        }
+      } catch (stripeErr: any) {
+        console.warn("[actions.updateCompany] Stripe sync warning:", stripeErr?.message);
+        // Don't fail the entire operation if Stripe sync fails
+      }
+    }
 
     console.log("[actions.updateCompany] ok");
     return {

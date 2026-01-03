@@ -68,7 +68,7 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
-  const [readStatusFilter, setReadStatusFilter] = useState<'all' | 'read' | 'unread'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'new' | 'open' | 'waiting' | 'resolved' | 'active'>('all');
   const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'unassigned' | 'groups'>('all');
   const [assignmentGroups, setAssignmentGroups] = useState<number[]>([]);
 
@@ -96,7 +96,7 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
     setFormName('');
     setFormDescription('');
     setSelectedGroups([]);
-    setReadStatusFilter('all');
+    setStatusFilter('all');
     setAssignmentFilter('all');
     setAssignmentGroups([]);
     setIsCreating(false);
@@ -109,12 +109,35 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
     setFormDescription(inbox.description || '');
     setSelectedGroups(inbox.inbox_groups.map(ig => ig.group_id));
     
-    // Load filters
+    // Load filters - support both legacy read_status and new status filter
+    const statusFilterData = inbox.inbox_filters.find(f => f.filter_type === 'status');
     const readFilter = inbox.inbox_filters.find(f => f.filter_type === 'read_status');
-    if (readFilter) {
-      setReadStatusFilter(readFilter.filter_config.show || 'all');
+    
+    if (statusFilterData) {
+      // New status filter
+      const show = statusFilterData.filter_config.show;
+      if (Array.isArray(show)) {
+        // Multiple statuses selected - map to 'active' if new+open
+        if (show.includes('new') && show.includes('open') && show.length === 2) {
+          setStatusFilter('active');
+        } else {
+          setStatusFilter(show[0] || 'all');
+        }
+      } else {
+        setStatusFilter(show || 'all');
+      }
+    } else if (readFilter) {
+      // Legacy read_status filter - map to new status
+      const show = readFilter.filter_config.show;
+      if (show === 'read') {
+        setStatusFilter('resolved');
+      } else if (show === 'unread') {
+        setStatusFilter('active');
+      } else {
+        setStatusFilter('all');
+      }
     } else {
-      setReadStatusFilter('all');
+      setStatusFilter('all');
     }
 
     const assignFilter = inbox.inbox_filters.find(f => f.filter_type === 'assignment');
@@ -156,11 +179,19 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
       // Set filters
       const filters = [];
       
-      if (readStatusFilter !== 'all') {
-        filters.push({
-          filter_type: 'read_status',
-          filter_config: { show: readStatusFilter }
-        });
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'active') {
+          // 'active' means new + open
+          filters.push({
+            filter_type: 'status',
+            filter_config: { show: ['new', 'open'] }
+          });
+        } else {
+          filters.push({
+            filter_type: 'status',
+            filter_config: { show: statusFilter }
+          });
+        }
       }
 
       if (assignmentFilter === 'unassigned') {
@@ -225,11 +256,19 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
       // Update filters
       const filters = [];
       
-      if (readStatusFilter !== 'all') {
-        filters.push({
-          filter_type: 'read_status',
-          filter_config: { show: readStatusFilter }
-        });
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'active') {
+          // 'active' means new + open
+          filters.push({
+            filter_type: 'status',
+            filter_config: { show: ['new', 'open'] }
+          });
+        } else {
+          filters.push({
+            filter_type: 'status',
+            filter_config: { show: statusFilter }
+          });
+        }
       }
 
       if (assignmentFilter === 'unassigned') {
@@ -448,21 +487,80 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
                   {t('inboxes.emailFilters')}
                 </label>
                 
-                {/* Read Status Filter */}
+                {/* Status Filter */}
                 <div className="border rounded-lg p-3 mb-3">
-                  <div className="text-sm font-medium mb-2">{t('inboxes.readStatus')}</div>
+                  <div className="text-sm font-medium mb-2">Ticket Status</div>
                   <div className="space-y-1">
-                    {(['all', 'read', 'unread'] as const).map(option => (
-                      <label key={option} className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="readStatus"
-                          checked={readStatusFilter === option}
-                          onChange={() => setReadStatusFilter(option)}
-                        />
-                        <span>{t(`inboxes.readStatusOptions.${option}`)}</span>
-                      </label>
-                    ))}
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="statusFilter"
+                        checked={statusFilter === 'all'}
+                        onChange={() => setStatusFilter('all')}
+                      />
+                      <span>All tickets</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="statusFilter"
+                        checked={statusFilter === 'active'}
+                        onChange={() => setStatusFilter('active')}
+                      />
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-green-500" />
+                        <span className="w-2 h-2 rounded-full bg-orange-500" />
+                        Active (New + Open)
+                      </span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="statusFilter"
+                        checked={statusFilter === 'new'}
+                        onChange={() => setStatusFilter('new')}
+                      />
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-green-500" />
+                        New only
+                      </span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="statusFilter"
+                        checked={statusFilter === 'open'}
+                        onChange={() => setStatusFilter('open')}
+                      />
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-orange-500" />
+                        Open only
+                      </span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="statusFilter"
+                        checked={statusFilter === 'waiting'}
+                        onChange={() => setStatusFilter('waiting')}
+                      />
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-blue-500" />
+                        Waiting only
+                      </span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="statusFilter"
+                        checked={statusFilter === 'resolved'}
+                        onChange={() => setStatusFilter('resolved')}
+                      />
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-gray-400" />
+                        Resolved only
+                      </span>
+                    </label>
                   </div>
                 </div>
 

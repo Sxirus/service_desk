@@ -489,6 +489,7 @@ export const EmailThread: React.FC<EmailThreadProps> = ({
 }) => {
   const { t } = useTranslation('dashboard');
   const threadRef = useRef<HTMLDivElement>(null);
+  const [threadEmails, setThreadEmails] = useState<ThreadEmail[]>(emails || []);
   const [previewImage, setPreviewImage] = useState<{ url: string; filename: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -496,16 +497,35 @@ export const EmailThread: React.FC<EmailThreadProps> = ({
    * Auto-scroll to bottom on mount to show latest messages
    */
   useEffect(() => {
-    if (threadRef.current) {
-      // Use requestAnimationFrame to ensure DOM is fully rendered
-      requestAnimationFrame(() => {
-        if (threadRef.current) {
-          threadRef.current.scrollTop = threadRef.current.scrollHeight;
-          console.log('[EmailThread] Auto-scrolled to bottom');
-        }
-      });
-    }
-  }, []);
+    setThreadEmails(emails || []);
+  }, [emails]);
+
+  /**
+   * Auto-scroll to bottom when the thread grows
+   */
+  useEffect(() => {
+    if (!threadRef.current) return;
+    requestAnimationFrame(() => {
+      if (!threadRef.current) return;
+      threadRef.current.scrollTop = threadRef.current.scrollHeight;
+    });
+  }, [threadEmails.length]);
+
+  /**
+   * Listen for optimistic “sent email” events
+   */
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const evt = e as CustomEvent;
+      const detail = evt?.detail as { customerId?: string; email?: ThreadEmail } | undefined;
+      if (!detail?.customerId || !detail?.email) return;
+      if (String(detail.customerId) !== String(customer.id)) return;
+      setThreadEmails((prev) => [...prev, detail.email]);
+    };
+
+    window.addEventListener('TicketEmailSent', handler);
+    return () => window.removeEventListener('TicketEmailSent', handler);
+  }, [customer.id]);
 
   /**
    * Handle image preview
@@ -521,13 +541,19 @@ export const EmailThread: React.FC<EmailThreadProps> = ({
     setPreviewImage(null);
   };
 
-  if (!emails || emails.length === 0) {
+  if (!threadEmails || threadEmails.length === 0) {
     return (
-      <Alert>
-        <AlertDescription>
-          {t('tickets.noMessagesFound')}
-        </AlertDescription>
-      </Alert>
+      <div className="flex-1 px-6 flex items-center justify-center">
+        <div className="text-center py-12">
+          <div className="mx-auto h-12 w-12 text-gray-400 mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-gray-900">New Conversation</h3>
+          <p className="text-gray-500 mt-1">Compose your first message to {customer.name} below.</p>
+        </div>
+      </div>
     );
   }
 
@@ -541,7 +567,7 @@ export const EmailThread: React.FC<EmailThreadProps> = ({
         aria-live="polite"
       >
         <div className="space-y-4 pb-4">
-          {emails.map((email) => (
+          {threadEmails.map((email) => (
             <EmailMessage
               key={email.id}
               email={email}

@@ -318,35 +318,6 @@ router.get('/getShopifyStatus',
   }
 );
 
-//updating the setting show_assigned_mails_in_all_mails
-router.post('/updateShowAssignedMails',
-  authenticate,
-  async (req, res) => {
-    try {
-      const client_id = req.user.client_id;
-      const value = req.body.value;
-
-      console.log('[SETTINGS] Updating show assigned mails setting for client:', client_id);
-
-      const { data, error } = await supabase
-        .from('clients')
-        .update({show_assigned_mails_in_all_mails: value})
-        .eq('id', client_id)
-      
-      if (error) {
-        console.error('[SETTINGS] Show assigned mails update failed:', error.message);
-        return res.status(500).json({ success: false, error: error.message });
-      }
-
-      console.log('[SETTINGS] Show assigned mails updated successfully');
-      res.json({ success: true, data })
-    } catch (err) {
-      console.error('[SETTINGS] Server error:', err.message);
-      res.status(500).json({ success: false, error: 'Servererror' });
-    }
-  }
-);
-
 //updating the setting auto_assign_employee_on_send
 router.post('/updateAutoAssignEmployeeOnSend',
   authenticate,

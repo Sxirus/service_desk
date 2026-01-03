@@ -8,6 +8,7 @@
  * - File attachment support with preview
  * - Memory-safe file handling
  * - Accessible keyboard controls
+ * - Ticket status selection (defaults to resolved)
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -17,11 +18,70 @@ import { FileUploadManager } from '@/utils/attachmentManager';
 import type { ReplyAreaProps, FileUploadState } from '@/types/ticket.types';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { toast } from 'sonner';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const MIN_HEIGHT = 150;
 const MAX_HEIGHT = 600;
 const COLLAPSED_HEIGHT = 52;
 const DEFAULT_HEIGHT = 180;
+
+type PostSendBehavior = 'stay' | 'next' | 'back';
+type TicketStatus = 'new' | 'open' | 'waiting' | 'resolved';
+
+const AFTER_SEND_KEY = 'replyAfterSendBehavior';
+
+// Status configuration for display
+const STATUS_OPTIONS: { value: TicketStatus; label: string; color: string }[] = [
+  { value: 'resolved', label: 'Resolved', color: 'bg-gray-400' },
+  { value: 'waiting', label: 'Waiting', color: 'bg-blue-500' },
+  { value: 'open', label: 'Open', color: 'bg-orange-500' },
+  { value: 'new', label: 'New', color: 'bg-green-500' },
+];
+
+function getOriginFromLocation(): string | null {
+  try {
+    const url = new URL(window.location.href);
+    const from = url.searchParams.get('from');
+    return from;
+  } catch {
+    return null;
+  }
+}
+
+function getBackHref(fromTableId: string | null): string {
+  if (!fromTableId) return '/dashboard';
+  if (fromTableId === 'dashboard') return '/dashboard';
+  if (fromTableId.startsWith('inbox-')) {
+    const inboxId = fromTableId.slice('inbox-'.length);
+    if (inboxId) return `/inboxes/${inboxId}`;
+  }
+  return '/dashboard';
+}
+
+function getNextTicketHref(fromTableId: string, currentCustomerId: string): string | null {
+  try {
+    const raw = localStorage.getItem(`table_${fromTableId}_ticketOrder`);
+    if (!raw) return null;
+    const order = JSON.parse(raw) as string[];
+    if (!Array.isArray(order) || order.length === 0) return null;
+
+    const currentIndex = order.findIndex((id) => String(id) === String(currentCustomerId));
+    if (currentIndex < 0) return null;
+    const nextId = order[currentIndex + 1];
+    if (!nextId) return null;
+    const from = encodeURIComponent(fromTableId);
+    return `/tickets/${nextId}?from=${from}`;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * File attachment preview item component
@@ -78,6 +138,9 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
   customerId,
   signature,
   threadEmailAddress,
+  agentName,
+  agentAvatarUrl,
+  composeMode,
   onEmailSent
 }) => {
   const { t } = useTranslation('dashboard');
@@ -94,6 +157,8 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<FileUploadState[]>([]);
+  const [postSendBehavior, setPostSendBehavior] = useState<PostSendBehavior>('back');
+  const [ticketStatus, setTicketStatus] = useState<TicketStatus>('resolved'); // Default to resolved
 
   // Refs for resize functionality
   const resizeStateRef = useRef({
@@ -107,14 +172,45 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
   useEffect(() => {
     const savedCollapsed = localStorage.getItem('replyAreaCollapsed') === 'true';
     const savedHeight = localStorage.getItem('replyAreaHeight');
+    const savedBehavior = localStorage.getItem(AFTER_SEND_KEY) as PostSendBehavior | null;
 
-    setIsCollapsed(savedCollapsed);
+    // In compose mode, always start expanded
+    if (composeMode) {
+      setIsCollapsed(false);
+    } else {
+      setIsCollapsed(savedCollapsed);
+    }
+
+    if (savedBehavior === 'stay' || savedBehavior === 'next' || savedBehavior === 'back') {
+      setPostSendBehavior(savedBehavior);
+    } else {
+      setPostSendBehavior('back');
+      localStorage.setItem(AFTER_SEND_KEY, 'back');
+    }
 
     if (savedHeight) {
       const height = parseInt(savedHeight);
       if (height >= MIN_HEIGHT && height <= MAX_HEIGHT) {
         setContainerHeight(height);
       }
+    }
+  }, [composeMode]);
+
+  const handleChangeBehavior = useCallback((value: string) => {
+    const next = (value as PostSendBehavior);
+    if (next !== 'stay' && next !== 'next' && next !== 'back') return;
+    setPostSendBehavior(next);
+    try {
+      localStorage.setItem(AFTER_SEND_KEY, next);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleChangeStatus = useCallback((value: string) => {
+    const validStatuses: TicketStatus[] = ['new', 'open', 'waiting', 'resolved'];
+    if (validStatuses.includes(value as TicketStatus)) {
+      setTicketStatus(value as TicketStatus);
     }
   }, []);
 
@@ -126,18 +222,26 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       const customEvent = e as CustomEvent;
       const text = customEvent?.detail?.text || '';
 
-      if (!text || !textareaRef.current) return;
+      if (!text) return;
 
-      // Append macro text to textarea
-      const currentValue = textareaRef.current.value;
-      const newValue = currentValue + (currentValue ? '\n\n' : '') + text;
-      
-      setReplyText(newValue);
-      textareaRef.current.value = newValue;
-      
-      // Focus and move cursor to end
-      textareaRef.current.focus();
-      textareaRef.current.setSelectionRange(newValue.length, newValue.length);
+      // If reply area is collapsed, expand it first so the textarea is mounted.
+      setIsCollapsed(false);
+      localStorage.setItem('replyAreaCollapsed', 'false');
+
+      // Append macro text to current reply text.
+      setReplyText((prev) => {
+        const currentValue = prev || '';
+        return currentValue + (currentValue ? '\n\n' : '') + text;
+      });
+
+      // Focus and move cursor to end (after render)
+      setTimeout(() => {
+        const el = textareaRef.current;
+        if (!el) return;
+        const newValue = el.value;
+        el.focus();
+        el.setSelectionRange(newValue.length, newValue.length);
+      }, 0);
     };
 
     window.addEventListener('MacroChoosen', handleMacroChosen);
@@ -285,23 +389,50 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       const body = replyText.trim();
       const files = uploadManagerRef.current.getFiles();
 
-      // Validate email address format
+      // If no content and no attachments, just update the status without sending an email
+      if (body === '' && files.length === 0) {
+        await apiClient.post(`/emails/updateStatus?customerId=${customerId}`, {
+          status: ticketStatus
+        });
+        
+        toast.success('Ticket status updated successfully');
+        setTicketStatus('resolved'); // Reset to default for next reply
+        
+        // Callback or redirect
+        if (onEmailSent) {
+          onEmailSent();
+        } else {
+          const fromTableId = getOriginFromLocation();
+          const effectiveBehavior: PostSendBehavior = composeMode ? 'stay' : postSendBehavior;
+
+          if (effectiveBehavior === 'next') {
+            const nextHref = fromTableId ? getNextTicketHref(fromTableId, String(customerId)) : null;
+            if (nextHref) {
+              window.location.href = nextHref;
+            }
+          } else if (effectiveBehavior === 'back') {
+            const backHref = getBackHref(fromTableId);
+            window.location.href = backHref;
+          } else {
+            // 'stay' - refresh page to update status badge
+            window.location.reload();
+          }
+        }
+        
+        setIsSending(false);
+        return;
+      }
+
+      // Validate email address format (only needed when sending email)
       if (!emailAddress || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailAddress)) {
         setError(t('tickets.invalidRecipientEmail'));
         setIsSending(false);
         return;
       }
 
-      // Validate subject
+      // Validate subject (only needed when sending email)
       if (!subject || subject.trim().length === 0) {
         setError(t('tickets.subjectRequired'));
-        setIsSending(false);
-        return;
-      }
-
-      // Validate body/attachments
-      if (body === '' && files.length === 0) {
-        setError(t('tickets.enterMessageOrAttach'));
         setIsSending(false);
         return;
       }
@@ -318,6 +449,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       formData.append('subject', subject);
       formData.append('text', fullBody);
       formData.append('threadEmailAddress', threadEmailAddress || '');
+      formData.append('ticketStatus', ticketStatus); // Include status to set after sending
 
       files.forEach(file => {
         formData.append('attachments', file);
@@ -338,24 +470,61 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
         return;
       }
 
-      // Mark conversation as read
-      try {
-        await apiClient.post(`/emails/makeRead?customerId=${customerId}`);
-      } catch (readErr) {
-        console.warn('[ReplyArea] Failed to mark as read:', readErr);
-        // Non-critical error, continue
-      }
+      // Status is now updated as part of sendMail endpoint
+      // No need for separate makeRead call
+
+      toast.success('Email sent successfully');
 
       // Clear state only on success
       uploadManagerRef.current.clear();
       setAttachments([]);
       setReplyText('');
+      setTicketStatus('resolved'); // Reset to default for next reply
       
       // Callback or redirect
       if (onEmailSent) {
         onEmailSent();
       } else {
-        window.location.href = '/dashboard';
+        const fromTableId = getOriginFromLocation();
+        const effectiveBehavior: PostSendBehavior = composeMode ? 'stay' : postSendBehavior;
+
+        if (effectiveBehavior === 'stay') {
+          // Optimistically add the sent message to the current thread.
+          try {
+            const optimisticSentEmail = {
+              id: `temp-sent-${Date.now()}`,
+              type: 'sent' as const,
+              send_at: new Date().toISOString(),
+              text_content: fullBody,
+              attachments: [],
+              has_attachments: false,
+              employee_id: 'me',
+              agent_name: agentName || 'Support Agent',
+              agent_avatar_url: agentAvatarUrl ?? null,
+            };
+            window.dispatchEvent(
+              new CustomEvent('TicketEmailSent', {
+                detail: { customerId: String(customerId), email: optimisticSentEmail },
+              })
+            );
+          } catch {
+            // ignore
+          }
+          // do nothing
+          setIsSending(false);
+          return;
+        }
+
+        if (effectiveBehavior === 'next' && fromTableId) {
+          const nextHref = getNextTicketHref(fromTableId, String(customerId));
+          if (nextHref) {
+            window.location.href = nextHref;
+            return;
+          }
+          // fall back to back if no next
+        }
+
+        window.location.href = getBackHref(fromTableId);
       }
     } catch (err) {
       console.error('[ReplyArea] Send failed:', err);
@@ -484,12 +653,49 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
               />
             </div>
 
-            <Button
-              onClick={handleSend}
-              disabled={isSending}
-              className="shrink-0 cursor-pointer"
-              aria-label={t('tickets.sendReply')}
-            >
+            <div className="shrink-0 flex flex-col gap-2">
+              {!composeMode && (
+                <>
+                  {/* Status dropdown - above navigation */}
+                  <div className="w-44">
+                    <Select value={ticketStatus} onValueChange={handleChangeStatus}>
+                      <SelectTrigger aria-label="Set ticket status">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STATUS_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full ${option.color}`} />
+                              {option.label}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {/* After sending behavior dropdown */}
+                  <div className="w-44">
+                    <Select value={postSendBehavior} onValueChange={handleChangeBehavior}>
+                      <SelectTrigger aria-label="After sending behavior">
+                        <SelectValue placeholder="After send..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="stay">Stay in ticket</SelectItem>
+                        <SelectItem value="next">Go to next</SelectItem>
+                        <SelectItem value="back">Go to inbox</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+
+              <Button
+                onClick={handleSend}
+                disabled={isSending}
+                className="shrink-0 cursor-pointer"
+                aria-label="Send reply"
+              >
               {isSending ? (
                 <>
                   <svg 
@@ -524,7 +730,8 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                   {t('tickets.sendReply')}
                 </>
               )}
-            </Button>
+              </Button>
+            </div>
           </div>
 
           {/* File Upload Section - Attachments List */}

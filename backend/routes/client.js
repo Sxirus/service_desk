@@ -977,4 +977,83 @@ router.get('/usage-stats',
   }
 );
 
+/**
+ * Sync client data to Stripe customer profile
+ * POST /api/client/sync-stripe-customer
+ * 
+ * Updates Stripe customer with name and address from client data
+ * Body: { name, address: { line1, city, postal_code, country } }
+ */
+router.post('/sync-stripe-customer',
+  authenticate,
+  async (req, res) => {
+    try {
+      const { name, address } = req.body;
+
+      console.log('[CLIENT] Syncing client data to Stripe for client:', req.user.client_id);
+
+      // Get client's Stripe customer ID
+      const { data: clientData, error: clientError } = await supabase
+        .from('clients')
+        .select('stripe_customer_id')
+        .eq('id', req.user.client_id)
+        .single();
+
+      if (clientError || !clientData) {
+        console.error('[CLIENT] Failed to get client:', clientError?.message);
+        return res.status(404).json({
+          success: false,
+          error: 'Client not found'
+        });
+      }
+
+      if (!clientData.stripe_customer_id) {
+        console.log('[CLIENT] No Stripe customer ID, skipping sync');
+        return res.json({
+          success: true,
+          message: 'No Stripe customer to sync'
+        });
+      }
+
+      // Build update object for Stripe
+      const stripeUpdates = {};
+      if (name) stripeUpdates.name = name;
+      if (address) stripeUpdates.address = address;
+
+      if (Object.keys(stripeUpdates).length === 0) {
+        return res.json({
+          success: true,
+          message: 'No updates to sync'
+        });
+      }
+
+      // Update Stripe customer
+      const { updateStripeCustomer } = require('../services/stripeService');
+      const result = await updateStripeCustomer(clientData.stripe_customer_id, stripeUpdates);
+
+      if (!result.success) {
+        console.error('[CLIENT] Failed to update Stripe customer:', result.error);
+        return res.status(500).json({
+          success: false,
+          error: result.error
+        });
+      }
+
+      console.log('[CLIENT] Stripe customer synced successfully');
+      res.json({
+        success: true,
+        message: 'Stripe customer updated'
+      });
+
+    } catch (err) {
+      console.error('[CLIENT] Server error syncing Stripe customer:', err.message);
+      res.status(500).json({
+        success: false,
+        error: 'Server error',
+        message: err.message
+      });
+    }
+  }
+);
+
 module.exports = router;
