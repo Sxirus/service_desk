@@ -54,6 +54,12 @@ const pageLoadTimer = perf.start('page-load', 'total');
 const { params } = Astro;
 const customerId = params.customerId;
 
+const isComposeMode = Astro.url.searchParams.get('compose') === '1';
+const composeSubjectRaw = Astro.url.searchParams.get('subject') ?? '';
+const composeSubject = composeSubjectRaw.length > 500 ? composeSubjectRaw.slice(0, 500) : composeSubjectRaw;
+const composeToRaw = Astro.url.searchParams.get('to') ?? '';
+const composeTo = composeToRaw.length > 320 ? composeToRaw.slice(0, 320) : composeToRaw;
+
 // Validate customerId format (positive integer)
 if (!customerId || !/^\d+$/.test(customerId) || parseInt(customerId) < 1) {
   log.error('Invalid customer ID format:', customerId);
@@ -116,6 +122,7 @@ const [
   { data: customer, error: customerError },
   { data: incomingMails, error: incomingError },
   { data: sentMails, error: sentError },
+  { data: customerEmailAddresses, error: customerEmailAddressesError },
   { data: macroArray, error: macroError },
   { data: macroGroups, error: macroGroupsError },
   { data: clientData, error: clientError },
@@ -151,6 +158,12 @@ const [
     .eq("customer_id", customerId)
     .eq("client_id", clientId)
     .order("send_at", { ascending: true }),
+
+  supabase
+    .from('email-addresses')
+    .select('email_address')
+    .eq('customer_id', customerId)
+    .limit(1),
   
   supabase
     .from("sent-mail")
@@ -278,6 +291,10 @@ if (sentError) {
   log.error('Error fetching sent mails:', sentError);
 }
 
+if (customerEmailAddressesError) {
+  log.error('Error fetching customer email addresses:', customerEmailAddressesError);
+}
+
 if (macroError) {
   log.error('Error fetching macros:', macroError);
 }
@@ -340,7 +357,7 @@ let lastMail = incomingMails && incomingMails.length > 0
   ? incomingMails[incomingMails.length - 1] 
   : null;
 
-if (!lastMail) {
+if (!lastMail && !isComposeMode) {
   log.error("No incoming emails found in thread");
   perf.end(processingTimer, { result: 'no-emails' });
   perf.end(pageLoadTimer, { result: 'no-emails' });
@@ -348,20 +365,40 @@ if (!lastMail) {
   return new Response("No emails found", { status: 404 });
 }
 
-const emailAddress = lastMail.email_address;
-const newSubject = `RE: ${lastMail.subject}`;
+const storedCustomerEmail = customerEmailAddresses?.[0]?.email_address || null;
+// In compose mode, also accept ?to= from URL as fallback
+const composeEmailFallback = isComposeMode && composeTo ? composeTo : null;
+const emailAddress = lastMail?.email_address || storedCustomerEmail || composeEmailFallback;
+const newSubject = lastMail ? `RE: ${lastMail.subject}` : composeSubject;
+
+log.info('Email resolution:', {
+  lastMailEmail: lastMail?.email_address,
+  storedCustomerEmail,
+  composeEmailFallback,
+  finalEmailAddress: emailAddress,
+  isComposeMode,
+  composeTo
+});
+
+if (!emailAddress) {
+  log.error('No recipient email address found for customer');
+  perf.end(processingTimer, { result: 'no-customer-email' });
+  perf.end(pageLoadTimer, { result: 'no-customer-email' });
+  perf.printReport('customer-ticket');
+  return new Response("No email address found for this customer", { status: 404 });
+}
 
 let threadEmailAddress = null;
 
 // Thread-Based Mode: Verwende received_by (welche unserer Emails die Nachricht empfangen hat)
 if (clientEmailConfig?.email_sending_mode === 'thread-based') {
   // Priorität 1: received_by Feld verwenden
-  if (lastMail.received_by) {
+  if (lastMail?.received_by) {
     threadEmailAddress = lastMail.received_by;
     log.info("Using thread-based email from received_by:", threadEmailAddress);
   }
   // Priorität 2: to_email_address Feld als Fallback
-  else if (lastMail.to_email_address) {
+  else if (lastMail?.to_email_address) {
     threadEmailAddress = lastMail.to_email_address;
     log.info("Using thread-based email from to_email_address (fallback):", threadEmailAddress);
   }
@@ -405,8 +442,8 @@ log.info("Client email configuration:", {
   senderEmail: senderEmail,
   threadEmail: threadEmailAddress,
   customerEmail: emailAddress,
-  lastMailReceivedBy: lastMail.received_by,
-  lastMailToEmail: lastMail.to_email_address
+  lastMailReceivedBy: lastMail?.received_by,
+  lastMailToEmail: lastMail?.to_email_address
 });
 
 log.info("Client data loaded:", {
@@ -526,12 +563,13 @@ log.info("[customer-ticket] Page setup complete, rendering");
           <ReplyArea 
             client:load
             emailAddress={emailAddress}
-            subject={newSubject}
+            subject={isComposeMode ? composeSubject : newSubject}
             customerId={customerId as string}
             signature={signature}
             threadEmailAddress={threadEmailAddress}
             agentName={sidebarData.user.name}
             agentAvatarUrl={sidebarData.user.avatarUrl}
+            composeMode={isComposeMode}
           />
         </ErrorBoundary>
       </main>

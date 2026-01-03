@@ -164,6 +164,7 @@ export interface ReplyAreaProps {
   threadEmailAddress: string | null;
   agentName?: string;
   agentAvatarUrl?: string | null;
+  composeMode?: boolean;
   onEmailSent?: () => void;
 }
 

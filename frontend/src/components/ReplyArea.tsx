@@ -127,6 +127,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
   threadEmailAddress,
   agentName,
   agentAvatarUrl,
+  composeMode,
   onEmailSent
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -158,7 +159,12 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
     const savedHeight = localStorage.getItem('replyAreaHeight');
     const savedBehavior = localStorage.getItem(AFTER_SEND_KEY) as PostSendBehavior | null;
 
-    setIsCollapsed(savedCollapsed);
+    // In compose mode, always start expanded
+    if (composeMode) {
+      setIsCollapsed(false);
+    } else {
+      setIsCollapsed(savedCollapsed);
+    }
 
     if (savedBehavior === 'stay' || savedBehavior === 'next' || savedBehavior === 'back') {
       setPostSendBehavior(savedBehavior);
@@ -173,7 +179,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
         setContainerHeight(height);
       }
     }
-  }, []);
+  }, [composeMode]);
 
   const handleChangeBehavior = useCallback((value: string) => {
     const next = (value as PostSendBehavior);
@@ -432,7 +438,9 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
         onEmailSent();
       } else {
         const fromTableId = getOriginFromLocation();
-        if (postSendBehavior === 'stay') {
+        const effectiveBehavior: PostSendBehavior = composeMode ? 'stay' : postSendBehavior;
+
+        if (effectiveBehavior === 'stay') {
           // Optimistically add the sent message to the current thread.
           try {
             const optimisticSentEmail = {
@@ -459,7 +467,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
           return;
         }
 
-        if (postSendBehavior === 'next' && fromTableId) {
+        if (effectiveBehavior === 'next' && fromTableId) {
           const nextHref = getNextTicketHref(fromTableId, String(customerId));
           if (nextHref) {
             window.location.href = nextHref;
@@ -598,21 +606,23 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
             </div>
 
             <div className="shrink-0 flex flex-col gap-2">
-              <div className="w-56">
-                <label className="block text-xs text-muted-foreground mb-1">
-                  After sending
-                </label>
-                <Select value={postSendBehavior} onValueChange={handleChangeBehavior}>
-                  <SelectTrigger aria-label="After sending behavior">
-                    <SelectValue placeholder="Choose..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="stay">Stay in ticket</SelectItem>
-                    <SelectItem value="next">Go to next ticket</SelectItem>
-                    <SelectItem value="back">Go back to inbox</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {!composeMode && (
+                <div className="w-56">
+                  <label className="block text-xs text-muted-foreground mb-1">
+                    After sending
+                  </label>
+                  <Select value={postSendBehavior} onValueChange={handleChangeBehavior}>
+                    <SelectTrigger aria-label="After sending behavior">
+                      <SelectValue placeholder="Choose..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="stay">Stay in ticket</SelectItem>
+                      <SelectItem value="next">Go to next ticket</SelectItem>
+                      <SelectItem value="back">Go back to inbox</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <Button
                 onClick={handleSend}
