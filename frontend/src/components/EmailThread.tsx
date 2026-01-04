@@ -15,16 +15,17 @@ import { useTranslation } from 'react-i18next';
 import DOMPurify from 'isomorphic-dompurify';
 import { formatDate } from '@/utils/formatDate.js';
 import { useAvatarUrl } from '@/hooks/use-avatar';
-import { 
-  getAttachmentSignedUrl, 
-  downloadAttachment, 
-  isImageMimeType 
+import {
+  getAttachmentSignedUrl,
+  downloadAttachment,
+  isImageMimeType
 } from '@/utils/attachmentManager';
 import type { EmailThreadProps, ThreadEmail, EmailAttachment } from '@/types/ticket.types';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { ParsedEmailContent } from '@/components/ParsedEmailContent';
 import { hasQuotedContent } from '@/utils/emailQuoteParser';
+import { NewMessageSeparator } from '@/components/NewMessageSeparator';
 
 /**
  * Individual attachment button component
@@ -243,9 +244,11 @@ interface EmailMessageProps {
   email: ThreadEmail;
   customerName: string;
   onPreview: (url: string, filename: string) => void;
+  /** Indicates this is a new unread incoming message (shows red highlight + badge) */
+  isNew?: boolean;
 }
 
-const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPreview }) => {
+const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPreview, isNew = false }) => {
   const { t } = useTranslation('dashboard');
   const isOutgoing = email.type === 'sent';
   const [showHtml, setShowHtml] = useState(false);
@@ -300,16 +303,28 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
     return truncated + '...';
   };
 
+  // Determine article styling based on message type
+  const getArticleStyles = () => {
+    if (isOutgoing) {
+      return 'bg-blue-50 border-blue-200';
+    }
+    return 'bg-card border-border';
+  };
+
   return (
-    <article 
-      className={`rounded-lg border shadow-sm ${
-        isOutgoing 
-          ? 'bg-blue-50 border-blue-200' 
-          : 'bg-card border-border'
-      }`}
+    <article
+      className={`rounded-lg border shadow-sm transition-all duration-300 relative ${getArticleStyles()}`}
       id={email.id}
       aria-label={`${isOutgoing ? t('tickets.sentMessage') : t('tickets.receivedMessage')} ${isOutgoing ? agentName : customerName}`}
     >
+      {/* Unread Badge - Top Right Corner */}
+      {isNew && (
+        <div className="absolute -top-2 -right-2 z-10">
+          <div className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-md">
+            {t('tickets.new')}
+          </div>
+        </div>
+      )}
       <div className="p-4">
         {/* Message Header */}
         <header className="flex items-start justify-between mb-3">
@@ -483,28 +498,91 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
 /**
  * Main EmailThread Component
  */
-export const EmailThread: React.FC<EmailThreadProps> = ({ 
-  emails, 
+export const EmailThread: React.FC<EmailThreadProps> = ({
+  emails,
   customer
 }) => {
   const { t } = useTranslation('dashboard');
   const threadRef = useRef<HTMLDivElement>(null);
+  const separatorRef = useRef<HTMLDivElement>(null);
+  const hasScrolledToSeparator = useRef(false);
   const [threadEmails, setThreadEmails] = useState<ThreadEmail[]>(emails || []);
   const [previewImage, setPreviewImage] = useState<{ url: string; filename: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  // State for new messages tracking
+  const [newMessageIndex, setNewMessageIndex] = useState<number | null>(null);
+  const [hasNewMessages, setHasNewMessages] = useState(false);
 
   /**
-   * Auto-scroll to bottom on mount to show latest messages
+   * Update emails when props change
    */
   useEffect(() => {
     setThreadEmails(emails || []);
   }, [emails]);
-
+  
   /**
-   * Auto-scroll to bottom when the thread grows
+   * Determine where new messages start (based on read field)
    */
   useEffect(() => {
+    if (!threadEmails || threadEmails.length === 0) return;
+    
+    // Find first incoming email that hasn't been read
+    let firstNewIndex = null;
+    for (let i = 0; i < threadEmails.length; i++) {
+      const email = threadEmails[i];
+      // Only check incoming emails for read status
+      if (email.type === 'incoming' && !email.read) {
+        firstNewIndex = i;
+        break;
+      }
+    }
+    
+    setNewMessageIndex(firstNewIndex);
+    setHasNewMessages(firstNewIndex !== null);
+  }, [threadEmails]);
+
+  /**
+   * Handle initial scroll behavior:
+   * - If there are new messages, scroll to the separator
+   * - Otherwise, scroll to the bottom
+   * Only runs once on initial mount when we have emails
+   */
+  useEffect(() => {
+    if (hasScrolledToSeparator.current) return;
+    if (!threadEmails || threadEmails.length === 0) return;
     if (!threadRef.current) return;
+    
+    // Wait for the DOM to be fully rendered
+    const timeoutId = setTimeout(() => {
+      if (hasScrolledToSeparator.current) return;
+      
+      if (hasNewMessages && separatorRef.current) {
+        // Scroll to the separator
+        separatorRef.current.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center'
+        });
+      } else if (threadRef.current) {
+        // No new messages, scroll to bottom
+        threadRef.current.scrollTop = threadRef.current.scrollHeight;
+      }
+      
+      hasScrolledToSeparator.current = true;
+    }, 150);
+    
+    return () => clearTimeout(timeoutId);
+  }, [threadEmails, hasNewMessages]);
+
+  /**
+   * Auto-scroll to bottom when NEW emails are added (after initial load)
+   * This handles the case when a new email comes in or when user sends a reply
+   */
+  useEffect(() => {
+    // Skip if we haven't done the initial scroll yet
+    if (!hasScrolledToSeparator.current) return;
+    if (!threadRef.current) return;
+    
     requestAnimationFrame(() => {
       if (!threadRef.current) return;
       threadRef.current.scrollTop = threadRef.current.scrollHeight;
@@ -513,6 +591,7 @@ export const EmailThread: React.FC<EmailThreadProps> = ({
 
   /**
    * Listen for optimistic “sent email” events
+   * When a reply is sent, also clear new message indicators
    */
   useEffect(() => {
     const handler = (e: Event) => {
@@ -520,7 +599,13 @@ export const EmailThread: React.FC<EmailThreadProps> = ({
       const detail = evt?.detail as { customerId?: string; email?: ThreadEmail } | undefined;
       if (!detail?.customerId || !detail?.email) return;
       if (String(detail.customerId) !== String(customer.id)) return;
-      setThreadEmails((prev) => [...prev, detail.email]);
+      
+      // Add the sent email to the thread
+      setThreadEmails((prev) => [...prev, detail.email!]);
+      
+      // Clear new message indicators since we've replied
+      setHasNewMessages(false);
+      setNewMessageIndex(null);
     };
 
     window.addEventListener('TicketEmailSent', handler);
@@ -567,14 +652,35 @@ export const EmailThread: React.FC<EmailThreadProps> = ({
         aria-live="polite"
       >
         <div className="space-y-4 pb-4">
-          {threadEmails.map((email) => (
-            <EmailMessage
-              key={email.id}
-              email={email}
-              customerName={customer.name}
-              onPreview={handlePreview}
-            />
-          ))}
+          {threadEmails.map((email, index) => {
+            // Insert separator before first new message
+            const shouldShowSeparator =
+              hasNewMessages &&
+              newMessageIndex === index;
+            
+            return (
+              <React.Fragment key={email.id}>
+                {shouldShowSeparator && (
+                  <div ref={separatorRef}>
+                    <NewMessageSeparator
+                      newMessageCount={threadEmails
+                        .slice(newMessageIndex!)
+                        .filter(e => e.type === 'incoming' && !e.read)
+                        .length
+                      }
+                    />
+                  </div>
+                )}
+                
+                <EmailMessage
+                  email={email}
+                  customerName={customer.name}
+                  onPreview={handlePreview}
+                  isNew={hasNewMessages && index >= (newMessageIndex || 0) && email.type === 'incoming' && !email.read}
+                />
+              </React.Fragment>
+            );
+          })}
         </div>
       </div>
 

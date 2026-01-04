@@ -152,6 +152,13 @@ export interface BrowserTokens {
 }
 
 /**
+ * Props for new message separator component
+ */
+export interface NewMessageSeparatorProps {
+  newMessageCount: number;
+}
+
+/**
  * Props for email thread component
  */
 export interface EmailThreadProps {

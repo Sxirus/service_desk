@@ -392,14 +392,14 @@ router.post('/sendMail',
         });
       }
 
-      // 6. Update ticket status (default to 'resolved' if not specified)
+      // 6. Update ticket status (default to 'resolved' if not specified) AND mark emails as read
       const ticketStatus = req.body.ticketStatus || 'resolved';
       const validStatuses = ['new', 'open', 'waiting', 'resolved'];
       const finalStatus = validStatuses.includes(ticketStatus) ? ticketStatus : 'resolved';
       
       const { error: statusError } = await supabase
         .from('incoming-mails')
-        .update({ status: finalStatus })
+        .update({ status: finalStatus, read: true })
         .eq('customer_id', customerId);
 
       if (statusError) {
