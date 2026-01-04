@@ -183,6 +183,17 @@
     "userLimitExceeded": "Benutzerlimit überschritten. Sie haben mehr als 1 aktiven Benutzer im Free-Plan. Bitte upgraden Sie auf Pro oder deaktivieren Sie Benutzer, um fortzufahren.",
     "emailLimitReached": "E-Mail-Limit erreicht. Sie haben diesen Monat 50 E-Mails im Free-Plan gesendet. Bitte upgraden Sie auf Pro, um unbegrenzt E-Mails zu senden.",
     "failedToSendEmail": "E-Mail konnte nicht gesendet werden. Bitte versuchen Sie es erneut.",
+    "emailSentSuccess": "E-Mail erfolgreich gesendet",
+    "statusUpdatedSuccess": "Ticketstatus erfolgreich aktualisiert",
+    "afterSend": {
+      "stayInTicket": "Im Ticket bleiben",
+      "goToNext": "Zum nächsten",
+      "goToInbox": "Zum Posteingang"
+    },
+    "statusResolved": "Erledigt",
+    "statusWaiting": "Wartend",
+    "statusOpen": "Offen",
+    "statusNew": "Neu",
     "emailReplyArea": "E-Mail-Antwortbereich",
     "dragToResize": "Ziehen zum Ändern der Größe",
     "resizeReplyArea": "Größe des Antwortbereichs ändern",
@@ -218,6 +229,22 @@
     "totalOrders": "Bestellungen gesamt",
     "totalSpent": "Gesamtausgaben",
     "noShopifyData": "Keine Shopify-Daten für diesen Kunden verfügbar."
+  },
+  "newEmail": {
+    "title": "Neue E-Mail",
+    "button": "Neue E-Mail",
+    "description": "Erstellen/finden Sie den Kunden, dann werden Sie zur Ticketansicht weitergeleitet.",
+    "nameLabel": "Name (optional)",
+    "namePlaceholder": "Kundenname",
+    "emailLabel": "E-Mail",
+    "emailPlaceholder": "kunde@beispiel.de",
+    "subjectLabel": "Betreff",
+    "subjectPlaceholder": "Betreff",
+    "startButton": "E-Mail starten",
+    "starting": "Wird gestartet…",
+    "validEmailError": "Bitte geben Sie eine gültige E-Mail-Adresse ein",
+    "subjectRequired": "Betreff ist erforderlich",
+    "failedToStart": "E-Mail konnte nicht gestartet werden"
   },
   "sidebar": {
     "dashboard": "Dashboard",

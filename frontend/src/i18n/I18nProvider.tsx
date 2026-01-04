@@ -22,7 +22,7 @@ export function I18nProvider({ children, initialLanguage = 'en' }: I18nProviderP
   // This runs during the component's initial execution, before React renders
   if (!hasInitialized.current) {
     hasInitialized.current = true;
-    const supportedLangs = ['en', 'de', 'zh'];
+    const supportedLangs = ['en', 'de'];
     
     // On client, also check localStorage as fallback
     let targetLang = initialLanguage;

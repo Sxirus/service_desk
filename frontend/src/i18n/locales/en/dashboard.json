@@ -183,6 +183,17 @@
     "userLimitExceeded": "User limit exceeded. You have more than 1 active user on the Free plan. Please upgrade to Pro or disable users to continue.",
     "emailLimitReached": "Email limit reached. You have sent 50 emails this month on the Free plan. Please upgrade to Pro to send unlimited emails.",
     "failedToSendEmail": "Failed to send email. Please try again.",
+    "emailSentSuccess": "Email sent successfully",
+    "statusUpdatedSuccess": "Ticket status updated successfully",
+    "afterSend": {
+      "stayInTicket": "Stay in ticket",
+      "goToNext": "Go to next",
+      "goToInbox": "Go to inbox"
+    },
+    "statusResolved": "Resolved",
+    "statusWaiting": "Waiting",
+    "statusOpen": "Open",
+    "statusNew": "New",
     "emailReplyArea": "Email reply area",
     "dragToResize": "Drag to resize",
     "resizeReplyArea": "Resize reply area",
@@ -218,6 +229,22 @@
     "totalOrders": "Total Orders",
     "totalSpent": "Total Spent",
     "noShopifyData": "No Shopify Data available for this customer."
+  },
+  "newEmail": {
+    "title": "New Email",
+    "button": "New Email",
+    "description": "Create/find the customer, then you'll be taken to the ticket view to send.",
+    "nameLabel": "Name (optional)",
+    "namePlaceholder": "Customer name",
+    "emailLabel": "Email",
+    "emailPlaceholder": "customer@example.com",
+    "subjectLabel": "Subject",
+    "subjectPlaceholder": "Subject",
+    "startButton": "Start Email",
+    "starting": "Starting…",
+    "validEmailError": "Please enter a valid email address",
+    "subjectRequired": "Subject is required",
+    "failedToStart": "Failed to start email"
   },
   "sidebar": {
     "dashboard": "Dashboard",

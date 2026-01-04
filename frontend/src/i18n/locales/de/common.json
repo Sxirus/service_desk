@@ -261,7 +261,7 @@
   },
   "sidebar": {
     "inbox": "Posteingang",
-    "yourAssignedTickets": "Ihre zugewiesenen Tickets",
+    "yourAssignedTickets": "Deine Tickets",
     "administration": "Administration",
     "generalSettings": "Allgemeine Einstellungen",
     "usersGroups": "Benutzer & Gruppen",
@@ -276,5 +276,36 @@
     "clients": "Kunden",
     "billing": "Abrechnung",
     "platformAdmins": "Plattform-Administratoren"
+  },
+  "branding": {
+    "poweredBy": "Bereitgestellt von Service Desk"
+  },
+  "pages": {
+    "login": {
+      "pageTitle": "Anmelden - Service Desk"
+    },
+    "register": {
+      "pageTitle": "Registrieren - Service Desk"
+    },
+    "resetPassword": {
+      "pageTitle": "Passwort zurücksetzen - Service Desk"
+    },
+    "dashboard": {
+      "pageTitle": "Service Desk - Dashboard",
+      "assignedTickets": "Zugewiesene Tickets",
+      "ticketsAssigned": "{{count}} Ticket ist Ihnen zugewiesen",
+      "ticketsAssigned_plural": "{{count}} Tickets sind Ihnen zugewiesen"
+    },
+    "tickets": {
+      "pageTitle": "Kunden-Ticket"
+    },
+    "inboxes": {
+      "pageTitle": "Posteingang",
+      "notFound": "Posteingang nicht gefunden oder Zugriff verweigert",
+      "loadFailed": "Fehler beim Laden des Posteingangs"
+    },
+    "analytics": {
+      "pageTitle": "Analysen - Service Desk"
+    }
   }
 }

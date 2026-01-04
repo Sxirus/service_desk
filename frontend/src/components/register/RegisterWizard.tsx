@@ -60,60 +60,53 @@ const createAccountSchema = (t: (key: string) => string) => z.object({
   email: z.string().email(t('auth:wizard.validation.validEmail')),
   password: z.string().min(8, t('auth:wizard.validation.passwordMinLength')),
 });
-
-const accountSchema = z.object({
-  firstName: z.string().min(1, "Please enter your first name."),
-  lastName: z.string().min(1, "Please enter your last name."),
-  email: z.string().email("Please enter a valid work email."),
-  password: z.string().min(8, "Password must be at least 8 characters."),
-});
-type AccountFormData = z.infer<typeof accountSchema>;
+type AccountFormData = z.infer<ReturnType<typeof createAccountSchema>>;
 
 /* =========================
    STEP 2: Company schema
    ========================= */
-const companySchema = z.object({
-  name: z.string().min(2, "Please enter your company name."),
-  address_street: z.string().min(2, "Please enter a street and number."),
-  address_zip: z.string().min(2, "Please enter a ZIP / postal code."),
-  address_city: z.string().min(2, "Please enter a city."),
-  address_country: z.string().min(2, "Please enter a country."),
+const createCompanySchema = (t: (key: string) => string) => z.object({
+  name: z.string().min(2, t('auth:wizard.validation.companyNameRequired')),
+  address_street: z.string().min(2, t('auth:wizard.validation.companyStreetRequired')),
+  address_zip: z.string().min(2, t('auth:wizard.validation.companyPostalRequired')),
+  address_city: z.string().min(2, t('auth:wizard.validation.companyCityRequired')),
+  address_country: z.string().min(2, t('auth:wizard.validation.companyCountryRequired')),
   website: z
     .string()
     .transform((v) => v.trim())
     .refine(
       (v) => v === "" || /^https?:\/\//i.test(v),
-      "Website should start with http:// or https:// (or leave it empty)."
+      t('auth:wizard.validation.companyWebsiteInvalid')
     )
     .optional()
     .nullable(),
   vat: z.string().optional().nullable(),
 });
-type CompanyFormData = z.infer<typeof companySchema>;
+type CompanyFormData = z.infer<ReturnType<typeof createCompanySchema>>;
 
 /* =========================
    STEP 3: Support mailbox schema
    ========================= */
-const supportSchema = z.object({
-  provider_id: z.coerce.number().int().positive("Choose a provider."),
-  email_address: z.string().email("Please enter a valid email."),
-  password: z.string().min(1, "Please enter the mailbox password."),
-  imap: z.string().min(1, "IMAP host required."),
-  imap_port: z.coerce.number().int().min(1),
-  smtp: z.string().min(1, "SMTP host required."),
-  smtp_port: z.coerce.number().int().min(1),
+const createSupportSchema = (t: (key: string) => string) => z.object({
+  provider_id: z.coerce.number().int().positive(t('validation:select.required')),
+  email_address: z.string().email(t('auth:wizard.validation.validEmail')),
+  password: z.string().min(1, t('auth:wizard.validation.inboxPasswordRequired')),
+  imap: z.string().min(1, t('auth:wizard.validation.imapHostRequired')),
+  imap_port: z.coerce.number().int().min(1, t('auth:wizard.validation.imapPortRequired')),
+  smtp: z.string().min(1, t('auth:wizard.validation.smtpHostRequired')),
+  smtp_port: z.coerce.number().int().min(1, t('auth:wizard.validation.smtpPortRequired')),
 });
-type SupportFormData = z.infer<typeof supportSchema>;
+type SupportFormData = z.infer<ReturnType<typeof createSupportSchema>>;
 
 /* =========================
    STEP 4: Team invite schema
    ========================= */
-const teamMemberSchema = z.object({
-  email: z.string().email("Please enter a valid email."),
-  name: z.string().min(1, "Please enter a name."),
-  role_id: z.coerce.number().int().positive("Please select a role."),
+const createTeamMemberSchema = (t: (key: string) => string) => z.object({
+  email: z.string().min(1, t('auth:wizard.validation.teamEmailRequired')).email(t('auth:wizard.validation.teamEmailInvalid')),
+  name: z.string().min(1, t('validation:name.required')),
+  role_id: z.coerce.number().int().positive(t('auth:wizard.validation.teamRoleRequired')),
 });
-type TeamMemberData = z.infer<typeof teamMemberSchema>;
+type TeamMemberData = z.infer<ReturnType<typeof createTeamMemberSchema>>;
 
 /* =========================
    Turnstile (sichtbar, normal)
@@ -311,6 +304,12 @@ function OneQuestionLayout({
 export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, currentUser }: Props) {
   const { t } = useTranslation(['auth', 'common', 'validation']);
 
+  // Create translated schemas
+  const accountSchema = React.useMemo(() => createAccountSchema(t), [t]);
+  const companySchema = React.useMemo(() => createCompanySchema(t), [t]);
+  const supportSchema = React.useMemo(() => createSupportSchema(t), [t]);
+  const teamMemberSchema = React.useMemo(() => createTeamMemberSchema(t), [t]);
+
   /* ---- Step control ---- */
   const [step, setStep] = useState<number>(initialStep);
 
@@ -434,13 +433,13 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
         captchaToken: cfToken,
       });
 
-      if (!res?.data?.success) throw new Error(res?.data?.message || "Registration failed");
+      if (!res?.data?.success) throw new Error(res?.data?.message || t('auth:wizard.errors.registrationFailed'));
       try {
         localStorage.removeItem(accStorageKey);
       } catch {}
       setStep(2); // move to Company
     } catch (e: any) {
-      alert(e?.message ?? "Unexpected error");
+      alert(e?.message ?? t('auth:wizard.errors.unexpectedError'));
     } finally {
       setSubmittingAccount(false);
     }
@@ -561,13 +560,13 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
         vat: companyForm.getValues("vat") || null,
       });
 
-      if (!res?.data?.success) throw new Error(res?.data?.message || "Could not create company");
+      if (!res?.data?.success) throw new Error(res?.data?.message || t('auth:wizard.errors.companyCreationFailed'));
       try {
         localStorage.removeItem(compStorageKey);
       } catch {}
       setStep(3); // proceed to Support email
     } catch (e: any) {
-      alert(e?.message ?? "Unexpected error");
+      alert(e?.message ?? t('auth:wizard.errors.unexpectedError'));
     } finally {
       setSubmittingCompany(false);
     }
@@ -725,13 +724,13 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
         smtp_port: supportForm.getValues("smtp_port"),
       });
       if (testRes?.data?.success) {
-        setTestStatus({ ok: true, message: "Connection successful." });
+        setTestStatus({ ok: true, message: t('auth:wizard.errors.connectionSuccessful') });
       } else {
-        setTestStatus({ ok: false, message: (testRes?.data as any)?.message || "Connection failed." });
+        setTestStatus({ ok: false, message: (testRes?.data as any)?.message || t('auth:wizard.errors.connectionFailed') });
       }
       setSupportIdx(4); // Ergebnis-Screen
     } catch (e: any) {
-      setTestStatus({ ok: false, message: e?.message || "Unexpected error" });
+      setTestStatus({ ok: false, message: e?.message || t('auth:wizard.errors.unexpectedError') });
       setSupportIdx(4);
     } finally {
       setSubmittingSupport(false);
@@ -749,8 +748,8 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
   const [addingMember, setAddingMember] = useState(false);
 
   const roles = [
-    { id: 1, name: "Admin" },
-    { id: 2, name: "User" },
+    { id: 1, name: t('auth:wizard.roles.admin') },
+    { id: 2, name: t('auth:wizard.roles.user') },
   ];
 
   const handleAddMember = () => {
@@ -803,13 +802,13 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
       const failed = results.filter(r => !r.result?.data?.success);
       if (failed.length > 0) {
         const failedEmails = failed.map(f => f.member.email).join(", ");
-        alert(`Some invites failed: ${failedEmails}`);
+        alert(t('auth:wizard.errors.invitesFailed', { emails: failedEmails }));
       }
 
       // Move to payment plan selection
       setStep(5);
     } catch (e: any) {
-      alert(e?.message || "Unexpected error inviting team members");
+      alert(e?.message || t('auth:wizard.errors.unexpectedError'));
     } finally {
       setSubmittingTeam(false);
     }

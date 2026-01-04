@@ -9,6 +9,12 @@ import { createClient } from "../../lib/supabase.ts";
 import { getPlatformOnlyContext, getCompletePageContext } from "../../lib/auth-helpers.ts";
 import PlatformShell from "@/components/platform/PlatformShell";
 import ClientsManagement from "@/components/platform/ClientsManagement";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const { t } = getTranslations(lang, 'platform');
+const tCommon = getTranslations(lang, 'common');
 
 // Initialize Supabase client
 const supabase = createClient({
@@ -70,13 +76,13 @@ try {
 }
 ---
 
-<Layout title="Platform Clients">
+<Layout title={t('pages.clients.pageTitle')}>
   <PlatformShell
     client:load
     user={{ email: user.email }}
-    crumbParentLabel="Platform"
-    crumbParentHref="/platform/dashboard"
-    crumbCurrent="Clients"
+    crumbParentLabel={tCommon.t('sidebar.platform')}
+    crumbParentHref="/platform"
+    crumbCurrent={tCommon.t('sidebar.clients')}
     currentPath="/platform/clients"
     hasClientLink={hasClientLink}
     clientName={clientName}

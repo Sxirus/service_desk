@@ -14,6 +14,12 @@ import { createClient } from "../../lib/supabase.ts";
 import { getCompletePageContext } from "../../lib/auth-helpers.ts";
 import { ROLE_IDS } from "../../types/database.ts";
 import type { Client } from "../../types/database.ts";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const { t } = getTranslations(lang, 'manage');
+const tCommon = getTranslations(lang, 'common');
 
 // Components
 import ShopifyManagementPanel from "@/components/ShopifyManagementPanel";
@@ -119,14 +125,14 @@ const initialPanelData = {
 };
 ---
 
-<Layout title="Shopify Integration">
+<Layout title={t('pages.shopify.pageTitle')}>
   <AdminShell 
     client:load
     user={sidebarData.user}
     firstTeam={sidebarData.team ?? undefined}
-    crumbParentLabel="Administration"
+    crumbParentLabel={tCommon.t('sidebar.administration')}
     crumbParentHref="/manage/settings"
-    crumbCurrent="Shopify"
+    crumbCurrent={t('pages.shopify.pageTitle')}
     isAdmin={authContext.isAdmin}
     isPlatformAdmin={pageContext.isPlatformAdmin}
     currentPath="/manage/shopify"
@@ -138,9 +144,9 @@ const initialPanelData = {
       <!-- Page Header -->
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="space-y-1 mt-2">
-          <h1 class="text-2xl font-semibold tracking-tight">Shopify Integration</h1>
+          <h1 class="text-2xl font-semibold tracking-tight">{t('pages.shopify.heading')}</h1>
           <p class="text-sm text-muted-foreground">
-            Connect and manage your Shopify store integration.
+            {t('pages.shopify.description')}
           </p>
         </div>
       </div>

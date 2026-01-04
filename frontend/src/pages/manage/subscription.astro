@@ -4,6 +4,12 @@ import { createClient } from "@/lib/supabase";
 import { getCompletePageContext } from "@/lib/auth-helpers";
 import SubscriptionManager from "@/components/SubscriptionManager";
 import AdminShell from "@/components/AdminShell";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const { t } = getTranslations(lang, 'manage');
+const tCommon = getTranslations(lang, 'common');
 
 // Create Supabase client with server-side rendering support
 const supabase = createClient({
@@ -28,7 +34,7 @@ if (!session) return Astro.redirect("/");
 const isAdmin = authContext.isAdmin;
 ---
 
-<BaseLayout title="Subscription Management">
+<BaseLayout title={t('pages.subscription.pageTitle')}>
   <AdminShell
     client:load
     user={sidebarData.user}
@@ -36,9 +42,9 @@ const isAdmin = authContext.isAdmin;
     isAdmin={isAdmin}
     isPlatformAdmin={pageContext.isPlatformAdmin}
     currentPath="/manage/subscription"
-    crumbParentLabel="Administration"
+    crumbParentLabel={tCommon.t('sidebar.administration')}
     crumbParentHref="/manage"
-    crumbCurrent="Subscription"
+    crumbCurrent={t('pages.subscription.pageTitle')}
     employeeId={sidebarData.employeeId}
     clientId={sidebarData.clientId}
     subscriptionTier={sidebarData.subscriptionTier}

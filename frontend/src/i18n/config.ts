@@ -16,13 +16,6 @@ import deManage from './locales/de/manage.json';
 import dePlatform from './locales/de/platform.json';
 import deValidation from './locales/de/validation.json';
 
-import zhCommon from './locales/zh/common.json';
-import zhAuth from './locales/zh/auth.json';
-import zhDashboard from './locales/zh/dashboard.json';
-import zhManage from './locales/zh/manage.json';
-import zhPlatform from './locales/zh/platform.json';
-import zhValidation from './locales/zh/validation.json';
-
 export const defaultNS = 'common';
 export const resources = {
   en: {
@@ -41,23 +34,14 @@ export const resources = {
     platform: dePlatform,
     validation: deValidation,
   },
-  zh: {
-    common: zhCommon,
-    auth: zhAuth,
-    dashboard: zhDashboard,
-    manage: zhManage,
-    platform: zhPlatform,
-    validation: zhValidation,
-  },
 } as const;
 
 export const supportedLanguages = [
   { code: 'en', name: 'English', flag: '🇬🇧' },
   { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
-  { code: 'zh', name: '中文', flag: '🇨🇳' },
 ] as const;
 
-export type SupportedLanguage = 'en' | 'de' | 'zh';
+export type SupportedLanguage = 'en' | 'de';
 
 // Helper to get cookie value
 const getCookie = (name: string): string | null => {
@@ -91,7 +75,7 @@ i18n
     defaultNS,
     lng: initialLang,
     fallbackLng: 'en',
-    supportedLngs: ['en', 'de', 'zh'],
+    supportedLngs: ['en', 'de'],
     interpolation: {
       escapeValue: false,
     },

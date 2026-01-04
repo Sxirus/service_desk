@@ -20,6 +20,12 @@ import { createClient } from "../../lib/supabase.ts";
 import { getCompletePageContext } from "../../lib/auth-helpers.ts";
 import { ROLE_IDS } from "../../types/database.ts";
 import type { Role, Employee, RoleEmployee, EmployeeEmailRow } from "../../types/database.ts";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const { t } = getTranslations(lang, 'manage');
+const tCommon = getTranslations(lang, 'common');
 
 // Components
 import type { User } from "@/components/datatable/columns";
@@ -217,14 +223,14 @@ const adminUsers = tableData.filter(u => u.role.toLowerCase().includes('admin'))
 console.log("[user-management] Page setup complete, rendering");
 ---
 
-<Layout title="Users & Groups">
+<Layout title={t('pages.users.pageTitle')}>
   <AdminShell 
     client:load
     user={sidebarData.user}
     firstTeam={sidebarData.team ?? undefined}
-    crumbParentLabel="Administration"
+    crumbParentLabel={tCommon.t('sidebar.administration')}
     crumbParentHref="/manage/settings"
-    crumbCurrent="Users & Groups"
+    crumbCurrent={t('pages.users.pageTitle')}
     isAdmin={authContext.isAdmin}
     isPlatformAdmin={pageContext.isPlatformAdmin}
     currentPath="/manage/users"
@@ -236,9 +242,9 @@ console.log("[user-management] Page setup complete, rendering");
       <!-- Page Header -->
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="space-y-1 mt-2">
-          <h1 class="text-2xl font-semibold tracking-tight">Users & Groups</h1>
+          <h1 class="text-2xl font-semibold tracking-tight">{t('pages.users.heading')}</h1>
           <p class="text-sm text-muted-foreground">
-            Manage your team's access, groups, roles, and permissions.
+            {t('pages.users.description')}
           </p>
         </div>
         
@@ -263,7 +269,7 @@ console.log("[user-management] Page setup complete, rendering");
             </div>
             <div>
               <p class="text-2xl font-bold">{totalUsers}</p>
-              <p class="text-xs text-muted-foreground">Total Members</p>
+              <p class="text-xs text-muted-foreground">{t('pages.users.stats.totalMembers')}</p>
             </div>
           </div>
         </div>
@@ -278,7 +284,7 @@ console.log("[user-management] Page setup complete, rendering");
             </div>
             <div>
               <p class="text-2xl font-bold">{activeUsers}</p>
-              <p class="text-xs text-muted-foreground">Active</p>
+              <p class="text-xs text-muted-foreground">{t('pages.users.stats.active')}</p>
             </div>
           </div>
         </div>
@@ -293,7 +299,7 @@ console.log("[user-management] Page setup complete, rendering");
             </div>
             <div>
               <p class="text-2xl font-bold">{adminUsers}</p>
-              <p class="text-xs text-muted-foreground">Administrators</p>
+              <p class="text-xs text-muted-foreground">{t('pages.users.stats.administrators')}</p>
             </div>
           </div>
         </div>
@@ -308,7 +314,7 @@ console.log("[user-management] Page setup complete, rendering");
             </div>
             <div>
               <p class="text-2xl font-bold">{disabledUsers}</p>
-              <p class="text-xs text-muted-foreground">Disabled</p>
+              <p class="text-xs text-muted-foreground">{t('pages.users.stats.disabled')}</p>
             </div>
           </div>
         </div>
@@ -317,7 +323,7 @@ console.log("[user-management] Page setup complete, rendering");
       <!-- Users Table -->
       <div class="space-y-4">
         <div class="flex items-center justify-between">
-          <h2 class="text-lg font-medium">All Team Members</h2>
+          <h2 class="text-lg font-medium">{t('pages.users.allTeamMembers')}</h2>
         </div>
         <ClientUsersTable 
           client:only="react" 
@@ -330,9 +336,9 @@ console.log("[user-management] Page setup complete, rendering");
       <div class="space-y-4">
         <div class="flex items-center justify-between">
           <div>
-            <h2 class="text-lg font-medium">Groups</h2>
+            <h2 class="text-lg font-medium">{t('pages.users.groups')}</h2>
             <p class="text-sm text-muted-foreground">
-              Organize team members into groups for easier inbox access management.
+              {t('groups.description')}
             </p>
           </div>
         </div>

@@ -53,7 +53,7 @@ interface Props {
 }
 
 export default function AdminsManagement({ initialAdmins, currentAdminId }: Props) {
-  const { t } = useTranslation('platform')
+  const { t } = useTranslation(['platform', 'common'])
   const [admins, setAdmins] = React.useState<PlatformAdmin[]>(initialAdmins)
   const [isAddDialogOpen, setIsAddDialogOpen] = React.useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false)

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -53,6 +54,7 @@ interface CompanyManagementFormProps {
 }
 
 export default function CompanyManagementForm({ initialData }: CompanyManagementFormProps) {
+  const { t } = useTranslation('manage');
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<FormData>({
@@ -87,11 +89,11 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
       });
 
       if (!result?.data?.success) {
-        throw new Error(result?.data?.message || "Failed to update company");
+        throw new Error(result?.data?.message || t('company.updateError'));
       }
 
-      toast("Company updated successfully", {
-        description: "Your company information has been updated.",
+      toast(t('company.updateSuccess'), {
+        description: t('company.updateSuccessDescription'),
         action: {
           label: <Check className="h-4 w-4" />,
           onClick: () => {},
@@ -100,8 +102,8 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
       window.location.reload();
     } catch (error) {
       console.error("Error updating company:", error);
-      toast("Error updating company", {
-        description: error instanceof Error ? error.message : "Please try again later.",
+      toast(t('company.updateError'), {
+        description: error instanceof Error ? error.message : t('company.updateErrorDescription'),
         action: {
           label: <AlertCircle className="h-4 w-4" />,
           onClick: () => {},
@@ -117,9 +119,9 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
       <CardHeader className="space-y-1">
         <div className="flex items-center space-x-2">
           <Building2 className="h-5 w-5" />
-          <CardTitle className="text-2xl">Company Information</CardTitle>
+          <CardTitle className="text-2xl">{t('company.title')}</CardTitle>
         </div>
-        <CardDescription>Update your company details and business information.</CardDescription>
+        <CardDescription>{t('company.description')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <Form {...form}>
@@ -127,7 +129,7 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
             {/* Basic Information */}
             <div className="space-y-4">
               <div className="flex items-center space-x-2">
-                <h3 className="text-lg font-medium">Basic Information</h3>
+                <h3 className="text-lg font-medium">{t('company.basicInfo')}</h3>
               </div>
 
               <FormField
@@ -135,11 +137,11 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Company Name</FormLabel>
+                    <FormLabel>{t('company.companyName')}</FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter company name" {...field} />
+                      <Input placeholder={t('company.companyNamePlaceholder')} {...field} />
                     </FormControl>
-                    <FormDescription>This is your company's official name.</FormDescription>
+                    <FormDescription>{t('company.companyNameDescription')}</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -151,7 +153,7 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
             {/* Address */}
             <div className="space-y-4">
               <div className="flex items-center space-x-2">
-                <h3 className="text-lg font-medium">Address</h3>
+                <h3 className="text-lg font-medium">{t('company.address')}</h3>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -160,9 +162,9 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
                   name="address_street"
                   render={({ field }) => (
                     <FormItem className="md:col-span-2">
-                      <FormLabel>Street & Number</FormLabel>
+                      <FormLabel>{t('company.street')}</FormLabel>
                       <FormControl>
-                        <Input placeholder="Street and number" {...field} value={field.value ?? ""} />
+                        <Input placeholder={t('company.streetPlaceholder')} {...field} value={field.value ?? ""} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -174,9 +176,9 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
                   name="address_zip"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>ZIP</FormLabel>
+                      <FormLabel>{t('company.zip')}</FormLabel>
                       <FormControl>
-                        <Input placeholder="Postal code" {...field} value={field.value ?? ""} />
+                        <Input placeholder={t('company.zipPlaceholder')} {...field} value={field.value ?? ""} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -188,9 +190,9 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
                   name="address_city"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>City</FormLabel>
+                      <FormLabel>{t('company.city')}</FormLabel>
                       <FormControl>
-                        <Input placeholder="City" {...field} value={field.value ?? ""} />
+                        <Input placeholder={t('company.cityPlaceholder')} {...field} value={field.value ?? ""} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -202,9 +204,9 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
                   name="address_country"
                   render={({ field }) => (
                     <FormItem className="md:col-span-2">
-                      <FormLabel>Country</FormLabel>
+                      <FormLabel>{t('company.country')}</FormLabel>
                       <FormControl>
-                        <Input placeholder="Country" {...field} value={field.value ?? ""} />
+                        <Input placeholder={t('company.countryPlaceholder')} {...field} value={field.value ?? ""} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -218,7 +220,7 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
             {/* Tax and Web */}
             <div className="space-y-4">
               <div className="flex items-center space-x-2">
-                <h3 className="text-lg font-medium">Other Information</h3>
+                <h3 className="text-lg font-medium">{t('company.otherInfo')}</h3>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -227,10 +229,10 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
                   name="vat"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>VAT Number</FormLabel>
+                      <FormLabel>{t('company.vat')}</FormLabel>
                       <FormControl>
                         <Input 
-                          placeholder="DE123456789" 
+                          placeholder={t('company.vatPlaceholder')} 
                           {...field} 
                           value={field.value ?? ""} 
                         />
@@ -244,9 +246,9 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
                   name="website"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Website</FormLabel>
+                      <FormLabel>{t('company.website')}</FormLabel>
                       <FormControl>
-                        <Input placeholder="https://example.com" {...field} value={field.value ?? ""} />
+                        <Input placeholder={t('company.websitePlaceholder')} {...field} value={field.value ?? ""} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -262,12 +264,12 @@ export default function CompanyManagementForm({ initialData }: CompanyManagement
                 {isLoading ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                    Saving...
+                    {t('common.saving')}
                   </>
                 ) : (
                   <>
                     <Save className="h-4 w-4 mr-2" />
-                    Save Changes
+                    {t('common.saveChanges')}
                   </>
                 )}
               </Button>

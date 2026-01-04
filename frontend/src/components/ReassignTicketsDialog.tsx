@@ -92,7 +92,7 @@ export function ReassignTicketsDialog({
         })
 
         if (!result?.data?.success) {
-          toast.error(result?.data?.message || "Failed to unassign tickets")
+          toast.error(result?.data?.message || t('users.failedToUnassign'))
           return
         }
 
@@ -112,7 +112,7 @@ export function ReassignTicketsDialog({
         })
 
         if (!result?.data?.success) {
-          toast.error(result?.data?.message || "Failed to reassign tickets")
+          toast.error(result?.data?.message || t('users.failedToReassign'))
           return
         }
 

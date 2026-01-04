@@ -112,7 +112,7 @@ export function AccountSettingsDialog({
       window.location.reload()
     } catch (err: any) {
       console.error("Save profile error:", err)
-      toast.error("An unexpected error occurred")
+      toast.error(t('accountSettings.unexpectedError'))
     } finally {
       setIsSaving(false)
     }
@@ -124,14 +124,14 @@ export function AccountSettingsDialog({
       const result = await actions.sendPasswordResetEmail({})
 
       if (!result?.data?.success) {
-        toast.error(result?.data?.message || "Failed to send password reset email")
+        toast.error(result?.data?.message || t('accountSettings.passwordResetFailed'))
         return
       }
 
-      toast.success("Password reset email sent! Check your inbox.")
+      toast.success(t('accountSettings.passwordResetSent'))
     } catch (err: any) {
       console.error("Password reset error:", err)
-      toast.error("An unexpected error occurred")
+      toast.error(t('accountSettings.unexpectedError'))
     } finally {
       setIsSendingReset(false)
     }

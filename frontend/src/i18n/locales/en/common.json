@@ -276,5 +276,36 @@
     "clients": "Clients",
     "billing": "Billing",
     "platformAdmins": "Platform Admins"
+  },
+  "branding": {
+    "poweredBy": "Powered by Service Desk"
+  },
+  "pages": {
+    "login": {
+      "pageTitle": "Login - Service Desk"
+    },
+    "register": {
+      "pageTitle": "Register - Service Desk"
+    },
+    "resetPassword": {
+      "pageTitle": "Reset Password - Service Desk"
+    },
+    "dashboard": {
+      "pageTitle": "Service Desk - Dashboard",
+      "assignedTickets": "Assigned Tickets",
+      "ticketsAssigned": "{{count}} ticket assigned to you",
+      "ticketsAssigned_plural": "{{count}} tickets assigned to you"
+    },
+    "tickets": {
+      "pageTitle": "Customer Ticket"
+    },
+    "inboxes": {
+      "pageTitle": "Inbox",
+      "notFound": "Inbox not found or access denied",
+      "loadFailed": "Failed to load inbox"
+    },
+    "analytics": {
+      "pageTitle": "Analytics - Service Desk"
+    }
   }
 }

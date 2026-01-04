@@ -8,7 +8,6 @@ export function getCurrentLocale(): string {
   const localeMap: Record<string, string> = {
     en: 'en-US',
     de: 'de-DE',
-    zh: 'zh-CN',
   };
   return localeMap[lang] || 'en-US';
 }

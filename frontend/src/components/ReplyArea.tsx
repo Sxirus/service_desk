@@ -37,12 +37,12 @@ type TicketStatus = 'new' | 'open' | 'waiting' | 'resolved';
 
 const AFTER_SEND_KEY = 'replyAfterSendBehavior';
 
-// Status configuration for display
-const STATUS_OPTIONS: { value: TicketStatus; label: string; color: string }[] = [
-  { value: 'resolved', label: 'Resolved', color: 'bg-gray-400' },
-  { value: 'waiting', label: 'Waiting', color: 'bg-blue-500' },
-  { value: 'open', label: 'Open', color: 'bg-orange-500' },
-  { value: 'new', label: 'New', color: 'bg-green-500' },
+// Status configuration for display - labels are translation keys
+const STATUS_OPTIONS: { value: TicketStatus; labelKey: string; color: string }[] = [
+  { value: 'resolved', labelKey: 'tickets.statusResolved', color: 'bg-gray-400' },
+  { value: 'waiting', labelKey: 'tickets.statusWaiting', color: 'bg-blue-500' },
+  { value: 'open', labelKey: 'tickets.statusOpen', color: 'bg-orange-500' },
+  { value: 'new', labelKey: 'tickets.statusNew', color: 'bg-green-500' },
 ];
 
 function getOriginFromLocation(): string | null {
@@ -395,7 +395,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
           status: ticketStatus
         });
         
-        toast.success('Ticket status updated successfully');
+        toast.success(t('tickets.statusUpdatedSuccess'));
         setTicketStatus('resolved'); // Reset to default for next reply
         
         // Callback or redirect
@@ -473,7 +473,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       // Status is now updated as part of sendMail endpoint
       // No need for separate makeRead call
 
-      toast.success('Email sent successfully');
+      toast.success(t('tickets.emailSentSuccess'));
 
       // Clear state only on success
       uploadManagerRef.current.clear();
@@ -667,7 +667,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                           <SelectItem key={option.value} value={option.value}>
                             <div className="flex items-center gap-2">
                               <span className={`w-2 h-2 rounded-full ${option.color}`} />
-                              {option.label}
+                              {t(option.labelKey)}
                             </div>
                           </SelectItem>
                         ))}
@@ -681,9 +681,9 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                         <SelectValue placeholder="After send..." />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="stay">Stay in ticket</SelectItem>
-                        <SelectItem value="next">Go to next</SelectItem>
-                        <SelectItem value="back">Go to inbox</SelectItem>
+                        <SelectItem value="stay">{t('tickets.afterSend.stayInTicket')}</SelectItem>
+                        <SelectItem value="next">{t('tickets.afterSend.goToNext')}</SelectItem>
+                        <SelectItem value="back">{t('tickets.afterSend.goToInbox')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

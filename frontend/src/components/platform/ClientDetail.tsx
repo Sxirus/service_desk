@@ -199,13 +199,13 @@ export default function ClientDetail({ clientData }: Props) {
           )
         })
         setEditingEmployee(null)
-        toast.success("Employee updated successfully")
+        toast.success(t('clientDetail.employeeUpdated'))
       } else {
-        throw new Error(response.error || "Failed to update")
+        throw new Error(response.error || t('clientDetail.employeeUpdateFailed'))
       }
     } catch (error) {
       console.error("Failed to update employee:", error)
-      toast.error("Failed to update employee")
+      toast.error(t('clientDetail.employeeUpdateFailed'))
     } finally {
       setIsEmployeeActionLoading(false)
     }
@@ -226,13 +226,13 @@ export default function ClientDetail({ clientData }: Props) {
             e.id === employee.id ? { ...e, disabled: newDisabled } : e
           )
         })
-        toast.success(newDisabled ? "Employee disabled" : "Employee enabled")
+        toast.success(newDisabled ? t('clientDetail.employeeDisabled') : t('clientDetail.employeeEnabled'))
       } else {
-        throw new Error(response.error || "Failed to update")
+        throw new Error(response.error || t('clientDetail.employeeStatusFailed'))
       }
     } catch (error) {
       console.error("Failed to toggle employee:", error)
-      toast.error("Failed to update employee status")
+      toast.error(t('clientDetail.employeeStatusFailed'))
     } finally {
       setIsEmployeeActionLoading(false)
     }
@@ -255,13 +255,13 @@ export default function ClientDetail({ clientData }: Props) {
           }
         })
         setDeletingEmployee(null)
-        toast.success("Employee removed successfully")
+        toast.success(t('clientDetail.employeeRemoved'))
       } else {
-        throw new Error(response.error || "Failed to delete")
+        throw new Error(response.error || t('clientDetail.employeeRemoveFailed'))
       }
     } catch (error) {
       console.error("Failed to delete employee:", error)
-      toast.error("Failed to remove employee")
+      toast.error(t('clientDetail.employeeRemoveFailed'))
     } finally {
       setIsEmployeeActionLoading(false)
     }
@@ -282,7 +282,7 @@ export default function ClientDetail({ clientData }: Props) {
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">{client.name}</h1>
               <p className="text-sm text-muted-foreground">
-                Client ID: {client.id}
+                {t('clientDetail.clientId', { id: client.id })}
               </p>
             </div>
           </div>
@@ -291,16 +291,16 @@ export default function ClientDetail({ clientData }: Props) {
           {isEditing ? (
             <>
               <Button variant="outline" onClick={handleCancel} disabled={isSaving}>
-                Cancel
+                {t('clientDetail.cancel')}
               </Button>
               <Button onClick={handleSave} disabled={isSaving}>
                 <Save className="h-4 w-4 mr-2" />
-                {isSaving ? "Saving..." : "Save Changes"}
+                {isSaving ? t('clientDetail.saving') : t('clientDetail.saveChanges')}
               </Button>
             </>
           ) : (
             <Button onClick={() => setIsEditing(true)}>
-              Edit Client
+              {t('clientDetail.editClient')}
             </Button>
           )}
         </div>
@@ -310,7 +310,7 @@ export default function ClientDetail({ clientData }: Props) {
       <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Employees</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('clientDetail.employees')}</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -320,7 +320,7 @@ export default function ClientDetail({ clientData }: Props) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Customers</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('clientDetail.customers')}</CardTitle>
             <Mail className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -330,7 +330,7 @@ export default function ClientDetail({ clientData }: Props) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Emails Sent</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('clientDetail.emailsSent')}</CardTitle>
             <Mail className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -340,7 +340,7 @@ export default function ClientDetail({ clientData }: Props) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Plan</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('clientDetail.plan')}</CardTitle>
             <CreditCard className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -352,7 +352,7 @@ export default function ClientDetail({ clientData }: Props) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('clientDetail.monthlyRevenue')}</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -364,7 +364,7 @@ export default function ClientDetail({ clientData }: Props) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('clientDetail.totalRevenue')}</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -379,14 +379,14 @@ export default function ClientDetail({ clientData }: Props) {
         {/* Client Information */}
         <Card>
           <CardHeader>
-            <CardTitle>Client Information</CardTitle>
-            <CardDescription>Basic details and settings</CardDescription>
+            <CardTitle>{t('clientDetail.clientInformation')}</CardTitle>
+            <CardDescription>{t('clientDetail.basicDetails')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {isEditing ? (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="name">Company Name</Label>
+                  <Label htmlFor="name">{t('clientDetail.companyName')}</Label>
                   <Input
                     id="name"
                     value={editForm.name}
@@ -394,7 +394,7 @@ export default function ClientDetail({ clientData }: Props) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="website">Website</Label>
+                  <Label htmlFor="website">{t('clientDetail.website')}</Label>
                   <Input
                     id="website"
                     value={editForm.website}
@@ -402,7 +402,7 @@ export default function ClientDetail({ clientData }: Props) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="tier">Subscription Tier</Label>
+                  <Label htmlFor="tier">{t('clientDetail.subscriptionTier')}</Label>
                   <Select
                     value={editForm.subscription_tier}
                     onValueChange={(value) => setEditForm({ ...editForm, subscription_tier: value })}
@@ -411,14 +411,14 @@ export default function ClientDetail({ clientData }: Props) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="free">Free</SelectItem>
-                      <SelectItem value="paid">Pro</SelectItem>
+                      <SelectItem value="free">{t('clients.free')}</SelectItem>
+                      <SelectItem value="paid">{t('clients.pro')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <Separator />
                 <div className="space-y-2">
-                  <Label htmlFor="street">Street Address</Label>
+                  <Label htmlFor="street">{t('clientDetail.streetAddress')}</Label>
                   <Input
                     id="street"
                     value={editForm.address_street}
@@ -427,7 +427,7 @@ export default function ClientDetail({ clientData }: Props) {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="city">City</Label>
+                    <Label htmlFor="city">{t('clientDetail.city')}</Label>
                     <Input
                       id="city"
                       value={editForm.address_city}
@@ -435,7 +435,7 @@ export default function ClientDetail({ clientData }: Props) {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="zip">ZIP Code</Label>
+                    <Label htmlFor="zip">{t('clientDetail.zipCode')}</Label>
                     <Input
                       id="zip"
                       value={editForm.address_zip}
@@ -444,7 +444,7 @@ export default function ClientDetail({ clientData }: Props) {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="country">Country</Label>
+                  <Label htmlFor="country">{t('clientDetail.country')}</Label>
                   <Input
                     id="country"
                     value={editForm.address_country}
@@ -452,7 +452,7 @@ export default function ClientDetail({ clientData }: Props) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="vat">VAT Number</Label>
+                  <Label htmlFor="vat">{t('clientDetail.vatNumber')}</Label>
                   <Input
                     id="vat"
                     value={editForm.vat}
@@ -465,9 +465,9 @@ export default function ClientDetail({ clientData }: Props) {
                 <div className="flex items-center gap-3">
                   <Globe className="h-4 w-4 text-muted-foreground" />
                   <div>
-                    <p className="text-sm font-medium">Website</p>
+                    <p className="text-sm font-medium">{t('clientDetail.website')}</p>
                     <p className="text-sm text-muted-foreground">
-                      {client.website || "Not set"}
+                      {client.website || t('clientDetail.notSet')}
                     </p>
                   </div>
                 </div>
@@ -475,11 +475,11 @@ export default function ClientDetail({ clientData }: Props) {
                 <div className="flex items-center gap-3">
                   <MapPin className="h-4 w-4 text-muted-foreground" />
                   <div>
-                    <p className="text-sm font-medium">Address</p>
+                    <p className="text-sm font-medium">{t('clientDetail.address')}</p>
                     <p className="text-sm text-muted-foreground">
                       {client.address_street || client.address_city || client.address_country
                         ? `${client.address_street || ""} ${client.address_zip || ""} ${client.address_city || ""} ${client.address_country || ""}`.trim()
-                        : "Not set"}
+                        : t('clientDetail.notSet')}
                     </p>
                   </div>
                 </div>
@@ -487,7 +487,7 @@ export default function ClientDetail({ clientData }: Props) {
                 <div className="flex items-center gap-3">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
                   <div>
-                    <p className="text-sm font-medium">Created</p>
+                    <p className="text-sm font-medium">{t('clients.created')}</p>
                     <p className="text-sm text-muted-foreground">
                       {formatDate(client.created_at)}
                     </p>
@@ -501,8 +501,8 @@ export default function ClientDetail({ clientData }: Props) {
         {/* Integrations */}
         <Card>
           <CardHeader>
-            <CardTitle>Integrations</CardTitle>
-            <CardDescription>Connected services and billing</CardDescription>
+            <CardTitle>{t('clientDetail.integrationsTitle')}</CardTitle>
+            <CardDescription>{t('clientDetail.connectedServices')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between p-3 rounded-lg border">
@@ -513,7 +513,7 @@ export default function ClientDetail({ clientData }: Props) {
                 <div>
                   <p className="font-medium">Stripe</p>
                   <p className="text-sm text-muted-foreground">
-                    {client.stripe_customer_id ? `Customer: ${client.stripe_customer_id.substring(0, 18)}...` : "Not connected"}
+                    {client.stripe_customer_id ? `Customer: ${client.stripe_customer_id.substring(0, 18)}...` : t('clientDetail.notConnected')}
                   </p>
                 </div>
               </div>
@@ -525,11 +525,11 @@ export default function ClientDetail({ clientData }: Props) {
                     onClick={() => window.open(`https://dashboard.stripe.com/customers/${client.stripe_customer_id}`, '_blank')}
                   >
                     <ExternalLink className="h-4 w-4 mr-1" />
-                    View
+                    {t('clientDetail.view')}
                   </Button>
                 )}
                 <Badge variant={client.stripe_customer_id ? "default" : "secondary"}>
-                  {client.stripe_customer_id ? "Connected" : "Not Connected"}
+                  {client.stripe_customer_id ? t('clientDetail.connected') : t('clientDetail.notConnected')}
                 </Badge>
               </div>
             </div>
@@ -542,12 +542,12 @@ export default function ClientDetail({ clientData }: Props) {
                 <div>
                   <p className="font-medium">Shopify</p>
                   <p className="text-sm text-muted-foreground">
-                    {client.shopify_store_url || "Not connected"}
+                    {client.shopify_store_url || t('clientDetail.notConnected')}
                   </p>
                 </div>
               </div>
               <Badge variant={client.shopify_connected ? "default" : "secondary"}>
-                {client.shopify_connected ? "Connected" : "Not Connected"}
+                {client.shopify_connected ? t('clientDetail.connected') : t('clientDetail.notConnected')}
               </Badge>
             </div>
           </CardContent>
@@ -558,16 +558,16 @@ export default function ClientDetail({ clientData }: Props) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Employees</CardTitle>
+            <CardTitle>{t('clientDetail.employeesTitle')}</CardTitle>
             <CardDescription>
-              Team members in this organization
+              {t('clientDetail.teamMembers')}
             </CardDescription>
           </div>
         </CardHeader>
         <CardContent>
           {client.employees.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">
-              No employees found
+              {t('clientDetail.noEmployeesFound')}
             </p>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -582,9 +582,9 @@ export default function ClientDetail({ clientData }: Props) {
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="font-medium truncate">{employee.name || "Unnamed"}</p>
+                      <p className="font-medium truncate">{employee.name || t('clientDetail.unnamed')}</p>
                       {employee.disabled && (
-                        <Badge variant="secondary" className="text-xs">Disabled</Badge>
+                        <Badge variant="secondary" className="text-xs">{t('clientDetail.disabled')}</Badge>
                       )}
                     </div>
                     <p className="text-sm text-muted-foreground truncate">{employee.email}</p>
@@ -598,18 +598,18 @@ export default function ClientDetail({ clientData }: Props) {
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => handleEditEmployee(employee)}>
                         <Pencil className="h-4 w-4 mr-2" />
-                        Edit Name
+                        {t('clientDetail.editName')}
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleToggleEmployee(employee)}>
                         {employee.disabled ? (
                           <>
                             <UserCheck className="h-4 w-4 mr-2" />
-                            Enable
+                            {t('clientDetail.enable')}
                           </>
                         ) : (
                           <>
                             <UserX className="h-4 w-4 mr-2" />
-                            Disable
+                            {t('clientDetail.disable')}
                           </>
                         )}
                       </DropdownMenuItem>
@@ -619,7 +619,7 @@ export default function ClientDetail({ clientData }: Props) {
                         className="text-destructive focus:text-destructive"
                       >
                         <Trash2 className="h-4 w-4 mr-2" />
-                        Remove
+                        {t('clientDetail.remove')}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -634,14 +634,14 @@ export default function ClientDetail({ clientData }: Props) {
       <Dialog open={!!editingEmployee} onOpenChange={(open) => !open && setEditingEmployee(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Employee</DialogTitle>
+            <DialogTitle>{t('clientDetail.editEmployee')}</DialogTitle>
             <DialogDescription>
-              Update the employee's name
+              {t('clientDetail.updateEmployeeName')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="employee-name">Name</Label>
+              <Label htmlFor="employee-name">{t('clientDetail.name')}</Label>
               <Input
                 id="employee-name"
                 value={editEmployeeForm.name}
@@ -651,10 +651,10 @@ export default function ClientDetail({ clientData }: Props) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingEmployee(null)}>
-              Cancel
+              {t('clientDetail.cancel')}
             </Button>
             <Button onClick={handleSaveEmployee} disabled={isEmployeeActionLoading}>
-              {isEmployeeActionLoading ? "Saving..." : "Save"}
+              {isEmployeeActionLoading ? t('clientDetail.saving') : t('clientDetail.save')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -664,19 +664,18 @@ export default function ClientDetail({ clientData }: Props) {
       <AlertDialog open={!!deletingEmployee} onOpenChange={(open) => !open && setDeletingEmployee(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove Employee</AlertDialogTitle>
+            <AlertDialogTitle>{t('clientDetail.removeEmployee')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to remove <strong>{deletingEmployee?.name}</strong> from this client? 
-              This will revoke their access to the platform. This action cannot be undone.
+              {t('clientDetail.removeEmployeeConfirm', { name: deletingEmployee?.name })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t('clientDetail.cancel')}</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleDeleteEmployee}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isEmployeeActionLoading ? "Removing..." : "Remove"}
+              {isEmployeeActionLoading ? t('clientDetail.removing') : t('clientDetail.remove')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
