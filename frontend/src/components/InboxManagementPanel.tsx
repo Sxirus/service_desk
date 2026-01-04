@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Inbox,
   Plus,
@@ -54,6 +55,7 @@ interface Props {
 }
 
 const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
+  const { t } = useTranslation('manage');
   const [inboxes, setInboxes] = useState<Inbox[]>([]);
   const [selectedInbox, setSelectedInbox] = useState<Inbox | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -151,7 +153,7 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
   // Create inbox
   const handleCreate = async () => {
     if (!formName.trim()) {
-      toast.error('Please enter an inbox name');
+      toast.error(t('inboxes.enterInboxName'));
       return;
     }
 
@@ -213,10 +215,10 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
 
       await loadInboxes();
       resetForm();
-      toast.success('Inbox created successfully!');
+      toast.success(t('inboxes.inboxCreated'));
     } catch (error) {
       console.error('Failed to create inbox:', error);
-      toast.error('Failed to create inbox');
+      toast.error(t('inboxes.createFailed'));
     }
   };
 
@@ -289,10 +291,10 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
       await loadInboxes();
       resetForm();
       setSelectedInbox(null);
-      toast.success('Inbox updated successfully!');
+      toast.success(t('inboxes.inboxUpdated'));
     } catch (error) {
       console.error('Failed to update inbox:', error);
-      toast.error('Failed to update inbox');
+      toast.error(t('inboxes.updateFailed'));
     }
   };
 
@@ -313,10 +315,10 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
         setSelectedInbox(null);
         resetForm();
       }
-      toast.success('Inbox deleted successfully!');
+      toast.success(t('inboxes.inboxDeleted'));
     } catch (error) {
       console.error('Failed to delete inbox:', error);
-      toast.error('Failed to delete inbox');
+      toast.error(t('inboxes.deleteFailed'));
     } finally {
       setDeleteDialogOpen(false);
       setInboxToDelete(null);
@@ -342,7 +344,7 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
   };
 
   if (loading) {
-    return <div className="p-6">Loading inboxes...</div>;
+    return <div className="p-6">{t('inboxes.loadingInboxes')}</div>;
   }
 
   return (
@@ -350,7 +352,7 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div className="flex items-center gap-2">
           <Inbox className="w-5 h-5 text-muted-foreground" />
-          <h2 className="text-2xl font-semibold tracking-tight">Inbox Management</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">{t('inboxes.title')}</h2>
         </div>
         <Button
           onClick={() => {
@@ -359,14 +361,14 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
           }}
         >
           <Plus className="w-4 h-4 mr-2" />
-          New Inbox
+          {t('inboxes.newInbox')}
         </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Inbox List */}
         <div className="lg:col-span-1">
-          <h3 className="text-lg font-semibold mb-4">Inboxes ({inboxes.length})</h3>
+          <h3 className="text-lg font-semibold mb-4">{t('inboxes.inboxesCount', { count: inboxes.length })}</h3>
           <div className="space-y-2">
             {inboxes.map(inbox => (
               <div
@@ -391,11 +393,11 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
                     <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
                       <span className="flex items-center gap-1">
                         <Users className="w-3 h-3" />
-                        {inbox.inbox_groups.length} groups
+                        {inbox.inbox_groups.length} {t('groups.groups')}
                       </span>
                       <span className="flex items-center gap-1">
                         <Filter className="w-3 h-3" />
-                        {inbox.inbox_filters.length} filters
+                        {inbox.inbox_filters.length} {t('inboxes.filters')}
                       </span>
                     </div>
                   </div>
@@ -416,7 +418,7 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
             {inboxes.length === 0 && (
               <div className="text-center text-gray-500 py-8">
                 <Mail className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p>No inboxes yet</p>
+                <p>{t('inboxes.noInboxesYet')}</p>
               </div>
             )}
           </div>
@@ -427,29 +429,29 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
           {isCreating || isEditing ? (
             <div>
               <h3 className="text-lg font-semibold mb-4">
-                {isCreating ? 'Create New Inbox' : 'Edit Inbox'}
+                {isCreating ? t('inboxes.createNewInbox') : t('inboxes.editInbox')}
               </h3>
               
               {/* Basic Info */}
               <div className="space-y-4 mb-6">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Inbox Name *</label>
+                  <label className="block text-sm font-medium mb-1">{t('inboxes.inboxName')} *</label>
                   <input
                     type="text"
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., First Level Support"
+                    placeholder={t('inboxes.inboxNamePlaceholder')}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Description</label>
+                  <label className="block text-sm font-medium mb-1">{t('groups.description')}</label>
                   <textarea
                     value={formDescription}
                     onChange={(e) => setFormDescription(e.target.value)}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                     rows={2}
-                    placeholder="Optional description"
+                    placeholder={t('groups.optionalDescription')}
                   />
                 </div>
               </div>
@@ -458,7 +460,7 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
               <div className="mb-6">
                 <label className="block text-sm font-medium mb-2">
                   <Users className="w-4 h-4 inline mr-1" />
-                  Access Groups
+                  {t('inboxes.accessGroups')}
                 </label>
                 <div className="border rounded-lg p-3 max-h-40 overflow-y-auto">
                   {groups.map(group => (
@@ -473,7 +475,7 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
                     </label>
                   ))}
                   {groups.length === 0 && (
-                    <p className="text-sm text-gray-500">No groups available</p>
+                    <p className="text-sm text-gray-500">{t('groups.noGroupsAvailable')}</p>
                   )}
                 </div>
               </div>
@@ -482,7 +484,7 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
               <div className="mb-6">
                 <label className="block text-sm font-medium mb-2">
                   <Filter className="w-4 h-4 inline mr-1" />
-                  Email Filters
+                  {t('inboxes.emailFilters')}
                 </label>
                 
                 {/* Status Filter */}
@@ -564,7 +566,7 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
 
                 {/* Assignment Filter */}
                 <div className="border rounded-lg p-3">
-                  <div className="text-sm font-medium mb-2">Assignment</div>
+                  <div className="text-sm font-medium mb-2">{t('inboxes.assignment')}</div>
                   <div className="space-y-2">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -573,7 +575,7 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
                         checked={assignmentFilter === 'all'}
                         onChange={() => setAssignmentFilter('all')}
                       />
-                      <span>All tickets</span>
+                      <span>{t('inboxes.allTickets')}</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -582,7 +584,7 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
                         checked={assignmentFilter === 'unassigned'}
                         onChange={() => setAssignmentFilter('unassigned')}
                       />
-                      <span>Unassigned only</span>
+                      <span>{t('inboxes.unassignedOnly')}</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -591,7 +593,7 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
                         checked={assignmentFilter === 'groups'}
                         onChange={() => setAssignmentFilter('groups')}
                       />
-                      <span>Specific groups</span>
+                      <span>{t('inboxes.specificGroups')}</span>
                     </label>
                     
                     {assignmentFilter === 'groups' && (
@@ -617,11 +619,11 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
               <div className="flex gap-2">
                 <Button onClick={isCreating ? handleCreate : handleUpdate}>
                   <Save className="w-4 h-4 mr-2" />
-                  {isCreating ? 'Create Inbox' : 'Save Changes'}
+                  {isCreating ? t('inboxes.createInbox') : t('common.saveChanges')}
                 </Button>
                 <Button variant="outline" onClick={resetForm}>
                   <X className="w-4 h-4 mr-2" />
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
               </div>
             </div>
@@ -638,7 +640,7 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
                   }}
                 >
                   <Edit2 className="w-4 h-4 mr-2" />
-                  Edit
+                  {t('common.edit')}
                 </Button>
               </div>
 
@@ -649,7 +651,7 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
               <div className="space-y-4">
                 {/* Access Groups */}
                 <div>
-                  <div className="text-sm font-medium mb-2">Access Groups</div>
+                  <div className="text-sm font-medium mb-2">{t('inboxes.accessGroups')}</div>
                   <div className="flex flex-wrap gap-2">
                     {selectedInbox.inbox_groups.map(ig => (
                       <span
@@ -660,14 +662,14 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
                       </span>
                     ))}
                     {selectedInbox.inbox_groups.length === 0 && (
-                      <span className="text-sm text-gray-500">No groups assigned</span>
+                      <span className="text-sm text-gray-500">{t('inboxes.noGroupsAssigned')}</span>
                     )}
                   </div>
                 </div>
 
                 {/* Filters */}
                 <div>
-                  <div className="text-sm font-medium mb-2">Active Filters</div>
+                  <div className="text-sm font-medium mb-2">{t('inboxes.activeFilters')}</div>
                   <div className="space-y-2">
                     {selectedInbox.inbox_filters.map((filter, idx) => (
                       <div key={idx} className="px-3 py-2 bg-gray-50 rounded border text-sm">
@@ -678,7 +680,7 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
                       </div>
                     ))}
                     {selectedInbox.inbox_filters.length === 0 && (
-                      <span className="text-sm text-gray-500">No filters configured</span>
+                      <span className="text-sm text-gray-500">{t('inboxes.noFiltersConfigured')}</span>
                     )}
                   </div>
                 </div>
@@ -687,7 +689,7 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
           ) : (
             <div className="text-center text-gray-500 py-12">
               <Inbox className="w-16 h-16 mx-auto mb-4 opacity-30" />
-              <p>Select an inbox to view details or create a new one</p>
+              <p>{t('inboxes.selectInboxOrCreate')}</p>
             </div>
           )}
         </div>
@@ -697,16 +699,15 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle>{t('common.areYouSure')}</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete this inbox and remove all associated groups and filters.
-              This action cannot be undone.
+              {t('inboxes.deleteWarning')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
-              Delete
+              {t('common.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

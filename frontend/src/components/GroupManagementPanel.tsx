@@ -10,6 +10,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { apiClient } from '@/utils/api';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -38,6 +39,7 @@ interface GroupManagementPanelProps {
 }
 
 export const GroupManagementPanel: React.FC<GroupManagementPanelProps> = ({ employees }) => {
+  const { t } = useTranslation('manage');
   const [groups, setGroups] = useState<Group[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
@@ -140,7 +142,7 @@ export const GroupManagementPanel: React.FC<GroupManagementPanelProps> = ({ empl
   };
 
   const handleDeleteGroup = async (groupId: number) => {
-    if (!confirm('Are you sure you want to delete this group? This will remove all member assignments.')) {
+    if (!confirm(t('groups.confirmDeleteWithMembers'))) {
       return;
     }
 
@@ -235,44 +237,44 @@ export const GroupManagementPanel: React.FC<GroupManagementPanelProps> = ({ empl
             <Users className="h-5 w-5 text-violet-600" />
           </div>
           <div>
-            <h3 className="font-medium">{groups.length} Groups</h3>
-            <p className="text-xs text-muted-foreground">Manage team organization</p>
+            <h3 className="font-medium">{t('groups.groupCount', { count: groups.length })}</h3>
+            <p className="text-xs text-muted-foreground">{t('groups.manageTeamOrganization')}</p>
           </div>
         </div>
         <Button size="sm" onClick={() => setIsCreating(true)} className="gap-2">
           <Plus className="h-4 w-4" />
-          New Group
+          {t('groups.newGroup')}
         </Button>
       </div>
 
       {/* Create Group Form */}
       {isCreating && (
         <div className="rounded-xl border bg-muted/30 p-5">
-          <h4 className="text-sm font-medium mb-4">Create New Group</h4>
+          <h4 className="text-sm font-medium mb-4">{t('groups.createNewGroup')}</h4>
           <form onSubmit={handleCreateGroup} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Group Name *</label>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('groups.groupName')} *</label>
               <input
                 type="text"
                 value={groupName}
                 onChange={(e) => setGroupName(e.target.value)}
                 className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                placeholder="e.g., Support Team, Sales Department"
+                placeholder={t('groups.groupNamePlaceholder')}
                 required
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Description</label>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('groups.description')}</label>
               <textarea
                 value={groupDescription}
                 onChange={(e) => setGroupDescription(e.target.value)}
                 className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                placeholder="Optional description"
+                placeholder={t('groups.optionalDescription')}
                 rows={2}
               />
             </div>
             <div className="flex gap-2">
-              <Button type="submit" size="sm">Create Group</Button>
+              <Button type="submit" size="sm">{t('groups.createGroup')}</Button>
               <Button 
                 type="button" 
                 variant="ghost" 
@@ -283,7 +285,7 @@ export const GroupManagementPanel: React.FC<GroupManagementPanelProps> = ({ empl
                   setGroupDescription('');
                 }}
               >
-                Cancel
+                {t('common.cancel')}
               </Button>
             </div>
           </form>
@@ -294,14 +296,14 @@ export const GroupManagementPanel: React.FC<GroupManagementPanelProps> = ({ empl
         {/* Groups List */}
         <div className="rounded-xl border bg-card">
           <div className="px-4 py-3 border-b">
-            <h4 className="text-sm font-medium">All Groups</h4>
+            <h4 className="text-sm font-medium">{t('groups.allGroups')}</h4>
           </div>
           <div className="p-3 space-y-2 max-h-[400px] overflow-y-auto">
             {groups.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No groups yet</p>
-                <p className="text-xs">Create one to organize your team</p>
+                <p className="text-sm">{t('groups.noGroupsYet')}</p>
+                <p className="text-xs">{t('groups.createToOrganize')}</p>
               </div>
             ) : (
               groups.map((group) => (
@@ -358,14 +360,14 @@ export const GroupManagementPanel: React.FC<GroupManagementPanelProps> = ({ empl
             <>
               <div className="px-4 py-3 border-b">
                 <h4 className="text-sm font-medium">
-                  {isEditing ? 'Edit Group' : selectedGroup.name}
+                  {isEditing ? t('groups.editGroup') : selectedGroup.name}
                 </h4>
               </div>
               <div className="p-4 space-y-4">
                 {isEditing ? (
                   <form onSubmit={handleUpdateGroup} className="space-y-4">
                     <div>
-                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">Group Name *</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('groups.groupName')} *</label>
                       <input
                         type="text"
                         value={groupName}
@@ -375,7 +377,7 @@ export const GroupManagementPanel: React.FC<GroupManagementPanelProps> = ({ empl
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">Description</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">{t('groups.description')}</label>
                       <textarea
                         value={groupDescription}
                         onChange={(e) => setGroupDescription(e.target.value)}
@@ -384,9 +386,9 @@ export const GroupManagementPanel: React.FC<GroupManagementPanelProps> = ({ empl
                       />
                     </div>
                     <div className="flex gap-2">
-                      <Button type="submit" size="sm">Save Changes</Button>
+                      <Button type="submit" size="sm">{t('common.saveChanges')}</Button>
                       <Button type="button" size="sm" variant="ghost" onClick={cancelEdit}>
-                        Cancel
+                        {t('common.cancel')}
                       </Button>
                     </div>
                   </form>
@@ -400,7 +402,7 @@ export const GroupManagementPanel: React.FC<GroupManagementPanelProps> = ({ empl
                       <div className="flex items-center gap-2 mb-2">
                         <Users className="h-4 w-4 text-muted-foreground" />
                         <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                          Members ({groupMembers.length})
+                          {t('groups.members')} ({groupMembers.length})
                         </h4>
                       </div>
                       <div className="space-y-1 max-h-[150px] overflow-y-auto">
@@ -421,7 +423,7 @@ export const GroupManagementPanel: React.FC<GroupManagementPanelProps> = ({ empl
                           </div>
                         ))}
                         {groupMembers.length === 0 && (
-                          <p className="text-xs text-muted-foreground py-2">No members in this group</p>
+                          <p className="text-xs text-muted-foreground py-2">{t('groups.noMembersInGroup')}</p>
                         )}
                       </div>
                     </div>
@@ -431,7 +433,7 @@ export const GroupManagementPanel: React.FC<GroupManagementPanelProps> = ({ empl
                         <div className="flex items-center gap-2 mb-2">
                           <UserPlus className="h-4 w-4 text-muted-foreground" />
                           <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Add Members
+                            {t('groups.addMembers')}
                           </h4>
                         </div>
                         <div className="space-y-1 max-h-[150px] overflow-y-auto">
@@ -461,8 +463,8 @@ export const GroupManagementPanel: React.FC<GroupManagementPanelProps> = ({ empl
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
               <Users className="h-8 w-8 mb-2 opacity-50" />
-              <p className="text-sm">Select a group</p>
-              <p className="text-xs">to view and manage members</p>
+              <p className="text-sm">{t('groups.selectGroup')}</p>
+              <p className="text-xs">{t('groups.toViewAndManageMembers')}</p>
             </div>
           )}
         </div>

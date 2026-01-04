@@ -20,6 +20,11 @@ import { getCompletePageContext } from "../../lib/auth-helpers.ts";
 import { createPageLogger, perf } from "../../utils/logger.ts";
 import AdminShell from "@/components/AdminShell";
 import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const tCommon = getTranslations(lang, 'common');
 
 const log = createPageLogger('analytics');
 log.info('Analytics page accessed');
@@ -380,14 +385,14 @@ perf.printReport('analytics');
 log.info('Analytics page setup complete');
 ---
 
-<BaseLayout title="Analytics - Service Desk">
+<BaseLayout title={tCommon.t('pages.analytics.pageTitle')}>
   <AdminShell 
     client:load
     user={sidebarData.user}
     firstTeam={sidebarData.team ?? undefined}
-    crumbParentLabel="Administration"
+    crumbParentLabel={tCommon.t('sidebar.administration')}
     crumbParentHref="/manage/settings"
-    crumbCurrent="Analytics"
+    crumbCurrent={tCommon.t('sidebar.analytics')}
     isAdmin={authContext.isAdmin}
     isPlatformAdmin={pageContext.isPlatformAdmin}
     currentPath="/manage/analytics"

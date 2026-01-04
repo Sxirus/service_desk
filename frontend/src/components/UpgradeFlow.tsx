@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CheckoutProvider, PaymentElement, useCheckout } from '@stripe/react-stripe-js/checkout';
 import { stripePromise } from '@/lib/stripe';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,7 @@ function CheckoutForm({
   onSuccess: () => void; 
   onCancel: () => void;
 }) {
+  const { t } = useTranslation('manage');
   const checkoutState = useCheckout();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +86,7 @@ function CheckoutForm({
     return (
       <Card className="border-destructive">
         <CardHeader>
-          <CardTitle className="text-destructive">Error Loading Payment</CardTitle>
+          <CardTitle className="text-destructive">{t('subscription.upgradeFlow.errorLoadingPayment')}</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground mb-4">
@@ -92,7 +94,7 @@ function CheckoutForm({
           </p>
           <Button onClick={onCancel} variant="outline">
             <ChevronLeft className="mr-2 h-4 w-4" />
-            Go Back
+            {t('subscription.upgradeFlow.goBack')}
           </Button>
         </CardContent>
       </Card>
@@ -103,43 +105,43 @@ function CheckoutForm({
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Pro Plan Summary</CardTitle>
+          <CardTitle>{t('subscription.upgradeFlow.proPlanSummary')}</CardTitle>
           <CardDescription>
-            Upgrade to unlock unlimited users and emails
+            {t('subscription.upgradeFlow.upgradeToUnlock')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <div className="flex items-center text-sm">
               <Check className="h-4 w-4 mr-2 text-primary" />
-              <span>Unlimited user accounts</span>
+              <span>{t('subscription.upgradeFlow.unlimitedUserAccounts')}</span>
             </div>
             <div className="flex items-center text-sm">
               <Check className="h-4 w-4 mr-2 text-primary" />
-              <span>Unlimited emails per month</span>
+              <span>{t('subscription.upgradeFlow.unlimitedEmailsPerMonth')}</span>
             </div>
             <div className="flex items-center text-sm">
               <Check className="h-4 w-4 mr-2 text-primary" />
-              <span>Priority support</span>
+              <span>{t('subscription.upgradeFlow.prioritySupportFeature')}</span>
             </div>
             <div className="flex items-center text-sm">
               <Check className="h-4 w-4 mr-2 text-primary" />
-              <span>Advanced analytics</span>
+              <span>{t('subscription.upgradeFlow.advancedAnalyticsFeature')}</span>
             </div>
           </div>
 
           <div className="border-t pt-4">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-sm text-muted-foreground">Users</span>
+              <span className="text-sm text-muted-foreground">{t('subscription.upgradeFlow.users')}</span>
               <span className="font-medium">{quantity}</span>
             </div>
             <div className="flex justify-between items-center mb-2">
-              <span className="text-sm text-muted-foreground">Price per user</span>
-              <span className="font-medium">€{pricePerUser.toFixed(2)}/month</span>
+              <span className="text-sm text-muted-foreground">{t('subscription.upgradeFlow.pricePerUser')}</span>
+              <span className="font-medium">€{pricePerUser.toFixed(2)}{t('subscription.upgradeFlow.perMonth')}</span>
             </div>
             <div className="flex justify-between items-center text-lg font-bold">
-              <span>Total</span>
-              <span>€{totalPrice}/month</span>
+              <span>{t('subscription.upgradeFlow.total')}</span>
+              <span>€{totalPrice}{t('subscription.upgradeFlow.perMonth')}</span>
             </div>
           </div>
         </CardContent>
@@ -147,7 +149,7 @@ function CheckoutForm({
 
       <Card>
         <CardHeader>
-          <CardTitle>Payment Details</CardTitle>
+          <CardTitle>{t('subscription.upgradeFlow.paymentDetails')}</CardTitle>
         </CardHeader>
         <CardContent>
           <PaymentElement />
@@ -167,7 +169,7 @@ function CheckoutForm({
           className="flex-1"
         >
           <ChevronLeft className="mr-2 h-4 w-4" />
-          Cancel
+          {t('subscription.upgradeFlow.cancel')}
         </Button>
         <Button
           onClick={handlePayment}
@@ -177,12 +179,12 @@ function CheckoutForm({
           {loading ? (
             <>
               <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-              Processing...
+              {t('subscription.upgradeFlow.processing')}
             </>
           ) : (
             <>
               <Sparkles className="mr-2 h-4 w-4" />
-              Complete Upgrade
+              {t('subscription.upgradeFlow.upgradeNow')}
             </>
           )}
         </Button>
@@ -195,6 +197,7 @@ function CheckoutForm({
  * Main UpgradeFlow component
  */
 export default function UpgradeFlow({ priceId, quantity, onSuccess, onCancel }: UpgradeFlowProps) {
+  const { t } = useTranslation('manage');
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -235,7 +238,7 @@ export default function UpgradeFlow({ priceId, quantity, onSuccess, onCancel }: 
     return (
       <div className="flex items-center justify-center py-12">
         <RefreshCw className="h-8 w-8 animate-spin text-primary" />
-        <span className="ml-3 text-muted-foreground">Initializing payment...</span>
+        <span className="ml-3 text-muted-foreground">{t('subscription.upgradeFlow.settingUpSecureCheckout')}</span>
       </div>
     );
   }
@@ -244,20 +247,20 @@ export default function UpgradeFlow({ priceId, quantity, onSuccess, onCancel }: 
     return (
       <Card className="border-destructive">
         <CardHeader>
-          <CardTitle className="text-destructive">Error</CardTitle>
+          <CardTitle className="text-destructive">{t('subscription.upgradeFlow.errorTitle')}</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground mb-4">
-            {error || 'Failed to initialize payment'}
+            {error || t('subscription.upgradeFlow.failedToInitialize')}
           </p>
           <div className="flex gap-3">
             <Button onClick={onCancel} variant="outline">
               <ChevronLeft className="mr-2 h-4 w-4" />
-              Go Back
+              {t('subscription.upgradeFlow.goBack')}
             </Button>
             <Button onClick={initCheckout} variant="default">
               <RefreshCw className="mr-2 h-4 w-4" />
-              Retry
+              {t('subscription.upgradeFlow.tryAgain')}
             </Button>
           </div>
         </CardContent>

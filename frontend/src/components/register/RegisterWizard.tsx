@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -53,59 +54,59 @@ const TOTAL_STEPS = 6;
 /* =========================
    STEP 1: Account schema
    ========================= */
-const accountSchema = z.object({
-  firstName: z.string().min(1, "Please enter your first name."),
-  lastName: z.string().min(1, "Please enter your last name."),
-  email: z.string().email("Please enter a valid work email."),
-  password: z.string().min(8, "Password must be at least 8 characters."),
+const createAccountSchema = (t: (key: string) => string) => z.object({
+  firstName: z.string().min(1, t('auth:wizard.validation.firstNameRequired')),
+  lastName: z.string().min(1, t('auth:wizard.validation.lastNameRequired')),
+  email: z.string().email(t('auth:wizard.validation.validEmail')),
+  password: z.string().min(8, t('auth:wizard.validation.passwordMinLength')),
 });
-type AccountFormData = z.infer<typeof accountSchema>;
+type AccountFormData = z.infer<ReturnType<typeof createAccountSchema>>;
 
 /* =========================
    STEP 2: Company schema
    ========================= */
-const companySchema = z.object({
-  name: z.string().min(2, "Please enter your company name."),
-  address_street: z.string().min(2, "Please enter a street and number."),
-  address_zip: z.string().min(2, "Please enter a ZIP / postal code."),
-  address_city: z.string().min(2, "Please enter a city."),
-  address_country: z.string().min(2, "Please enter a country."),
+const createCompanySchema = (t: (key: string) => string) => z.object({
+  name: z.string().min(2, t('auth:wizard.validation.companyNameRequired')),
+  address_street: z.string().min(2, t('auth:wizard.validation.companyStreetRequired')),
+  address_zip: z.string().min(2, t('auth:wizard.validation.companyPostalRequired')),
+  address_city: z.string().min(2, t('auth:wizard.validation.companyCityRequired')),
+  address_country: z.string().min(2, t('auth:wizard.validation.companyCountryRequired')),
   website: z
     .string()
     .transform((v) => v.trim())
     .refine(
       (v) => v === "" || /^https?:\/\//i.test(v),
-      "Website should start with http:// or https:// (or leave it empty)."
+      t('auth:wizard.validation.companyWebsiteInvalid')
     )
     .optional()
     .nullable(),
   vat: z.string().optional().nullable(),
 });
-type CompanyFormData = z.infer<typeof companySchema>;
+type CompanyFormData = z.infer<ReturnType<typeof createCompanySchema>>;
 
 /* =========================
    STEP 3: Support mailbox schema
    ========================= */
-const supportSchema = z.object({
-  provider_id: z.coerce.number().int().positive("Choose a provider."),
-  email_address: z.string().email("Please enter a valid email."),
-  password: z.string().min(1, "Please enter the mailbox password."),
-  imap: z.string().min(1, "IMAP host required."),
-  imap_port: z.coerce.number().int().min(1),
-  smtp: z.string().min(1, "SMTP host required."),
-  smtp_port: z.coerce.number().int().min(1),
+const createSupportSchema = (t: (key: string) => string) => z.object({
+  provider_id: z.coerce.number().int().positive(t('validation:select.required')),
+  email_address: z.string().email(t('auth:wizard.validation.validEmail')),
+  password: z.string().min(1, t('auth:wizard.validation.inboxPasswordRequired')),
+  imap: z.string().min(1, t('auth:wizard.validation.imapHostRequired')),
+  imap_port: z.coerce.number().int().min(1, t('auth:wizard.validation.imapPortRequired')),
+  smtp: z.string().min(1, t('auth:wizard.validation.smtpHostRequired')),
+  smtp_port: z.coerce.number().int().min(1, t('auth:wizard.validation.smtpPortRequired')),
 });
-type SupportFormData = z.infer<typeof supportSchema>;
+type SupportFormData = z.infer<ReturnType<typeof createSupportSchema>>;
 
 /* =========================
    STEP 4: Team invite schema
    ========================= */
-const teamMemberSchema = z.object({
-  email: z.string().email("Please enter a valid email."),
-  name: z.string().min(1, "Please enter a name."),
-  role_id: z.coerce.number().int().positive("Please select a role."),
+const createTeamMemberSchema = (t: (key: string) => string) => z.object({
+  email: z.string().min(1, t('auth:wizard.validation.teamEmailRequired')).email(t('auth:wizard.validation.teamEmailInvalid')),
+  name: z.string().min(1, t('validation:name.required')),
+  role_id: z.coerce.number().int().positive(t('auth:wizard.validation.teamRoleRequired')),
 });
-type TeamMemberData = z.infer<typeof teamMemberSchema>;
+type TeamMemberData = z.infer<ReturnType<typeof createTeamMemberSchema>>;
 
 /* =========================
    Turnstile (sichtbar, normal)
@@ -230,6 +231,8 @@ function OneQuestionLayout({
   children,
   onBack,
   onNextLabel = "Continue",
+  backLabel = "Back",
+  workingLabel = "Working...",
   showBack = true,
   nextDisabled,
   onSubmit,
@@ -242,6 +245,8 @@ function OneQuestionLayout({
   children: React.ReactNode;
   onBack?: () => void;
   onNextLabel?: string;
+  backLabel?: string;
+  workingLabel?: string;
   showBack?: boolean;
   nextDisabled?: boolean;
   submitting?: boolean;
@@ -265,7 +270,7 @@ function OneQuestionLayout({
             {showBack ? (
               <Button type="button" variant="outline" onClick={onBack}>
                 <ChevronLeft className="mr-2 h-4 w-4" />
-                Back
+                {backLabel}
               </Button>
             ) : (
               <div />
@@ -276,7 +281,7 @@ function OneQuestionLayout({
                 {submitting ? (
                   <>
                     <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-b-transparent" />
-                    Working...
+                    {workingLabel}
                   </>
                 ) : (
                   <>
@@ -297,6 +302,14 @@ function OneQuestionLayout({
    Component
    ========================= */
 export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, currentUser }: Props) {
+  const { t } = useTranslation(['auth', 'common', 'validation']);
+
+  // Create translated schemas
+  const accountSchema = React.useMemo(() => createAccountSchema(t), [t]);
+  const companySchema = React.useMemo(() => createCompanySchema(t), [t]);
+  const supportSchema = React.useMemo(() => createSupportSchema(t), [t]);
+  const teamMemberSchema = React.useMemo(() => createTeamMemberSchema(t), [t]);
+
   /* ---- Step control ---- */
   const [step, setStep] = useState<number>(initialStep);
 
@@ -404,7 +417,7 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
     const okAll = await accountForm.trigger();
     if (!okAll) return;
     if (!cfToken) {
-      alert("Please complete the captcha to continue.");
+      alert(t('auth:wizard.validation.completeCaptcha'));
       return;
     }
 
@@ -420,13 +433,13 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
         captchaToken: cfToken,
       });
 
-      if (!res?.data?.success) throw new Error(res?.data?.message || "Registration failed");
+      if (!res?.data?.success) throw new Error(res?.data?.message || t('auth:wizard.errors.registrationFailed'));
       try {
         localStorage.removeItem(accStorageKey);
       } catch {}
       setStep(2); // move to Company
     } catch (e: any) {
-      alert(e?.message ?? "Unexpected error");
+      alert(e?.message ?? t('auth:wizard.errors.unexpectedError'));
     } finally {
       setSubmittingAccount(false);
     }
@@ -547,13 +560,13 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
         vat: companyForm.getValues("vat") || null,
       });
 
-      if (!res?.data?.success) throw new Error(res?.data?.message || "Could not create company");
+      if (!res?.data?.success) throw new Error(res?.data?.message || t('auth:wizard.errors.companyCreationFailed'));
       try {
         localStorage.removeItem(compStorageKey);
       } catch {}
       setStep(3); // proceed to Support email
     } catch (e: any) {
-      alert(e?.message ?? "Unexpected error");
+      alert(e?.message ?? t('auth:wizard.errors.unexpectedError'));
     } finally {
       setSubmittingCompany(false);
     }
@@ -711,13 +724,13 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
         smtp_port: supportForm.getValues("smtp_port"),
       });
       if (testRes?.data?.success) {
-        setTestStatus({ ok: true, message: "Connection successful." });
+        setTestStatus({ ok: true, message: t('auth:wizard.errors.connectionSuccessful') });
       } else {
-        setTestStatus({ ok: false, message: (testRes?.data as any)?.message || "Connection failed." });
+        setTestStatus({ ok: false, message: (testRes?.data as any)?.message || t('auth:wizard.errors.connectionFailed') });
       }
       setSupportIdx(4); // Ergebnis-Screen
     } catch (e: any) {
-      setTestStatus({ ok: false, message: e?.message || "Unexpected error" });
+      setTestStatus({ ok: false, message: e?.message || t('auth:wizard.errors.unexpectedError') });
       setSupportIdx(4);
     } finally {
       setSubmittingSupport(false);
@@ -735,8 +748,8 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
   const [addingMember, setAddingMember] = useState(false);
 
   const roles = [
-    { id: 1, name: "Admin" },
-    { id: 2, name: "User" },
+    { id: 1, name: t('auth:wizard.roles.admin') },
+    { id: 2, name: t('auth:wizard.roles.user') },
   ];
 
   const handleAddMember = () => {
@@ -745,7 +758,7 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
       teamMemberSchema.parse(currentMember);
       // Check for duplicate emails
       if (teamMembers.some(m => m.email.toLowerCase() === currentMember.email.toLowerCase())) {
-        alert("This email has already been added.");
+        alert(t('auth:wizard.team.duplicateEmail'));
         return;
       }
       setTeamMembers([...teamMembers, currentMember]);
@@ -754,7 +767,7 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
       if (e.errors && e.errors.length > 0) {
         alert(e.errors[0].message);
       } else {
-        alert("Please fill in all fields correctly.");
+        alert(t('auth:wizard.validation.fillAllFields'));
       }
     }
   };
@@ -789,13 +802,13 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
       const failed = results.filter(r => !r.result?.data?.success);
       if (failed.length > 0) {
         const failedEmails = failed.map(f => f.member.email).join(", ");
-        alert(`Some invites failed: ${failedEmails}`);
+        alert(t('auth:wizard.errors.invitesFailed', { emails: failedEmails }));
       }
 
       // Move to payment plan selection
       setStep(5);
     } catch (e: any) {
-      alert(e?.message || "Unexpected error inviting team members");
+      alert(e?.message || t('auth:wizard.errors.unexpectedError'));
     } finally {
       setSubmittingTeam(false);
     }
@@ -807,26 +820,26 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
   const plans = [
     {
       id: 'free' as const,
-      name: 'Free Tier',
+      name: t('auth:wizard.plan.freeTier.name'),
       price: '€0',
       features: [
-        '1 user account',
-        'Send up to 50 emails/month',
-        'Basic support',
-        'Email management',
+        t('auth:wizard.plan.freeTier.feature1'),
+        t('auth:wizard.plan.freeTier.feature2'),
+        t('auth:wizard.plan.freeTier.feature3'),
+        t('auth:wizard.plan.freeTier.feature4'),
       ],
     },
     {
       id: 'paid' as const,
-      name: 'Pro Plan',
+      name: t('auth:wizard.plan.proPlan.name'),
       price: '€9.99',
-      priceNote: 'per user/month',
+      priceNote: t('auth:wizard.plan.proPlan.priceNote'),
       features: [
-        'Unlimited users',
-        'Unlimited emails',
-        'Priority support',
-        'Advanced analytics',
-        'Custom integrations',
+        t('auth:wizard.plan.proPlan.feature1'),
+        t('auth:wizard.plan.proPlan.feature2'),
+        t('auth:wizard.plan.proPlan.feature3'),
+        t('auth:wizard.plan.proPlan.feature4'),
+        t('auth:wizard.plan.proPlan.feature5'),
       ],
     },
   ];
@@ -891,10 +904,13 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
           {accountIdx === 0 && (
             <OneQuestionLayout
               icon={<UserIcon className="h-5 w-5" />}
-              title="What's your first name?"
-              description="We will use it in your account profile."
+              title={t('auth:wizard.account.firstName.title')}
+              description={t('auth:wizard.account.firstName.description')}
               showBack={false}
               onSubmit={nextAccount}
+              onNextLabel={t('common:continue')}
+              backLabel={t('common:back')}
+              workingLabel={t('common:working')}
             >
               <Form {...accountForm}>
                 <FormField
@@ -902,9 +918,9 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                   name="firstName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>First name</FormLabel>
+                      <FormLabel>{t('auth:register.firstNameLabel')}</FormLabel>
                       <FormControl>
-                        <Input autoFocus placeholder="Jane" {...field} />
+                        <Input autoFocus placeholder={t('auth:register.firstNamePlaceholder')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -917,10 +933,13 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
           {accountIdx === 1 && (
             <OneQuestionLayout
               icon={<UserIcon className="h-5 w-5" />}
-              title="And your last name?"
-              description="This helps personalize your workspace."
+              title={t('auth:wizard.account.lastName.title')}
+              description={t('auth:wizard.account.lastName.description')}
               onBack={backAccount}
               onSubmit={nextAccount}
+              onNextLabel={t('common:continue')}
+              backLabel={t('common:back')}
+              workingLabel={t('common:working')}
             >
               <Form {...accountForm}>
                 <FormField
@@ -928,9 +947,9 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                   name="lastName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Last name</FormLabel>
+                      <FormLabel>{t('auth:register.lastNameLabel')}</FormLabel>
                       <FormControl>
-                        <Input autoFocus placeholder="Doe" {...field} />
+                        <Input autoFocus placeholder={t('auth:register.lastNamePlaceholder')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -943,10 +962,13 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
           {accountIdx === 2 && (
             <OneQuestionLayout
               icon={<Mail className="h-5 w-5" />}
-              title="Work email"
-              description="We will use this to log you in."
+              title={t('auth:wizard.account.email.title')}
+              description={t('auth:wizard.account.email.description')}
               onBack={backAccount}
               onSubmit={nextAccount}
+              onNextLabel={t('common:continue')}
+              backLabel={t('common:back')}
+              workingLabel={t('common:working')}
             >
               <Form {...accountForm}>
                 <FormField
@@ -954,9 +976,9 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email</FormLabel>
+                      <FormLabel>{t('auth:register.emailLabel')}</FormLabel>
                       <FormControl>
-                        <Input autoFocus type="email" placeholder="you@company.com" {...field} />
+                        <Input autoFocus type="email" placeholder={t('auth:wizard.account.email.placeholder')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -969,13 +991,15 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
           {accountIdx === 3 && (
             <OneQuestionLayout
               icon={<Lock className="h-5 w-5" />}
-              title="Create a password"
-              description="Minimum 8 characters."
+              title={t('auth:wizard.account.password.title')}
+              description={t('auth:wizard.account.password.description')}
               onBack={backAccount}
-              onNextLabel="Create account"
+              onNextLabel={t('auth:wizard.account.createAccount')}
               onSubmit={doRegister}
               submitting={submittingAccount}
               nextDisabled={submittingAccount || !cfToken}
+              backLabel={t('common:back')}
+              workingLabel={t('common:working')}
             >
               <Form {...accountForm}>
                 <FormField
@@ -983,7 +1007,7 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Password</FormLabel>
+                      <FormLabel>{t('auth:register.passwordLabel')}</FormLabel>
                       <FormControl>
                         <Input autoFocus type="password" placeholder="••••••••" {...field} />
                       </FormControl>
@@ -995,12 +1019,12 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
 
               {siteKey ? (
                 <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">Please complete the captcha to continue.</p>
+                  <p className="text-xs text-muted-foreground">{t('auth:wizard.account.captchaHint')}</p>
                   <TurnstileCompact siteKey={siteKey} cData={regNonce} onToken={setCfToken} />
                 </div>
               ) : (
                 <p className="text-xs text-red-500">
-                  TURNSTILE_SITE_KEY is missing. Set it in your environment to enable captcha.
+                  {t('auth:wizard.account.captchaMissing')}
                 </p>
               )}
             </OneQuestionLayout>
@@ -1015,10 +1039,13 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
           {companyIdx === 0 && (
             <OneQuestionLayout
               icon={<Building2 className="h-5 w-5" />}
-              title="Your company name"
-              description="We will create your workspace with this name."
+              title={t('auth:wizard.company.name.title')}
+              description={t('auth:wizard.company.name.description')}
               onBack={() => setStep(1)}
               onSubmit={nextCompany}
+              onNextLabel={t('common:continue')}
+              backLabel={t('common:back')}
+              workingLabel={t('common:working')}
             >
               <Form {...companyForm}>
                 <FormField
@@ -1026,9 +1053,9 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                   name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Company name</FormLabel>
+                      <FormLabel>{t('auth:wizard.company.name.label')}</FormLabel>
                       <FormControl>
-                        <Input autoFocus placeholder="Acme Inc." {...field} />
+                        <Input autoFocus placeholder={t('auth:wizard.company.name.placeholder')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1041,10 +1068,13 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
           {companyIdx === 1 && (
             <OneQuestionLayout
               icon={<MapPin className="h-5 w-5" />}
-              title="Street and number"
-              description="Where is your company located?"
+              title={t('auth:wizard.company.street.title')}
+              description={t('auth:wizard.company.street.description')}
               onBack={backCompany}
               onSubmit={nextCompany}
+              onNextLabel={t('common:continue')}
+              backLabel={t('common:back')}
+              workingLabel={t('common:working')}
             >
               <Form {...companyForm}>
                 <FormField
@@ -1052,9 +1082,9 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                   name="address_street"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Street</FormLabel>
+                      <FormLabel>{t('auth:wizard.company.street.label')}</FormLabel>
                       <FormControl>
-                        <Input autoFocus placeholder="Main Street 1" {...field} />
+                        <Input autoFocus placeholder={t('auth:wizard.company.street.placeholder')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1067,9 +1097,12 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
           {companyIdx === 2 && (
             <OneQuestionLayout
               icon={<MapPin className="h-5 w-5" />}
-              title="ZIP / Postal code"
+              title={t('auth:wizard.company.zip.title')}
               onBack={backCompany}
               onSubmit={nextCompany}
+              onNextLabel={t('common:continue')}
+              backLabel={t('common:back')}
+              workingLabel={t('common:working')}
             >
               <Form {...companyForm}>
                 <FormField
@@ -1077,9 +1110,9 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                   name="address_zip"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>ZIP</FormLabel>
+                      <FormLabel>{t('auth:wizard.company.zip.label')}</FormLabel>
                       <FormControl>
-                        <Input autoFocus placeholder="10115" {...field} />
+                        <Input autoFocus placeholder={t('auth:wizard.company.zip.placeholder')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1092,9 +1125,12 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
           {companyIdx === 3 && (
             <OneQuestionLayout
               icon={<MapPin className="h-5 w-5" />}
-              title="City"
+              title={t('auth:wizard.company.city.title')}
               onBack={backCompany}
               onSubmit={nextCompany}
+              onNextLabel={t('common:continue')}
+              backLabel={t('common:back')}
+              workingLabel={t('common:working')}
             >
               <Form {...companyForm}>
                 <FormField
@@ -1102,9 +1138,9 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                   name="address_city"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>City</FormLabel>
+                      <FormLabel>{t('auth:wizard.company.city.label')}</FormLabel>
                       <FormControl>
-                        <Input autoFocus placeholder="Berlin" {...field} />
+                        <Input autoFocus placeholder={t('auth:wizard.company.city.placeholder')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1117,9 +1153,12 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
           {companyIdx === 4 && (
             <OneQuestionLayout
               icon={<MapPin className="h-5 w-5" />}
-              title="Country"
+              title={t('auth:wizard.company.country.title')}
               onBack={backCompany}
               onSubmit={nextCompany}
+              onNextLabel={t('common:continue')}
+              backLabel={t('common:back')}
+              workingLabel={t('common:working')}
             >
               <Form {...companyForm}>
                 <FormField
@@ -1127,9 +1166,9 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                   name="address_country"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Country</FormLabel>
+                      <FormLabel>{t('auth:wizard.company.country.label')}</FormLabel>
                       <FormControl>
-                        <Input autoFocus placeholder="Germany" {...field} />
+                        <Input autoFocus placeholder={t('auth:wizard.company.country.placeholder')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1142,13 +1181,16 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
           {companyIdx === 5 && (
             <OneQuestionLayout
               icon={<Globe className="h-5 w-5" />}
-              title="Company website (optional)"
-              description="Add your homepage now or later in Settings."
+              title={t('auth:wizard.company.website.title')}
+              description={t('auth:wizard.company.website.description')}
               onBack={backCompany}
               onSubmit={nextCompany}
+              onNextLabel={t('common:continue')}
+              backLabel={t('common:back')}
+              workingLabel={t('common:working')}
               extraRight={
                 <Button type="button" variant="outline" onClick={skipCompanyOptional}>
-                  Skip
+                  {t('common:skip')}
                 </Button>
               }
             >
@@ -1158,9 +1200,9 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                   name="website"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Website</FormLabel>
+                      <FormLabel>{t('auth:wizard.company.website.label')}</FormLabel>
                       <FormControl>
-                        <Input autoFocus placeholder="https://example.com" {...field} value={field.value ?? ""} />
+                        <Input autoFocus placeholder={t('auth:wizard.company.website.placeholder')} {...field} value={field.value ?? ""} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1173,15 +1215,17 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
           {companyIdx === 6 && (
             <OneQuestionLayout
               icon={<Landmark className="h-5 w-5" />}
-              title="VAT ID (optional)"
-              description="You can add or update this later."
+              title={t('auth:wizard.company.vat.title')}
+              description={t('auth:wizard.company.vat.description')}
               onBack={backCompany}
-              onNextLabel="Create company"
+              onNextLabel={t('auth:wizard.company.createCompany')}
               onSubmit={createCompany}
               submitting={submittingCompany}
+              backLabel={t('common:back')}
+              workingLabel={t('common:working')}
               extraRight={
                 <Button type="button" variant="outline" onClick={skipCompanyOptional}>
-                  Skip
+                  {t('common:skip')}
                 </Button>
               }
             >
@@ -1191,9 +1235,9 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                   name="vat"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>VAT ID</FormLabel>
+                      <FormLabel>{t('auth:wizard.company.vat.label')}</FormLabel>
                       <FormControl>
-                        <Input autoFocus placeholder="DE123456789" {...field} value={field.value ?? ""} />
+                        <Input autoFocus placeholder={t('auth:wizard.company.vat.placeholder')} {...field} value={field.value ?? ""} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1212,11 +1256,14 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
           {supportIdx === 0 && (
             <OneQuestionLayout
               icon={<Inbox className="h-5 w-5" />}
-              title="Choose your email provider"
-              description="We will prefill IMAP/SMTP using this provider."
+              title={t('auth:wizard.support.provider.title')}
+              description={t('auth:wizard.support.provider.description')}
               onBack={() => setStep(2)}
               onSubmit={nextSupport}
               nextDisabled={loadingProviders}
+              onNextLabel={t('common:continue')}
+              backLabel={t('common:back')}
+              workingLabel={t('common:working')}
             >
               {loadingProviders ? (
                 <div className="h-9 w-full animate-pulse rounded-md bg-muted" />
@@ -1227,10 +1274,10 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                     name="provider_id"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Provider</FormLabel>
+                        <FormLabel>{t('auth:wizard.support.provider.label')}</FormLabel>
                         <Select value={String(field.value || "")} onValueChange={onSelectProvider}>
                           <SelectTrigger>
-                            <SelectValue placeholder="Select a provider" />
+                            <SelectValue placeholder={t('auth:wizard.support.provider.placeholder')} />
                           </SelectTrigger>
                           <SelectContent>
                             {providers.map((p) => (
@@ -1253,10 +1300,13 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
           {supportIdx === 1 && (
             <OneQuestionLayout
               icon={<Mail className="h-5 w-5" />}
-              title="Support email address"
-              description="This will be the shared mailbox for your helpdesk."
+              title={t('auth:wizard.support.email.title')}
+              description={t('auth:wizard.support.email.description')}
               onBack={backSupport}
               onSubmit={nextSupport}
+              onNextLabel={t('common:continue')}
+              backLabel={t('common:back')}
+              workingLabel={t('common:working')}
             >
               <Form {...supportForm}>
                 <FormField
@@ -1264,9 +1314,9 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                   name="email_address"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email</FormLabel>
+                      <FormLabel>{t('auth:register.emailLabel')}</FormLabel>
                       <FormControl>
-                        <Input autoFocus type="email" placeholder="support@yourcompany.com" {...field} />
+                        <Input autoFocus type="email" placeholder={t('auth:wizard.support.email.placeholder')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1280,10 +1330,13 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
           {supportIdx === 2 && (
             <OneQuestionLayout
               icon={<Lock className="h-5 w-5" />}
-              title="Mailbox password"
-              description="Dev only: stored in plaintext. We will hash & encrypt in production."
+              title={t('auth:wizard.support.password.title')}
+              description={t('auth:wizard.support.password.description')}
               onBack={backSupport}
               onSubmit={nextSupport}
+              onNextLabel={t('common:continue')}
+              backLabel={t('common:back')}
+              workingLabel={t('common:working')}
             >
               <Form {...supportForm}>
                 <FormField
@@ -1291,7 +1344,7 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Password</FormLabel>
+                      <FormLabel>{t('auth:register.passwordLabel')}</FormLabel>
                       <FormControl>
                         <Input autoFocus type="password" placeholder="••••••••" {...field} />
                       </FormControl>
@@ -1307,12 +1360,14 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
           {supportIdx === 3 && (
             <OneQuestionLayout
               icon={<ServerCog className="h-5 w-5" />}
-              title="Advanced (optional)"
-              description="IMAP/SMTP settings are prefilled from your provider. Adjust only if needed."
+              title={t('auth:wizard.support.advanced.title')}
+              description={t('auth:wizard.support.advanced.description')}
               onBack={backSupport}
-              onNextLabel="Save & test"
+              onNextLabel={t('auth:wizard.support.saveAndTest')}
               onSubmit={nextSupport}
               submitting={submittingSupport}
+              backLabel={t('common:back')}
+              workingLabel={t('common:working')}
             >
               <Form {...supportForm}>
                 {/* IMAP */}
@@ -1325,7 +1380,7 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                     name="imap"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Host</FormLabel>
+                        <FormLabel>{t('auth:wizard.support.advanced.hostLabel')}</FormLabel>
                         <FormControl>
                           <Input autoFocus placeholder="imap.example.com" {...field} />
                         </FormControl>
@@ -1339,7 +1394,7 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                       name="imap_port"
                       render={({ field }) => (
                         <FormItem className="flex-1">
-                          <FormLabel>Port</FormLabel>
+                          <FormLabel>{t('auth:wizard.support.advanced.portLabel')}</FormLabel>
                           <FormControl>
                             <Input type="number" placeholder="993" {...field} />
                           </FormControl>
@@ -1358,7 +1413,7 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                     name="smtp"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Host</FormLabel>
+                        <FormLabel>{t('auth:wizard.support.advanced.hostLabel')}</FormLabel>
                         <FormControl>
                           <Input placeholder="smtp.example.com" {...field} />
                         </FormControl>
@@ -1372,7 +1427,7 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                       name="smtp_port"
                       render={({ field }) => (
                         <FormItem className="flex-1">
-                          <FormLabel>Port</FormLabel>
+                          <FormLabel>{t('auth:wizard.support.advanced.portLabel')}</FormLabel>
                           <FormControl>
                             <Input type="number" placeholder="587" {...field} />
                           </FormControl>
@@ -1400,25 +1455,25 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                   </div>
                 )}
                 <CardTitle className="text-xl">
-                  {testStatus?.ok ? "Mailbox connected" : "Connection failed"}
+                  {testStatus?.ok ? t('auth:wizard.support.test.successTitle') : t('auth:wizard.support.test.failedTitle')}
                 </CardTitle>
                 <CardDescription className="text-sm">
-                  {testStatus?.message || (testStatus?.ok ? "Connection successful." : "Please review your settings.")}
+                  {testStatus?.message || (testStatus?.ok ? t('auth:wizard.support.test.successMessage') : t('auth:wizard.support.test.failedMessage'))}
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex items-center justify-between">
                 <Button variant="outline" onClick={() => setSupportIdx(3)}>
                   <ChevronLeft className="mr-2 h-4 w-4" />
-                  Back
+                  {t('common:back')}
                 </Button>
                 {testStatus?.ok ? (
                   <Button onClick={() => setStep(4)}>
-                    Continue
+                    {t('common:continue')}
                     <ChevronRight className="ml-2 h-4 w-4" />
                   </Button>
                 ) : (
                   <Button onClick={onSaveAndTest} disabled={submittingSupport}>
-                    Retry test
+                    {t('auth:wizard.support.test.retry')}
                   </Button>
                 )}
               </CardContent>
@@ -1433,10 +1488,10 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
           <CardHeader>
             <div className="flex items-center space-x-2 mb-2">
               <UserPlus className="h-5 w-5" />
-              <CardTitle className="text-xl">Invite Your Team</CardTitle>
+              <CardTitle className="text-xl">{t('auth:wizard.team.title')}</CardTitle>
             </div>
             <CardDescription>
-              Add team members now or skip and do it later from the dashboard.
+              {t('auth:wizard.team.description')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -1447,31 +1502,31 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                   <label className="text-sm font-medium">Email</label>
                   <Input
                     type="email"
-                    placeholder="colleague@company.com"
+                    placeholder={t('auth:wizard.team.emailPlaceholder')}
                     value={currentMember.email}
                     onChange={(e) => setCurrentMember({ ...currentMember, email: e.target.value })}
                     disabled={submittingTeam}
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Name</label>
+                  <label className="text-sm font-medium">{t('auth:wizard.team.nameLabel')}</label>
                   <Input
                     type="text"
-                    placeholder="John Doe"
+                    placeholder={t('auth:wizard.team.namePlaceholder')}
                     value={currentMember.name}
                     onChange={(e) => setCurrentMember({ ...currentMember, name: e.target.value })}
                     disabled={submittingTeam}
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Role</label>
+                  <label className="text-sm font-medium">{t('auth:wizard.team.roleLabel')}</label>
                   <Select
                     value={currentMember.role_id.toString()}
                     onValueChange={(value) => setCurrentMember({ ...currentMember, role_id: Number(value) })}
                     disabled={submittingTeam}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select role" />
+                      <SelectValue placeholder={t('auth:wizard.team.rolePlaceholder')} />
                     </SelectTrigger>
                     <SelectContent>
                       {roles.map((role) => (
@@ -1491,14 +1546,14 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                 disabled={submittingTeam}
               >
                 <UserPlus className="h-4 w-4 mr-2" />
-                Add Team Member
+                {t('auth:wizard.team.addMember')}
               </Button>
             </div>
 
             {/* Team Members List */}
             {teamMembers.length > 0 && (
               <div className="space-y-2">
-                <h4 className="text-sm font-medium">Team Members ({teamMembers.length})</h4>
+                <h4 className="text-sm font-medium">{t('auth:wizard.team.membersList', { count: teamMembers.length })}</h4>
                 <div className="space-y-2">
                   {teamMembers.map((member, index) => (
                     <div
@@ -1531,7 +1586,7 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
             <div className="flex items-center justify-between pt-4">
               <Button variant="outline" onClick={() => setStep(3)} disabled={submittingTeam}>
                 <ChevronLeft className="mr-2 h-4 w-4" />
-                Back
+                {t('common:back')}
               </Button>
               <div className="flex gap-2">
                 <Button
@@ -1539,7 +1594,7 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                   onClick={() => setStep(5)}
                   disabled={submittingTeam}
                 >
-                  Skip
+                  {t('common:skip')}
                 </Button>
                 <Button
                   onClick={handleInviteTeam}
@@ -1548,11 +1603,11 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                   {submittingTeam ? (
                     <>
                       <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                      Inviting...
+                      {t('auth:wizard.team.inviting')}
                     </>
                   ) : (
                     <>
-                      Invite {teamMembers.length} {teamMembers.length === 1 ? 'Member' : 'Members'}
+                      {t('auth:wizard.team.inviteCount', { count: teamMembers.length })}
                       <ChevronRight className="ml-2 h-4 w-4" />
                     </>
                   )}
@@ -1569,10 +1624,10 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
           <CardHeader>
             <div className="flex items-center space-x-2 mb-2">
               <CreditCard className="h-5 w-5" />
-              <CardTitle className="text-xl">Choose Your Plan</CardTitle>
+              <CardTitle className="text-xl">{t('auth:wizard.plan.title')}</CardTitle>
             </div>
             <CardDescription>
-              Select the plan that best fits your needs. You can upgrade anytime.
+              {t('auth:wizard.plan.description')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1622,13 +1677,13 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
             <div className="flex items-center justify-between pt-4">
               <Button variant="outline" onClick={() => setStep(4)}>
                 <ChevronLeft className="mr-2 h-4 w-4" />
-                Back
+                {t('common:back')}
               </Button>
               <Button
                 onClick={() => selectedPlan && handlePlanSelection(selectedPlan)}
                 disabled={!selectedPlan}
               >
-                Continue
+                {t('common:continue')}
                 <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
@@ -1642,10 +1697,10 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
           <CardHeader>
             <div className="flex items-center space-x-2 mb-2">
               <CreditCard className="h-5 w-5" />
-              <CardTitle className="text-xl">Payment Details</CardTitle>
+              <CardTitle className="text-xl">{t('auth:wizard.payment.title')}</CardTitle>
             </div>
             <CardDescription>
-              Enter your payment information to complete the subscription.
+              {t('auth:wizard.payment.description')}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1666,11 +1721,11 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
             <div className="mx-auto h-16 w-16 rounded-full bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 flex items-center justify-center">
               <CheckCircle2 className="h-8 w-8" />
             </div>
-            <CardTitle className="text-2xl">Registration Complete!</CardTitle>
+            <CardTitle className="text-2xl">{t('auth:wizard.complete.title')}</CardTitle>
             <CardDescription className="text-base">
-              Your account and company have been successfully set up.
+              {t('auth:wizard.complete.description')}
               {teamMembers.length > 0 && (
-                <> {teamMembers.length} team {teamMembers.length === 1 ? 'member has' : 'members have'} been invited.</>
+                <> {t('auth:wizard.complete.teamInvited', { count: teamMembers.length })}</>
               )}
             </CardDescription>
           </CardHeader>
@@ -1689,11 +1744,11 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
                 window.location.href = '/dashboard';
               }}
             >
-              Go to Dashboard
+              {t('auth:wizard.complete.goToDashboard')}
               <ChevronRight className="ml-2 h-4 w-4" />
             </Button>
             <p className="text-xs text-center text-muted-foreground">
-              You can configure additional settings and add more team members from the dashboard.
+              {t('auth:wizard.complete.hint')}
             </p>
           </CardContent>
         </Card>

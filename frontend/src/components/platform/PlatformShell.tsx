@@ -2,6 +2,7 @@
 "use client"
 
 import * as React from "react";
+import { I18nProvider } from "@/i18n/I18nProvider";
 import { PlatformSidebar } from "./PlatformSidebar";
 import {
   Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList,
@@ -46,38 +47,40 @@ export default function PlatformShell({
   const finalPath = currentPath || detectedPath;
 
   return (
-    <SidebarProvider>
-      <PlatformSidebar
-        user={user}
-        currentPath={finalPath}
-        hasClientLink={hasClientLink}
-        clientName={clientName}
-      />
-      <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-          <div className="flex items-center gap-2 px-4">
-            <SidebarTrigger className="-ml-1" />
-            <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-            <Breadcrumb>
-              <BreadcrumbList>
-                <BreadcrumbItem className="hidden md:block">
-                  <BreadcrumbLink href={crumbParentHref}>{crumbParentLabel}</BreadcrumbLink>
-                </BreadcrumbItem>
-                <BreadcrumbSeparator className="hidden md:block" />
-                <BreadcrumbItem>
-                  <BreadcrumbPage>{crumbCurrent}</BreadcrumbPage>
-                </BreadcrumbItem>
-              </BreadcrumbList>
-            </Breadcrumb>
-          </div>
-        </header>
+    <I18nProvider>
+      <SidebarProvider>
+        <PlatformSidebar
+          user={user}
+          currentPath={finalPath}
+          hasClientLink={hasClientLink}
+          clientName={clientName}
+        />
+        <SidebarInset>
+          <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+            <div className="flex items-center gap-2 px-4">
+              <SidebarTrigger className="-ml-1" />
+              <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
+              <Breadcrumb>
+                <BreadcrumbList>
+                  <BreadcrumbItem className="hidden md:block">
+                    <BreadcrumbLink href={crumbParentHref}>{crumbParentLabel}</BreadcrumbLink>
+                  </BreadcrumbItem>
+                  <BreadcrumbSeparator className="hidden md:block" />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>{crumbCurrent}</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </BreadcrumbList>
+              </Breadcrumb>
+            </div>
+          </header>
 
-        <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-          <div className="bg-muted/50 flex-1 rounded-xl p-4 pt-0 md:min-h-min">
-            {children}
+          <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+            <div className="bg-muted/50 flex-1 rounded-xl p-4 pt-0 md:min-h-min">
+              {children}
+            </div>
           </div>
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+        </SidebarInset>
+      </SidebarProvider>
+    </I18nProvider>
   );
 }

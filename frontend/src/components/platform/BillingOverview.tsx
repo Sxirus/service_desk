@@ -2,6 +2,7 @@
 "use client"
 
 import * as React from "react"
+import { useTranslation } from 'react-i18next'
 import {
   CreditCard,
   Building2,
@@ -50,6 +51,8 @@ interface Props {
 }
 
 export default function BillingOverview({ billingData, summary }: Props) {
+  const { t } = useTranslation('platform')
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
@@ -79,9 +82,9 @@ export default function BillingOverview({ billingData, summary }: Props) {
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Billing Overview</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('billing.title')}</h1>
           <p className="text-sm text-muted-foreground">
-            Subscription and revenue metrics across all clients
+            {t('billing.description')}
           </p>
         </div>
       </div>
@@ -90,41 +93,41 @@ export default function BillingOverview({ billingData, summary }: Props) {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('billing.monthlyRevenue')}</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(summary.mrr || 0)}</div>
             <p className="text-xs text-muted-foreground">
-              MRR from {summary.paidClients} clients
+              {t('billing.mrrFromClients', { count: summary.paidClients })}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('billing.totalRevenue')}</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(summary.totalRevenue || 0)}</div>
             <p className="text-xs text-muted-foreground">
-              All time
+              {t('billing.allTime')}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Paid Subscriptions</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('billing.paidSubscriptions')}</CardTitle>
             <CreditCard className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{summary.paidClients}</div>
             <p className="text-xs text-muted-foreground">
               {summary.totalClients > 0 
-                ? `${Math.round((summary.paidClients / summary.totalClients) * 100)}% of clients`
-                : '0% of clients'
+                ? t('billing.ofClients', { percent: Math.round((summary.paidClients / summary.totalClients) * 100) })
+                : t('billing.ofClients', { percent: 0 })
               }
             </p>
           </CardContent>
@@ -132,26 +135,26 @@ export default function BillingOverview({ billingData, summary }: Props) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Paid Seats</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('billing.paidSeats')}</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{paidSeats}</div>
             <p className="text-xs text-muted-foreground">
-              Billable employees
+              {t('billing.billableEmployees')}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Free Clients</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('billing.freeClients')}</CardTitle>
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{summary.freeClients}</div>
             <p className="text-xs text-muted-foreground">
-              Potential conversions
+              {t('billing.potentialConversions')}
             </p>
           </CardContent>
         </Card>
@@ -162,26 +165,26 @@ export default function BillingOverview({ billingData, summary }: Props) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <CheckCircle className="h-5 w-5 text-green-500" />
-            Pro Plan Clients
+            {t('billing.proPlanClients')}
           </CardTitle>
           <CardDescription>
-            {paidClients.length} clients with active subscriptions
+            {t('billing.activeSubscriptions', { count: paidClients.length })}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {paidClients.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">
-              No paid subscriptions yet
+              {t('billing.noPaidSubscriptions')}
             </p>
           ) : (
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Client</TableHead>
-                    <TableHead>Seats</TableHead>
-                    <TableHead>Stripe</TableHead>
-                    <TableHead>Created</TableHead>
+                    <TableHead>{t('billing.client')}</TableHead>
+                    <TableHead>{t('billing.seats')}</TableHead>
+                    <TableHead>{t('billing.stripe')}</TableHead>
+                    <TableHead>{t('billing.created')}</TableHead>
                     <TableHead className="w-[100px]"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -208,15 +211,15 @@ export default function BillingOverview({ billingData, summary }: Props) {
                       <TableCell>
                         {client.has_subscription ? (
                           <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                            Active
+                            {t('billing.active')}
                           </Badge>
                         ) : client.has_stripe ? (
                           <Badge variant="secondary">
-                            Customer Only
+                            {t('billing.customerOnly')}
                           </Badge>
                         ) : (
                           <Badge variant="outline">
-                            Not Connected
+                            {t('billing.notConnected')}
                           </Badge>
                         )}
                       </TableCell>
@@ -229,7 +232,7 @@ export default function BillingOverview({ billingData, summary }: Props) {
                           size="sm"
                           onClick={() => window.location.href = `/platform/clients/${client.id}`}
                         >
-                          View
+                          {t('billing.view')}
                           <ExternalLink className="h-3 w-3 ml-1" />
                         </Button>
                       </TableCell>
@@ -247,26 +250,26 @@ export default function BillingOverview({ billingData, summary }: Props) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <XCircle className="h-5 w-5 text-muted-foreground" />
-            Free Plan Clients
+            {t('billing.freePlanClients')}
           </CardTitle>
           <CardDescription>
-            {freeClients.length} clients on free plan - potential conversions
+            {t('billing.freePlanDescription', { count: freeClients.length })}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {freeClients.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">
-              No free clients
+              {t('billing.noFreeClients')}
             </p>
           ) : (
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Client</TableHead>
-                    <TableHead>Employees</TableHead>
-                    <TableHead>Stripe Status</TableHead>
-                    <TableHead>Created</TableHead>
+                    <TableHead>{t('billing.client')}</TableHead>
+                    <TableHead>{t('billing.employees')}</TableHead>
+                    <TableHead>{t('billing.stripeStatus')}</TableHead>
+                    <TableHead>{t('billing.created')}</TableHead>
                     <TableHead className="w-[100px]"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -293,11 +296,11 @@ export default function BillingOverview({ billingData, summary }: Props) {
                       <TableCell>
                         {client.has_stripe ? (
                           <Badge variant="secondary">
-                            Has Customer ID
+                            {t('billing.hasCustomerId')}
                           </Badge>
                         ) : (
                           <Badge variant="outline">
-                            Not Connected
+                            {t('billing.notConnected')}
                           </Badge>
                         )}
                       </TableCell>
@@ -310,7 +313,7 @@ export default function BillingOverview({ billingData, summary }: Props) {
                           size="sm"
                           onClick={() => window.location.href = `/platform/clients/${client.id}`}
                         >
-                          View
+                          {t('billing.view')}
                           <ExternalLink className="h-3 w-3 ml-1" />
                         </Button>
                       </TableCell>
@@ -320,9 +323,9 @@ export default function BillingOverview({ billingData, summary }: Props) {
               </Table>
               {freeClients.length > 10 && (
                 <div className="p-3 text-center text-sm text-muted-foreground border-t">
-                  Showing 10 of {freeClients.length} free clients.{" "}
+                  {t('billing.showingOf', { shown: 10, total: freeClients.length })}{" "}
                   <a href="/platform/clients" className="text-primary hover:underline">
-                    View all
+                    {t('billing.viewAll')}
                   </a>
                 </div>
               )}

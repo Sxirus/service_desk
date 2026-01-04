@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Mail, ShoppingBag, MapPin, Package, Euro, User } from 'lucide-react';
 import type { ShopifyConfig, ShopifyClientData, ShopifyCustomer } from '../types/shopify.types';
 import { apiClient } from '../utils/api'; // ✅ ADDED: Import apiClient
@@ -37,6 +38,7 @@ export const CustomerInfo: React.FC<CustomerInfoProps> = ({
   shopifyConfig,
   clientData 
 }) => {
+  const { t } = useTranslation('dashboard');
   const [shopifyCustomer, setShopifyCustomer] = useState<ShopifyCustomer | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -140,13 +142,13 @@ export const CustomerInfo: React.FC<CustomerInfoProps> = ({
         {/* Header */}
         <div className="flex items-center gap-2">
             <User className="inline-block h-4 w-4 text-muted-foreground ml-1" />
-            <h3 className="text-sm font-semibold">Customer Information</h3>
+            <h3 className="text-sm font-semibold">{t('tickets.customerInformation')}</h3>
         </div>
 
         <div className="space-y-3">
           {/* Name with source indicators */}
           <div>
-            <p className="text-xs text-muted-foreground mb-1">Name</p>
+            <p className="text-xs text-muted-foreground mb-1">{t('tickets.name')}</p>
             <div className="flex items-center gap-2">
                 <Tooltip>
                     <TooltipTrigger>
@@ -156,7 +158,7 @@ export const CustomerInfo: React.FC<CustomerInfoProps> = ({
                         </p>
                     </TooltipTrigger>
                     <TooltipContent>
-                        <p>Name extracted from E-Mail-Sender</p>
+                        <p>{t('tickets.nameFromEmail')}</p>
                     </TooltipContent>
                 </Tooltip>
             </div>
@@ -170,7 +172,7 @@ export const CustomerInfo: React.FC<CustomerInfoProps> = ({
                             </p>
                         </TooltipTrigger>
                         <TooltipContent>
-                            <p>Name extracted from Shopify</p>
+                            <p>{t('tickets.nameFromShopify')}</p>
                         </TooltipContent>
                     </Tooltip>
                 </div>
@@ -179,7 +181,7 @@ export const CustomerInfo: React.FC<CustomerInfoProps> = ({
 
           {/* Email */}
           <div>
-            <p className="text-xs text-muted-foreground">Email</p>
+            <p className="text-xs text-muted-foreground">{t('tickets.email')}</p>
             <p className="text-sm font-medium text-blue-600 break-all">
               {emailAddress}
             </p>
@@ -190,7 +192,7 @@ export const CustomerInfo: React.FC<CustomerInfoProps> = ({
             <div className="pt-2 border-t">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
-                <span className="text-xs">Loading Shopify data...</span>
+                <span className="text-xs">{t('tickets.loadingShopifyData')}</span>
               </div>
             </div>
           )}
@@ -199,7 +201,7 @@ export const CustomerInfo: React.FC<CustomerInfoProps> = ({
           {error && !loading && shopifyConfig.connected && (
             <div className="pt-2 border-t">
               <p className="text-xs text-muted-foreground">
-                Could not load Shopify customer data
+                {t('tickets.couldNotLoadShopifyData')}
               </p>
             </div>
           )}
@@ -212,7 +214,7 @@ export const CustomerInfo: React.FC<CustomerInfoProps> = ({
                 <div className="pt-2 border-t">
                   <div className="flex items-start gap-2 mb-1">
                     <MapPin className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
-                    <p className="text-xs text-muted-foreground">Address</p>
+                    <p className="text-xs text-muted-foreground">{t('tickets.address')}</p>
                   </div>
                   <div className="text-sm ml-5">
                     {addressLines.map((line, idx) => (
@@ -224,13 +226,13 @@ export const CustomerInfo: React.FC<CustomerInfoProps> = ({
 
               {/* Customer Stats */}
               <div className="pt-2 border-t space-y-2">
-                <p className="text-xs text-muted-foreground font-semibold">Customer Stats</p>
+                <p className="text-xs text-muted-foreground font-semibold">{t('tickets.customerStats')}</p>
                 
                 {/* Total Orders */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Package className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">Total Orders</span>
+                    <span className="text-xs text-muted-foreground">{t('tickets.totalOrders')}</span>
                   </div>
                   <span className="text-sm font-semibold">
                     {shopifyCustomer.orders_count}
@@ -241,7 +243,7 @@ export const CustomerInfo: React.FC<CustomerInfoProps> = ({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Euro className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">Total Spent</span>
+                    <span className="text-xs text-muted-foreground">{t('tickets.totalSpent')}</span>
                   </div>
                   <span className="text-sm font-semibold text-green-600 dark:text-green-400">
                     {formatCurrency(shopifyCustomer.total_spent, shopifyCustomer.currency)}
@@ -255,7 +257,7 @@ export const CustomerInfo: React.FC<CustomerInfoProps> = ({
           {!shopifyCustomer && !loading && !error && shopifyConfig.connected && (
             <div className="pt-2 border-t">
               <p className="text-xs text-muted-foreground italic">
-                No Shopify Data available for this customer.
+                {t('tickets.noShopifyData')}
               </p>
             </div>
           )}

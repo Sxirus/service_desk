@@ -10,12 +10,14 @@
 "use client"
 
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { type DateRange } from "react-day-picker"
 import { AnalyticsDatePicker } from './AnalyticsDatePicker';
 import { AnalyticsEmailChart } from './AnalyticsEmailChart';
 import { AnalyticsEmployeeChart } from './AnalyticsEmployeeChart';
 import { AnalyticsEmployeeTable } from './AnalyticsEmployeeTable';
 import { apiClient } from '@/utils/api';
+import { formatDate } from '@/i18n/utils';
 
 interface DailyStats {
   date: string;
@@ -59,6 +61,7 @@ export function AnalyticsDashboard({
   initialFrom, 
   initialTo 
 }: AnalyticsDashboardProps) {
+  const { t } = useTranslation('dashboard');
   const [stats, setStats] = useState<AnalyticsStats>(initialStats);
   const [employeeStats, setEmployeeStats] = useState<EmployeeStats[]>(initialEmployeeStats);
   const [employeeDaily, setEmployeeDaily] = useState<DailyEmployeeStats[]>(initialEmployeeDaily);
@@ -90,7 +93,7 @@ export function AnalyticsDashboard({
       setEmployeeDaily(employeeData.daily);
     } catch (error) {
       console.error('[Analytics] Failed to fetch data:', error);
-      alert('Failed to load analytics data. Please try again.');
+      alert(t('analytics.noDataForPeriod'));
     } finally {
       setIsLoading(false);
     }
@@ -101,7 +104,7 @@ export function AnalyticsDashboard({
   );
 
   const formatDateRange = () => {
-    return `${dateRange.from.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${dateRange.to.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    return `${formatDate(dateRange.from)} - ${formatDate(dateRange.to)}`;
   };
 
   return (
@@ -109,9 +112,9 @@ export function AnalyticsDashboard({
       {/* Page Header with Date Picker */}
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1 mt-2">
-          <h1 className="text-2xl font-semibold tracking-tight">Analytics Dashboard</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('analytics.title')}</h1>
           <p className="text-sm text-muted-foreground">
-            Email statistics for the selected period
+            {t('analytics.emailVolume')}
           </p>
         </div>
         <AnalyticsDatePicker
@@ -126,7 +129,7 @@ export function AnalyticsDashboard({
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
           <div className="flex items-center gap-2">
             <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
-            <span className="text-lg font-medium">Loading analytics...</span>
+            <span className="text-lg font-medium">{t('analytics.loadingData')}</span>
           </div>
         </div>
       )}
@@ -137,7 +140,7 @@ export function AnalyticsDashboard({
         <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
           <div className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
             <h3 className="tracking-tight text-sm font-medium">
-              Total Received
+              {t('analytics.emailsReceived')}
             </h3>
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -155,7 +158,7 @@ export function AnalyticsDashboard({
           <div className="p-6 pt-0">
             <div className="text-2xl font-bold">{stats.totalIncoming.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              Emails received from customers
+              {t('analytics.incomingEmails')}
             </p>
           </div>
         </div>
@@ -164,7 +167,7 @@ export function AnalyticsDashboard({
         <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
           <div className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
             <h3 className="tracking-tight text-sm font-medium">
-              Total Sent
+              {t('analytics.emailsSent')}
             </h3>
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -182,7 +185,7 @@ export function AnalyticsDashboard({
           <div className="p-6 pt-0">
             <div className="text-2xl font-bold">{stats.totalSent.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              Replies sent to customers
+              {t('analytics.outgoingEmails')}
             </p>
           </div>
         </div>
@@ -191,7 +194,7 @@ export function AnalyticsDashboard({
         <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
           <div className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
             <h3 className="tracking-tight text-sm font-medium">
-              Avg. Received/Day
+              {t('analytics.avgResponseTime')}
             </h3>
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -210,7 +213,7 @@ export function AnalyticsDashboard({
           <div className="p-6 pt-0">
             <div className="text-2xl font-bold">{stats.averageIncomingPerDay}</div>
             <p className="text-xs text-muted-foreground">
-              Daily average over {dayCount} days
+              {t('analytics.last30Days')}
             </p>
           </div>
         </div>
@@ -219,7 +222,7 @@ export function AnalyticsDashboard({
         <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
           <div className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
             <h3 className="tracking-tight text-sm font-medium">
-              Avg. Response Time
+              {t('analytics.firstResponseTime')}
             </h3>
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -238,7 +241,7 @@ export function AnalyticsDashboard({
           <div className="p-6 pt-0">
             <div className="text-2xl font-bold">{stats.averageResponseTime}h</div>
             <p className="text-xs text-muted-foreground">
-              Time to first response
+              {t('analytics.resolutionTime')}
             </p>
           </div>
         </div>
@@ -267,7 +270,7 @@ export function AnalyticsDashboard({
       {/* Future Features Placeholder */}
       <div className="rounded-lg border border-dashed p-6 text-center text-muted-foreground">
         <p className="text-sm">
-          More analytics features coming soon: Response time metrics, customer satisfaction, and more.
+          {t('analytics.comingSoon')}
         </p>
       </div>
     </div>

@@ -2,6 +2,7 @@
 "use client"
 
 import * as React from "react"
+import { useTranslation } from 'react-i18next'
 import {
   Building2,
   Users,
@@ -54,6 +55,7 @@ interface Props {
 }
 
 export default function PlatformAnalytics({ analytics }: Props) {
+  const { t } = useTranslation('platform')
   const { overview, activity, growth, recentActivity } = analytics
 
   const formatDate = (dateString: string) => {
@@ -120,9 +122,9 @@ export default function PlatformAnalytics({ analytics }: Props) {
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Platform Analytics</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('analytics.title')}</h1>
           <p className="text-sm text-muted-foreground">
-            Platform-wide metrics and growth trends
+            {t('analytics.description')}
           </p>
         </div>
       </div>
@@ -131,7 +133,7 @@ export default function PlatformAnalytics({ analytics }: Props) {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Clients</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('analytics.totalClients')}</CardTitle>
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -141,15 +143,15 @@ export default function PlatformAnalytics({ analytics }: Props) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pro Clients</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('analytics.proClients')}</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{overview.paidClients}</div>
             <p className="text-xs text-muted-foreground">
               {overview.totalClients > 0 
-                ? `${Math.round((overview.paidClients / overview.totalClients) * 100)}% conversion`
-                : '0% conversion'
+                ? t('analytics.conversionRate', { percent: Math.round((overview.paidClients / overview.totalClients) * 100) })
+                : t('analytics.conversionRate', { percent: 0 })
               }
             </p>
           </CardContent>
@@ -157,7 +159,7 @@ export default function PlatformAnalytics({ analytics }: Props) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('analytics.totalUsers')}</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -167,7 +169,7 @@ export default function PlatformAnalytics({ analytics }: Props) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Contacts</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('analytics.contacts')}</CardTitle>
             <Mail className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -177,7 +179,7 @@ export default function PlatformAnalytics({ analytics }: Props) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Users/Client</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('analytics.avgUsersPerClient')}</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -197,16 +199,16 @@ export default function PlatformAnalytics({ analytics }: Props) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Mail className="h-5 w-5" />
-              Email Activity
+              {t('analytics.emailActivity')}
             </CardTitle>
-            <CardDescription>Emails sent this month vs last month</CardDescription>
+            <CardDescription>{t('analytics.emailActivityDesc')}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-3xl font-bold">{activity.emailsSentThisMonth.toLocaleString()}</p>
-                  <p className="text-sm text-muted-foreground">Emails this month</p>
+                  <p className="text-sm text-muted-foreground">{t('analytics.emailsThisMonth')}</p>
                 </div>
                 <div className={`flex items-center gap-1 ${emailGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {emailGrowth >= 0 ? (
@@ -218,7 +220,7 @@ export default function PlatformAnalytics({ analytics }: Props) {
                 </div>
               </div>
               <div className="text-sm text-muted-foreground">
-                Last month: {activity.emailsSentLastMonth.toLocaleString()} emails
+                {t('analytics.lastMonth')}: {activity.emailsSentLastMonth.toLocaleString()} {t('analytics.emails')}
               </div>
             </div>
           </CardContent>
@@ -228,16 +230,16 @@ export default function PlatformAnalytics({ analytics }: Props) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Building2 className="h-5 w-5" />
-              New Clients
+              {t('analytics.newClients')}
             </CardTitle>
-            <CardDescription>New signups this month vs last month</CardDescription>
+            <CardDescription>{t('analytics.newClientsDesc')}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-3xl font-bold">{activity.newClientsThisMonth}</p>
-                  <p className="text-sm text-muted-foreground">New clients this month</p>
+                  <p className="text-sm text-muted-foreground">{t('analytics.newClientsThisMonth')}</p>
                 </div>
                 <div className={`flex items-center gap-1 ${clientGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {clientGrowth >= 0 ? (
@@ -249,7 +251,7 @@ export default function PlatformAnalytics({ analytics }: Props) {
                 </div>
               </div>
               <div className="text-sm text-muted-foreground">
-                Last month: {activity.newClientsLastMonth} new clients
+                {t('analytics.lastMonth')}: {activity.newClientsLastMonth} {t('analytics.newClientsLower')}
               </div>
             </div>
           </CardContent>
@@ -259,13 +261,13 @@ export default function PlatformAnalytics({ analytics }: Props) {
       {/* Growth Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Client Growth</CardTitle>
-          <CardDescription>Cumulative client count over the last 6 months</CardDescription>
+          <CardTitle>{t('analytics.clientGrowth')}</CardTitle>
+          <CardDescription>{t('analytics.clientGrowthDesc')}</CardDescription>
         </CardHeader>
         <CardContent>
           {growthData.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">
-              No growth data available
+              {t('analytics.noGrowthData')}
             </p>
           ) : (
             <div className="space-y-4">
@@ -296,14 +298,14 @@ export default function PlatformAnalytics({ analytics }: Props) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Activity className="h-5 w-5" />
-            Recent Platform Activity
+            {t('analytics.recentActivity')}
           </CardTitle>
-          <CardDescription>Latest admin actions on the platform</CardDescription>
+          <CardDescription>{t('analytics.recentActivityDesc')}</CardDescription>
         </CardHeader>
         <CardContent>
           {recentActivity.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">
-              No recent activity
+              {t('analytics.noRecentActivity')}
             </p>
           ) : (
             <div className="space-y-3">

@@ -14,6 +14,12 @@ import { createClient } from "../../lib/supabase.ts";
 import { getCompletePageContext } from "../../lib/auth-helpers.ts";
 import { ROLE_IDS } from "../../types/database.ts";
 import type { Client } from "../../types/database.ts";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const { t } = getTranslations(lang, 'manage');
+const tCommon = getTranslations(lang, 'common');
 
 // Components
 import CompanyManagementForm from "@/components/CompanyManagementForm";
@@ -113,14 +119,14 @@ const initialFormData = {
 };
 ---
 
-<Layout title="Company Settings">
+<Layout title={t('pages.client.pageTitle')}>
   <AdminShell 
     client:load
     user={sidebarData.user}
     firstTeam={sidebarData.team ?? undefined}
-    crumbParentLabel="Administration"
+    crumbParentLabel={tCommon.t('sidebar.administration')}
     crumbParentHref="/manage/settings"
-    crumbCurrent="Company"
+    crumbCurrent={t('pages.client.pageTitle')}
     isAdmin={authContext.isAdmin}
     isPlatformAdmin={pageContext.isPlatformAdmin}
     currentPath="/manage/client"
@@ -132,9 +138,9 @@ const initialFormData = {
       <!-- Page Header -->
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="space-y-1 mt-2">
-          <h1 class="text-2xl font-semibold tracking-tight">Company Settings</h1>
+          <h1 class="text-2xl font-semibold tracking-tight">{t('pages.client.heading')}</h1>
           <p class="text-sm text-muted-foreground">
-            Manage your company information and settings.
+            {t('pages.client.description')}
           </p>
         </div>
       </div>

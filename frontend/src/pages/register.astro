@@ -2,6 +2,12 @@
 import Layout from "../layouts/BaseLayout.astro";
 import { createClient } from "../lib/supabase.ts";
 import RegisterWizard from "@/components/register/RegisterWizard";
+import { LanguagePicker } from "@/components/LanguagePicker";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const { t } = getTranslations(lang, 'common');
 
 const supabase = createClient({ request: Astro.request, cookies: Astro.cookies });
 const { data: { user } } = await supabase.auth.getUser();
@@ -13,8 +19,11 @@ const cfSiteKey = import.meta.env.TURNSTILE_SITE_KEY ?? "";
 const regNonce = crypto.randomUUID();
 ---
 
-<Layout title="Register - Service Desk">
-  <div class="min-h-svh w-full bg-background flex items-center justify-center p-4">
+<Layout title={t('pages.register.pageTitle')}>
+  <div class="min-h-svh w-full bg-background flex flex-col items-center justify-center p-4">
+    <div class="absolute top-4 right-4">
+      <LanguagePicker client:load variant="outline" size="sm" />
+    </div>
     <RegisterWizard
       client:only="react"
       initialStep={1}

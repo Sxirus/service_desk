@@ -2,6 +2,7 @@
 "use client"
 
 import * as React from "react"
+import { useTranslation } from 'react-i18next'
 import {
   Building2,
   Search,
@@ -54,6 +55,7 @@ interface Props {
 }
 
 export default function ClientsManagement({ initialClients }: Props) {
+  const { t } = useTranslation('platform')
   const [clients, setClients] = React.useState<Client[]>(initialClients)
   const [search, setSearch] = React.useState("")
   const [tierFilter, setTierFilter] = React.useState<string>("all")
@@ -90,9 +92,9 @@ export default function ClientsManagement({ initialClients }: Props) {
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Clients</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('clients.title')}</h1>
           <p className="text-sm text-muted-foreground">
-            Manage all organizations on the platform
+            {t('clients.description')}
           </p>
         </div>
       </div>
@@ -101,7 +103,7 @@ export default function ClientsManagement({ initialClients }: Props) {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Clients</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('clients.totalClients')}</CardTitle>
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -111,7 +113,7 @@ export default function ClientsManagement({ initialClients }: Props) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pro Plan</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('clients.proPlan')}</CardTitle>
             <CreditCard className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -121,7 +123,7 @@ export default function ClientsManagement({ initialClients }: Props) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Free Plan</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('clients.freePlan')}</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -131,7 +133,7 @@ export default function ClientsManagement({ initialClients }: Props) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Shopify Connected</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('clients.shopifyConnected')}</CardTitle>
             <ShoppingBag className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -143,9 +145,9 @@ export default function ClientsManagement({ initialClients }: Props) {
       {/* Filters */}
       <Card>
         <CardHeader>
-          <CardTitle>Client Directory</CardTitle>
+          <CardTitle>{t('clients.clientDirectory')}</CardTitle>
           <CardDescription>
-            Search and filter clients
+            {t('clients.searchAndFilter')}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -153,7 +155,7 @@ export default function ClientsManagement({ initialClients }: Props) {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search by name or website..."
+                placeholder={t('clients.searchPlaceholder')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
@@ -161,12 +163,12 @@ export default function ClientsManagement({ initialClients }: Props) {
             </div>
             <Select value={tierFilter} onValueChange={setTierFilter}>
               <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by plan" />
+                <SelectValue placeholder={t('clients.filterByPlan')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Plans</SelectItem>
-                <SelectItem value="paid">Pro Plan</SelectItem>
-                <SelectItem value="free">Free Plan</SelectItem>
+                <SelectItem value="all">{t('clients.allPlans')}</SelectItem>
+                <SelectItem value="paid">{t('clients.proPlan')}</SelectItem>
+                <SelectItem value="free">{t('clients.freePlan')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -176,11 +178,11 @@ export default function ClientsManagement({ initialClients }: Props) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Plan</TableHead>
-                  <TableHead>Employees</TableHead>
-                  <TableHead>Integrations</TableHead>
-                  <TableHead>Created</TableHead>
+                  <TableHead>{t('clients.client')}</TableHead>
+                  <TableHead>{t('clients.plan')}</TableHead>
+                  <TableHead>{t('clients.employees')}</TableHead>
+                  <TableHead>{t('clients.integrations')}</TableHead>
+                  <TableHead>{t('clients.created')}</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -188,7 +190,7 @@ export default function ClientsManagement({ initialClients }: Props) {
                 {filteredClients.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No clients found
+                      {t('clients.noClientsFound')}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -222,7 +224,7 @@ export default function ClientsManagement({ initialClients }: Props) {
                       </TableCell>
                       <TableCell>
                         <Badge variant={client.subscription_tier === 'paid' ? 'default' : 'secondary'}>
-                          {client.subscription_tier === 'paid' ? 'Pro' : 'Free'}
+                          {client.subscription_tier === 'paid' ? t('clients.pro') : t('clients.free')}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -246,7 +248,7 @@ export default function ClientsManagement({ initialClients }: Props) {
                             </Badge>
                           )}
                           {!client.stripe_customer_id && !client.shopify_connected && (
-                            <span className="text-muted-foreground text-sm">None</span>
+                            <span className="text-muted-foreground text-sm">{t('clients.none')}</span>
                           )}
                         </div>
                       </TableCell>
@@ -263,7 +265,7 @@ export default function ClientsManagement({ initialClients }: Props) {
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => window.location.href = `/platform/clients/${client.id}`}>
                               <Eye className="h-4 w-4 mr-2" />
-                              View Details
+                              {t('clients.viewDetails')}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -276,7 +278,7 @@ export default function ClientsManagement({ initialClients }: Props) {
           </div>
 
           <div className="mt-4 text-sm text-muted-foreground">
-            Showing {filteredClients.length} of {clients.length} clients
+            {t('clients.showingClients', { showing: filteredClients.length, total: clients.length })}
           </div>
         </CardContent>
       </Card>

@@ -18,6 +18,31 @@ import Layout from "../../layouts/BaseLayout.astro";
 import { createClient } from "../../lib/supabase.ts";
 import { getCompletePageContext } from "../../lib/auth-helpers.ts";
 import ToggleSwitch from "@/components/ToggleSwitch";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const { t } = getTranslations(lang, 'manage');
+const tCommon = getTranslations(lang, 'common');
+
+// Serialized client messages for client-side script (avoid using `t` in client scope)
+const clientMsgsJson = JSON.stringify({
+  configurationIncomplete: t('settings.configurationIncomplete'),
+  selectPrimaryEmailForMode: t('settings.selectPrimaryEmailForMode'),
+  commonSaving: t('common.saving'),
+  configurationSaved: t('settings.configurationSaved'),
+  emailSendingPreferencesUpdated: t('settings.emailSendingPreferencesUpdated'),
+  failedToSave: t('settings.failedToSave'),
+  saveEmailConfiguration: t('settings.saveEmailConfiguration'),
+  invalidSignature: t('settings.invalidSignature'),
+  changesSaved: t('settings.changesSaved'),
+  emailSignatureUpdatedSuccessfully: t('settings.emailSignatureUpdatedSuccessfully'),
+  saveSignature: t('settings.saveSignature'),
+  invalidSubject: t('settings.invalidSubject'),
+  invalidBody: t('settings.invalidBody'),
+  commonSaveChanges: t('common.saveChanges'),
+  autoAssignEmployeeSaved: t('settings.autoAssignEmployeeSaved')
+});
 
 // Components
 import AdminShell from "@/components/AdminShell";
@@ -154,14 +179,14 @@ const auto_assign_employee_on_send = truefalseSettingsJSON?.auto_assign_employee
 console.log("[general-settings] Page setup complete, rendering");
 ---
 
-<Layout title="General Settings">
+<Layout title={t('pages.settings.pageTitle')}>
   <AdminShell 
     client:load
     user={sidebarData.user}
     firstTeam={sidebarData.team ?? undefined}
-    crumbParentLabel="Administration"
+    crumbParentLabel={tCommon.t('sidebar.administration')}
     crumbParentHref="/manage/settings"
-    crumbCurrent="General Settings"
+    crumbCurrent={t('pages.settings.pageTitle')}
     isAdmin={authContext.isAdmin}
     isPlatformAdmin={pageContext.isPlatformAdmin}
     currentPath="/manage/settings"
@@ -173,9 +198,9 @@ console.log("[general-settings] Page setup complete, rendering");
       <!-- Page Header -->
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="space-y-1 mt-2">
-          <h1 class="text-2xl font-semibold tracking-tight">General Settings</h1>
+          <h1 class="text-2xl font-semibold tracking-tight">{t('pages.settings.heading')}</h1>
           <p class="text-sm text-muted-foreground">
-            Manage the settings and preferences for the service desk
+            {t('pages.settings.description')}
           </p>
         </div>
       </div>
@@ -189,10 +214,10 @@ console.log("[general-settings] Page setup complete, rendering");
             <!-- Section Header -->
             <div class="space-y-1">
               <h3 class="text-lg font-semibold leading-none tracking-tight">
-                Email Sending Configuration
+                {t('pages.settings.emailConfig.title')}
               </h3>
               <p class="text-sm text-muted-foreground">
-                Configure how emails are sent from your service desk
+                {t('pages.settings.emailConfig.description')}
               </p>
             </div>
 
@@ -205,10 +230,10 @@ console.log("[general-settings] Page setup complete, rendering");
                   </svg>
                   <div class="space-y-1">
                     <p class="text-sm font-medium text-destructive">
-                      Failed to load email configurations
+                      {t('pages.settings.emailConfig.errorTitle')}
                     </p>
                     <p class="text-sm text-muted-foreground">
-                      There was an error loading your email accounts. You can still configure the settings.
+                      {t('pages.settings.emailConfig.errorDescription')}
                     </p>
                   </div>
                 </div>
@@ -224,10 +249,10 @@ console.log("[general-settings] Page setup complete, rendering");
                   </svg>
                   <div class="space-y-1">
                     <p class="text-sm font-medium text-amber-800">
-                      No email accounts configured
+                      {t('pages.settings.emailConfig.noEmails')}
                     </p>
                     <p class="text-sm text-amber-700">
-                      Please configure at least one email account before setting up sending preferences.
+                      {t('pages.settings.emailConfig.addFirst')}
                     </p>
                   </div>
                 </div>
@@ -239,7 +264,7 @@ console.log("[general-settings] Page setup complete, rendering");
               <div class="space-y-4">
                 <!-- Mode Selection -->
                 <div class="space-y-2">
-                  <label class="text-sm font-medium leading-none">Email Sending Mode</label>
+                  <label class="text-sm font-medium leading-none">{t('pages.settings.emailConfig.sendingMode')}</label>
                   <div class="grid gap-2">
                     <label class="flex items-center space-x-2">
                       <input 
@@ -250,8 +275,8 @@ console.log("[general-settings] Page setup complete, rendering");
                         checked={emailSendingMode === 'primary'}
                       />
                       <span class="text-sm">
-                        <span class="font-medium">Use Primary Email</span>
-                        <span class="text-muted-foreground block text-xs">Always send from your selected primary email address</span>
+                        <span class="font-medium">{t('pages.settings.emailConfig.alwaysFrom')}</span>
+                        <span class="text-muted-foreground block text-xs">{t('pages.settings.emailConfig.alwaysFromDescription')}</span>
                       </span>
                     </label>
                     
@@ -264,8 +289,8 @@ console.log("[general-settings] Page setup complete, rendering");
                         checked={emailSendingMode === 'thread-based'}
                       />
                       <span class="text-sm">
-                        <span class="font-medium">Thread-Based Response</span>
-                        <span class="text-muted-foreground block text-xs">Always reply from the same email that received the original message</span>
+                        <span class="font-medium">{t('pages.settings.emailConfig.matchInbox')}</span>
+                        <span class="text-muted-foreground block text-xs">{t('pages.settings.emailConfig.matchInboxDescription')}</span>
                       </span>
                     </label>
                   </div>
@@ -273,7 +298,7 @@ console.log("[general-settings] Page setup complete, rendering");
 
                 <!-- Primary Email Selection (only show when mode is primary) -->
                 <div id="primaryEmailSection" class={`space-y-2 ${emailSendingMode !== 'primary' ? 'hidden' : ''}`}>
-                  <label for="primaryEmail" class="text-sm font-medium leading-none">Primary Email Address</label>
+                  <label for="primaryEmail" class="text-sm font-medium leading-none">{t('pages.settings.emailConfig.primaryAccount')}</label>
                   <select 
                     id="primaryEmail"
                     class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
@@ -289,7 +314,7 @@ console.log("[general-settings] Page setup complete, rendering");
                     ))}
                   </select>
                   <p class="text-xs text-muted-foreground">
-                    This email will be used as the sender for all outgoing emails in "Primary Email" mode.
+                    {t('pages.settings.emailConfig.selectAccount')}
                   </p>
                 </div>
 
@@ -303,7 +328,7 @@ console.log("[general-settings] Page setup complete, rendering");
                     <svg class="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    Save Email Configuration
+                    {t('common.saveChanges')}
                   </button>
                 </div>
               </div>
@@ -317,10 +342,10 @@ console.log("[general-settings] Page setup complete, rendering");
             <!-- Section Header -->
             <div class="space-y-1">
               <h3 class="text-lg font-semibold leading-none tracking-tight">
-                Email Signature
+                {t('pages.settings.emailSignature.title')}
               </h3>
               <p class="text-sm text-muted-foreground">
-                Configure the default email signature for support responses
+                {t('pages.settings.emailSignature.description')}
               </p>
             </div>
 
@@ -344,10 +369,10 @@ console.log("[general-settings] Page setup complete, rendering");
                   </svg>
                   <div class="space-y-1">
                     <p class="text-sm font-medium text-destructive">
-                      Failed to load email signature
+                      {t('pages.settings.emailSignature.errorTitle')}
                     </p>
                     <p class="text-sm text-muted-foreground">
-                      There was an error loading the signature. You can still edit and save a new one.
+                      {t('pages.settings.emailSignature.errorDescription')}
                     </p>
                   </div>
                 </div>
@@ -360,16 +385,16 @@ console.log("[general-settings] Page setup complete, rendering");
                 for="signature" 
                 class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
               >
-                Signature Content
+                {t('pages.settings.emailSignature.signature')}
               </label>
               <textarea
                 id="signature"
                 class="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-                placeholder="Enter your email signature here..."
+                placeholder={t('pages.settings.emailSignature.placeholder')}
                 rows="6"
               >{signature}</textarea>
               <p class="text-xs text-muted-foreground">
-                This signature will be automatically appended to all outgoing support emails.
+                {t('pages.settings.emailSignature.hint')}
               </p>
             </div>
 
@@ -394,7 +419,7 @@ console.log("[general-settings] Page setup complete, rendering");
                     d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                Save Signature
+                {t('common.save')}
               </button>
             </div>
           </div>
@@ -406,10 +431,10 @@ console.log("[general-settings] Page setup complete, rendering");
             <!-- Section Header -->
             <div class="space-y-1">
               <h3 class="text-lg font-semibold leading-none tracking-tight">
-                Confirm Mail
+                {t('settings.confirmMail')}
               </h3>
               <p class="text-sm text-muted-foreground">
-                Configure the default confirm mail, send when a email reaches you. (If you leave this empty nothing will be send)
+                {t('settings.confirmMailDescription')}
               </p>
             </div>
 
@@ -433,10 +458,10 @@ console.log("[general-settings] Page setup complete, rendering");
                   </svg>
                   <div class="space-y-1">
                     <p class="text-sm font-medium text-destructive">
-                      Failed to load confirmation mail
+                      {t('settings.failedToLoadConfirmationMail')}
                     </p>
                     <p class="text-sm text-muted-foreground">
-                      There was an error loading the confirmation mail. You can still edit and save a new one.
+                      {t('settings.failedToLoadConfirmationMailDescription')}
                     </p>
                   </div>
                 </div>
@@ -449,16 +474,16 @@ console.log("[general-settings] Page setup complete, rendering");
                 for="confirm-subject" 
                 class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
               >
-                Subject
+                {t('settings.subject')}
               </label>
               <textarea
                 id="confirm-subject"
                 class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-                placeholder="Enter your email subject here..."
+                placeholder={t('settings.subjectPlaceholder')}
                 rows="6"
               >{confirmation_subject}</textarea>
               <p class="text-xs text-muted-foreground">
-                This is the subject of the auto send confirmation mail
+                {t('settings.subjectHint')}
               </p>
             </div>
 
@@ -468,16 +493,16 @@ console.log("[general-settings] Page setup complete, rendering");
                 for="confirm-body" 
                 class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
               >
-                Email Body
+                {t('settings.emailBody')}
               </label>
               <textarea
                 id="confirm-body"
                 class="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-                placeholder="Enter your email body here..."
+                placeholder={t('settings.emailBodyPlaceholder')}
                 rows="6"
               >{confirmation_body}</textarea>
               <p class="text-xs text-muted-foreground">
-                This is the body of the auto send confirmation mail
+                {t('settings.emailBodyHint')}
               </p>
             </div>
 
@@ -502,7 +527,7 @@ console.log("[general-settings] Page setup complete, rendering");
                     d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                Save Confirmation Email
+                {t('settings.saveConfirmationEmail')}
               </button>
             </div>
           </div>
@@ -513,10 +538,10 @@ console.log("[general-settings] Page setup complete, rendering");
           <!-- Section Header -->
           <div class="space-y-1 pt-6 pl-6">
             <h3 class="text-lg font-semibold leading-none tracking-tight">
-              Additional Settings
+              {t('settings.additionalSettings')}
             </h3>
             <p class="text-sm text-muted-foreground">
-              Configure General settings that apply to all of your employees
+              {t('settings.additionalSettingsDescription')}
             </p>
           </div>
           <ul class="m-5">
@@ -526,7 +551,7 @@ console.log("[general-settings] Page setup complete, rendering");
                 client:visible
                 defaultChecked={auto_assign_employee_on_send}
                 eventName="auto-assign-employee-on-send-toggle"
-                label = "Auto assign an employee when he sends an answer"
+                label = {t('settings.autoAssignEmployeeOnSend')}
               />
             </li>
           </ul>
@@ -534,12 +559,16 @@ console.log("[general-settings] Page setup complete, rendering");
         <!-- Future Settings Sections -->
         <div class="rounded-lg border border-dashed p-6 text-center">
           <p class="text-sm text-muted-foreground">
-            Additional settings will be added here
+            {t('settings.additionalSettingsPlaceholder')}
           </p>
         </div>
       </div>
     </div>
   </AdminShell>
+
+  <script id="i18n-messages" type="application/json">
+    {clientMsgsJson}
+  </script>
 
   <script>
     /**
@@ -562,6 +591,10 @@ console.log("[general-settings] Page setup complete, rendering");
     const sendingModeRadios = document.querySelectorAll('input[name="sendingMode"]');
     const primaryEmailSelect = document.getElementById("primaryEmail");
     const primaryEmailSection = document.getElementById("primaryEmailSection");
+
+    // Localized messages loaded from JSON script tag
+    const msgsEl = document.getElementById('i18n-messages');
+    const msgs = msgsEl ? JSON.parse((msgsEl.textContent || '').trim()) : {};
 
     // Show/hide primary email selection based on mode
     sendingModeRadios.forEach(radio => {
@@ -586,8 +619,8 @@ console.log("[general-settings] Page setup complete, rendering");
 
         // Validation
         if (selectedMode === 'primary' && !primaryEmailId) {
-          toast.error("Configuration incomplete", {
-            description: "Please select a primary email address for this mode."
+          toast.error(msgs.configurationIncomplete, {
+            description: msgs.selectPrimaryEmailForMode
           });
           return;
         }
@@ -595,11 +628,11 @@ console.log("[general-settings] Page setup complete, rendering");
         // Disable button during save
         saveEmailConfigButton.setAttribute("disabled", "true");
         saveEmailConfigButton.innerHTML = `
-          <svg class="mr-2 h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          <svg class='mr-2 h-4 w-4 animate-spin' xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24'>
+            <circle class='opacity-25' cx='12' cy='12' r='10' stroke='currentColor' stroke-width='4'></circle>
+            <path class='opacity-75' fill='currentColor' d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'></path>
           </svg>
-          Saving...
+          ${msgs.commonSaving}
         `;
 
         try {
@@ -614,24 +647,24 @@ console.log("[general-settings] Page setup complete, rendering");
 
           console.log("[settings-script] Email configuration saved successfully");
           
-          toast.success("Configuration saved", {
-            description: "Email sending preferences have been updated.",
+          toast.success(msgs.configurationSaved, {
+            description: msgs.emailSendingPreferencesUpdated,
           });
 
         } catch (error) {
           console.error("[settings-script] Failed to save email configuration:", error);
           
-          toast.error("Failed to save", {
+          toast.error(msgs.failedToSave, {
             description: error instanceof Error ? error.message : "An unexpected error occurred.",
           });
         } finally {
           // Re-enable button
           saveEmailConfigButton.removeAttribute("disabled");
           saveEmailConfigButton.innerHTML = `
-            <svg class="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <svg class='mr-2 h-4 w-4' xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='1.5' stroke='currentColor'>
+              <path stroke-linecap='round' stroke-linejoin='round' d='M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z' />
             </svg>
-            Save Email Configuration
+            ${msgs.saveEmailConfiguration}
           `;
         }
       });
@@ -659,7 +692,7 @@ console.log("[general-settings] Page setup complete, rendering");
         
         if (!validation.isValid) {
           console.error("[settings-script] Validation failed:", validation.error);
-          toast.error("Invalid signature", {
+          toast.error(msgs.invalidSignature, {
             description: validation.error
           });
           return;
@@ -675,11 +708,11 @@ console.log("[general-settings] Page setup complete, rendering");
         // Disable button during save
         saveSignatureButton.setAttribute("disabled", "true");
         saveSignatureButton.innerHTML = `
-          <svg class="mr-2 h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          <svg class='mr-2 h-4 w-4 animate-spin' xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24'>
+            <circle class='opacity-25' cx='12' cy='12' r='10' stroke='currentColor' stroke-width='4'></circle>
+            <path class='opacity-75' fill='currentColor' d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'></path>
           </svg>
-          Saving...
+          ${msgs.commonSaving}
         `;
 
         try {
@@ -696,29 +729,29 @@ console.log("[general-settings] Page setup complete, rendering");
           // Update textarea with sanitized value if it was changed
           if (sanitizedSignature !== signature) {
             signatureTextarea.value = sanitizedSignature;
-            toast.success("Changes saved", {
+            toast.success(msgs.changesSaved, {
               description: "Email signature has been updated (some unsafe content was removed).",
             });
           } else {
-            toast.success("Changes saved", {
-              description: "Email signature has been updated successfully.",
+            toast.success(msgs.changesSaved, {
+              description: msgs.emailSignatureUpdatedSuccessfully,
             });
           }
 
         } catch (error) {
           console.error("[settings-script] Failed to save signature:", error);
           
-          toast.error("Failed to save", {
+          toast.error(msgs.failedToSave, {
             description: error instanceof Error ? error.message : "An unexpected error occurred.",
           });
         } finally {
           // Re-enable button
           saveSignatureButton.removeAttribute("disabled");
           saveSignatureButton.innerHTML = `
-            <svg class="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <svg class='mr-2 h-4 w-4' xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='1.5' stroke='currentColor'>
+              <path stroke-linecap='round' stroke-linejoin='round' d='M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z' />
             </svg>
-            Save Signature
+            ${msgs.saveSignature}
           `;
         }
       });
@@ -748,13 +781,13 @@ console.log("[general-settings] Page setup complete, rendering");
 
         if (!validationSubject.isValid) {
           console.error("[settings-script] Validation failed:", validationSubject.error);
-          toast.error("Invalid subject", {
+          toast.error(msgs.invalidSubject, {
             description: validationSubject.error
           });
           return;
         } else if (!validationBody.isValid) {
           console.error ("[settings-script] Validation failed", validationBody.error);
-          toast.error("Invalid body", {
+          toast.error(msgs.invalidBody, {
             description: validationBody.error
           });
           return;
@@ -768,11 +801,11 @@ console.log("[general-settings] Page setup complete, rendering");
         //disable button during save
         saveConfirmationMailButton.setAttribute("disabled", "true");
         saveConfirmationMailButton.innerHTML = `
-          <svg class="mr-2 h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          <svg class='mr-2 h-4 w-4 animate-spin' xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24'>
+            <circle class='opacity-25' cx='12' cy='12' r='10' stroke='currentColor' stroke-width='4'></circle>
+            <path class='opacity-75' fill='currentColor' d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'></path>
           </svg>
-          Saving...
+          ${msgs.commonSaving}
         `;
 
         try {
@@ -790,23 +823,23 @@ console.log("[general-settings] Page setup complete, rendering");
           confirmSubjectTextarea.value = subject;
           confirmBodyTextarea.value = body;
 
-          toast.success("Changes saved", {
+          toast.success(msgs.changesSaved, {
             description: "Email signature has been updated successfully.",
           });
 
         } catch (error) {
           console.error("[settings-script] Failed to save confirm mail:", error);
-          toast.error("Failed to save", {
+          toast.error(msgs.failedToSave, {
             description: error instanceof Error ? error.message : "An unexpected error occurred.",
           });
         } finally {
           // Re-enable button
           saveConfirmationMailButton.removeAttribute("disabled");
           saveConfirmationMailButton.innerHTML = `
-            <svg class="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <svg class='mr-2 h-4 w-4' xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='1.5' stroke='currentColor'>
+              <path stroke-linecap='round' stroke-linejoin='round' d='M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z' />
             </svg>
-            Save Changes
+            ${msgs.commonSaveChanges}
           `;
         }
       })
@@ -829,13 +862,13 @@ console.log("[general-settings] Page setup complete, rendering");
 
           console.log('[settings-script] Auto assign employee setting saved successfully');
 
-          toast.success('Changes saved', {
-            description: 'Auto assign employee when a mail is send, saved successfully'
+          toast.success(msgs.changesSaved, {
+            description: msgs.autoAssignEmployeeSaved
           });
 
         } catch (error) {
           console.error("[settings-script] Failed to save the setting (auto assign employee when email is send):", error);
-          toast.error("Failed to save", {
+          toast.error(msgs.failedToSave, {
             description: error instanceof Error ? error.message : "An unexpected error occurred.",
           });
         }

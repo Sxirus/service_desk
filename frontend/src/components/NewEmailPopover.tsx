@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { apiClient } from "@/utils/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,7 @@ interface NewEmailPopoverProps {
 }
 
 export function NewEmailPopover({ from }: NewEmailPopoverProps) {
+  const { t } = useTranslation('dashboard');
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -40,12 +42,12 @@ export function NewEmailPopover({ from }: NewEmailPopoverProps) {
     const trimmedSubject = subject.trim();
 
     if (!isValidEmail(trimmedEmail)) {
-      setError("Please enter a valid email address");
+      setError(t('newEmail.validEmailError'));
       return;
     }
 
     if (!trimmedSubject) {
-      setError("Subject is required");
+      setError(t('newEmail.subjectRequired'));
       return;
     }
 
@@ -73,7 +75,7 @@ export function NewEmailPopover({ from }: NewEmailPopoverProps) {
       // Navigate to the normal ticket view (thread + reply + sidebar/macros).
       window.location.href = nextUrl.toString();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to start email");
+      setError(e instanceof Error ? e.message : t('newEmail.failedToStart'));
       setIsSubmitting(false);
     }
   };
@@ -81,13 +83,13 @@ export function NewEmailPopover({ from }: NewEmailPopoverProps) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button className="cursor-pointer">New Email</Button>
+        <Button className="cursor-pointer">{t('newEmail.button')}</Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-96">
         <div className="space-y-4">
           <div>
-            <div className="text-sm font-medium">New Email</div>
-            <div className="text-xs text-muted-foreground">Create/find the customer, then you’ll be taken to the ticket view to send.</div>
+            <div className="text-sm font-medium">{t('newEmail.title')}</div>
+            <div className="text-xs text-muted-foreground">{t('newEmail.description')}</div>
           </div>
 
           {error && (
@@ -98,41 +100,41 @@ export function NewEmailPopover({ from }: NewEmailPopoverProps) {
 
           <div className="grid gap-3">
             <div className="grid gap-1.5">
-              <Label htmlFor="new-email-name">Name (optional)</Label>
+              <Label htmlFor="new-email-name">{t('newEmail.nameLabel')}</Label>
               <Input
                 id="new-email-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Customer name"
+                placeholder={t('newEmail.namePlaceholder')}
                 autoComplete="name"
               />
             </div>
 
             <div className="grid gap-1.5">
-              <Label htmlFor="new-email-email">Email</Label>
+              <Label htmlFor="new-email-email">{t('newEmail.emailLabel')}</Label>
               <Input
                 id="new-email-email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="customer@example.com"
+                placeholder={t('newEmail.emailPlaceholder')}
                 autoComplete="email"
                 inputMode="email"
               />
             </div>
 
             <div className="grid gap-1.5">
-              <Label htmlFor="new-email-subject">Subject</Label>
+              <Label htmlFor="new-email-subject">{t('newEmail.subjectLabel')}</Label>
               <Input
                 id="new-email-subject"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                placeholder="Subject"
+                placeholder={t('newEmail.subjectPlaceholder')}
               />
             </div>
 
             <div className="pt-1">
               <Button onClick={handleStart} disabled={!canSubmit} className="cursor-pointer w-full">
-                {isSubmitting ? "Starting…" : "Start Email"}
+                {isSubmitting ? t('newEmail.starting') : t('newEmail.startButton')}
               </Button>
             </div>
           </div>

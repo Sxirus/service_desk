@@ -6,6 +6,7 @@ import { stripePromise } from '@/lib/stripe';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
+import { useTranslation } from 'react-i18next';
 
 interface StripePaymentFormProps {
   priceId: string;
@@ -28,6 +29,7 @@ function CheckoutForm({
   onSuccess: () => void; 
   onBack: () => void 
 }) {
+  const { t } = useTranslation(['auth', 'common']);
   const checkoutState = useCheckout();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +40,7 @@ function CheckoutForm({
   const handlePayment = async () => {
     // Type guard - only proceed if checkout is available
     if (checkoutState.type !== 'success') {
-      setError('Checkout not ready');
+      setError(t('auth:wizard.payment.checkoutNotReady'));
       return;
     }
 
@@ -62,7 +64,7 @@ function CheckoutForm({
         const { data: { session } } = await supabase.auth.getSession();
         
         if (!session) {
-          setError('Authentication lost. Please log in again.');
+          setError(t('auth:wizard.payment.authenticationLost'));
           setLoading(false);
           return;
         }
@@ -82,14 +84,14 @@ function CheckoutForm({
         const completeData = await completeResponse.json();
 
         if (!completeResponse.ok || !completeData.success) {
-          throw new Error(completeData.error || 'Failed to complete subscription');
+          throw new Error(completeData.error || t('auth:wizard.payment.initializationFailed'));
         }
 
         console.log('[Payment] Subscription completed:', completeData.subscriptionId);
         onSuccess();
       }
     } catch (e: any) {
-      setError(e?.message || 'Payment failed');
+      setError(e?.message || t('auth:wizard.payment.paymentFailed'));
       setLoading(false);
     }
   };
@@ -99,7 +101,7 @@ function CheckoutForm({
     return (
       <div className="flex items-center justify-center py-8">
         <RefreshCw className="h-8 w-8 animate-spin text-primary" />
-        <span className="ml-3 text-muted-foreground">Loading payment form...</span>
+        <span className="ml-3 text-muted-foreground">{t('auth:wizard.payment.loadingPaymentForm')}</span>
       </div>
     );
   }
@@ -109,11 +111,11 @@ function CheckoutForm({
     return (
       <div className="p-4 border border-destructive rounded-lg bg-destructive/10">
         <p className="text-sm text-destructive">
-          Error loading payment form: {checkoutState.error.message}
+          {t('auth:wizard.payment.errorLoadingForm', { message: checkoutState.error.message })}
         </p>
         <Button variant="outline" onClick={onBack} className="mt-4">
           <ChevronLeft className="mr-2 h-4 w-4" />
-          Go Back
+          {t('auth:wizard.payment.goBack')}
         </Button>
       </div>
     );
@@ -125,20 +127,20 @@ function CheckoutForm({
       {/* Payment summary */}
       <div className="p-4 border rounded-lg bg-muted/50">
         <div className="flex justify-between items-center mb-2">
-          <span className="font-medium">Pro Plan</span>
-          <span className="font-bold">€{totalPrice}/month</span>
+          <span className="font-medium">{t('auth:wizard.payment.proPlan')}</span>
+          <span className="font-bold">{t('auth:wizard.payment.pricePerMonth', { total: totalPrice })}</span>
         </div>
         <p className="text-xs text-muted-foreground">
-          {quantity} user{quantity > 1 ? 's' : ''} × €{pricePerUser.toFixed(2)}/month
+          {t('auth:wizard.payment.userCount', { count: quantity, price: pricePerUser.toFixed(2) })}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Your subscription will start immediately. You can cancel anytime.
+          {t('auth:wizard.payment.subscriptionNote')}
         </p>
       </div>
 
       {/* Stripe Payment Element */}
       <div className="space-y-4">
-        <label className="text-sm font-medium block">Payment Information</label>
+        <label className="text-sm font-medium block">{t('auth:wizard.payment.paymentInformation')}</label>
         <PaymentElement options={{ layout: 'accordion' }} />
       </div>
 
@@ -153,17 +155,17 @@ function CheckoutForm({
       <div className="flex items-center justify-between pt-4">
         <Button variant="outline" onClick={onBack} disabled={loading}>
           <ChevronLeft className="mr-2 h-4 w-4" />
-          Back
+          {t('auth:wizard.payment.back')}
         </Button>
         <Button onClick={handlePayment} disabled={loading}>
           {loading ? (
             <>
               <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-              Processing...
+              {t('auth:wizard.payment.processing')}
             </>
           ) : (
             <>
-              Complete Payment
+              {t('auth:wizard.payment.completePayment')}
               <ChevronRight className="ml-2 h-4 w-4" />
             </>
           )}
@@ -171,7 +173,7 @@ function CheckoutForm({
       </div>
 
       <p className="text-xs text-center text-muted-foreground">
-        Payments are processed securely through Stripe.
+        {t('auth:wizard.payment.securePayment')}
       </p>
     </div>
   );
@@ -181,6 +183,7 @@ function CheckoutForm({
  * Main payment form component with Stripe provider
  */
 export default function StripePaymentForm({ priceId, quantity, onSuccess, onBack }: StripePaymentFormProps) {
+  const { t } = useTranslation(['auth', 'common']);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
@@ -199,7 +202,7 @@ export default function StripePaymentForm({ priceId, quantity, onSuccess, onBack
         const { data: { session } } = await supabase.auth.getSession();
         
         if (!session) {
-          throw new Error('Not authenticated. Please complete account creation first.');
+          throw new Error('NOT_AUTHENTICATED');
         }
 
         // PUBLIC_API_URL already includes /api, so we just add the specific endpoint
@@ -217,14 +220,14 @@ export default function StripePaymentForm({ priceId, quantity, onSuccess, onBack
         const data = await response.json();
 
         if (!response.ok || !data.success) {
-          throw new Error(data.error || 'Failed to create checkout session');
+          throw new Error(data.error || 'FAILED_TO_CREATE_SESSION');
         }
 
         setClientSecret(data.clientSecret);
         setSessionId(data.sessionId);
       } catch (e: any) {
         console.error('[StripePaymentForm] Error initializing checkout:', e);
-        setInitError(e?.message || 'Failed to initialize payment');
+        setInitError(e?.message || 'FAILED_TO_INITIALIZE');
       } finally {
         setLoading(false);
       }
@@ -233,12 +236,27 @@ export default function StripePaymentForm({ priceId, quantity, onSuccess, onBack
     initializeCheckout();
   }, [priceId, quantity]);
 
+  // Helper to translate error codes
+  const getErrorMessage = (errorCode: string | null) => {
+    if (!errorCode) return t('auth:wizard.payment.initializationFailed');
+    switch (errorCode) {
+      case 'NOT_AUTHENTICATED':
+        return t('auth:wizard.payment.notAuthenticated');
+      case 'FAILED_TO_CREATE_SESSION':
+        return t('auth:wizard.payment.initializationFailed');
+      case 'FAILED_TO_INITIALIZE':
+        return t('auth:wizard.payment.failedToInitialize');
+      default:
+        return errorCode;
+    }
+  };
+
   // Show loading state
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
         <RefreshCw className="h-8 w-8 animate-spin text-primary" />
-        <span className="ml-3 text-muted-foreground">Preparing payment...</span>
+        <span className="ml-3 text-muted-foreground">{t('auth:wizard.payment.preparingPayment')}</span>
       </div>
     );
   }
@@ -249,12 +267,12 @@ export default function StripePaymentForm({ priceId, quantity, onSuccess, onBack
       <div className="space-y-4">
         <div className="p-4 border border-destructive rounded-lg bg-destructive/10">
           <p className="text-sm text-destructive">
-            {initError || 'Failed to initialize payment session'}
+            {getErrorMessage(initError)}
           </p>
         </div>
         <Button variant="outline" onClick={onBack}>
           <ChevronLeft className="mr-2 h-4 w-4" />
-          Go Back
+          {t('auth:wizard.payment.goBack')}
         </Button>
       </div>
     );
@@ -266,21 +284,11 @@ export default function StripePaymentForm({ priceId, quantity, onSuccess, onBack
       <div className="space-y-4">
         <div className="p-4 border border-destructive rounded-lg bg-destructive/10">
           <p className="text-sm text-destructive">
-            Stripe is not configured. Please contact support.
+            {t('auth:wizard.payment.stripeNotConfigured')}
           </p>
         </div>
         <Button variant="outline" onClick={onBack}>
           <ChevronLeft className="mr-2 h-4 w-4" />
-          Go Back
-        </Button>
-      </div>
-    );
-  }
-
-  // Render payment form with Stripe provider
-  return (
-    <CheckoutProvider stripe={stripePromise} options={{ clientSecret }}>
-      <CheckoutForm quantity={quantity} sessionId={sessionId} onSuccess={onSuccess} onBack={onBack} />
-    </CheckoutProvider>
+          {t('auth:wizard.payment.goBack')}
   );
 }

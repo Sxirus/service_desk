@@ -2,6 +2,7 @@
 "use client"
 
 import * as React from "react"
+import { useTranslation } from 'react-i18next'
 import {
   Shield,
   Building2,
@@ -48,34 +49,6 @@ type Props = React.ComponentProps<typeof Sidebar> & {
   clientName?: string;
 }
 
-const navItems = [
-  {
-    title: "Dashboard",
-    url: "/platform/dashboard",
-    icon: LayoutDashboard,
-  },
-  {
-    title: "Clients",
-    url: "/platform/clients",
-    icon: Building2,
-  },
-  {
-    title: "Billing",
-    url: "/platform/billing",
-    icon: CreditCard,
-  },
-  {
-    title: "Analytics",
-    url: "/platform/analytics",
-    icon: BarChart3,
-  },
-  {
-    title: "Platform Admins",
-    url: "/platform/admins",
-    icon: Users,
-  },
-]
-
 export function PlatformSidebar({ 
   user,
   currentPath = "/platform/dashboard",
@@ -83,7 +56,36 @@ export function PlatformSidebar({
   clientName,
   ...props 
 }: Props) {
+  const { t } = useTranslation('platform')
   const [isLoggingOut, setIsLoggingOut] = React.useState(false)
+
+  const navItems = [
+    {
+      title: t('sidebar.overview'),
+      url: "/platform/dashboard",
+      icon: LayoutDashboard,
+    },
+    {
+      title: t('sidebar.companies'),
+      url: "/platform/clients",
+      icon: Building2,
+    },
+    {
+      title: t('sidebar.billing'),
+      url: "/platform/billing",
+      icon: CreditCard,
+    },
+    {
+      title: t('sidebar.analytics'),
+      url: "/platform/analytics",
+      icon: BarChart3,
+    },
+    {
+      title: t('users.platformAdmins'),
+      url: "/platform/admins",
+      icon: Users,
+    },
+  ]
 
   const getInitials = (email: string) => {
     const parts = email.split('@')[0].split(/[._-]/)
@@ -117,8 +119,8 @@ export function PlatformSidebar({
                 <Shield className="size-4" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">Platform Admin</span>
-                <span className="truncate text-xs text-muted-foreground">Management Console</span>
+                <span className="truncate font-semibold">{t('shell.platformAdmin')}</span>
+                <span className="truncate text-xs text-muted-foreground">{t('shell.managementConsole')}</span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -127,7 +129,7 @@ export function PlatformSidebar({
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel>{t('shell.navigation')}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {navItems.map((item) => (
@@ -149,14 +151,14 @@ export function PlatformSidebar({
 
         {hasClientLink && (
           <SidebarGroup>
-            <SidebarGroupLabel>Quick Access</SidebarGroupLabel>
+            <SidebarGroupLabel>{t('shell.quickAccess')}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild>
                     <a href="/dashboard">
                       <ArrowLeft className="size-4" />
-                      <span>Back to {clientName || 'Client'}</span>
+                      <span>{t('sidebar.backToApp', { name: clientName || t('shell.client') })}</span>
                     </a>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -181,7 +183,7 @@ export function PlatformSidebar({
                     </AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold">Platform Admin</span>
+                    <span className="truncate font-semibold">{t('shell.platformAdmin')}</span>
                     <span className="truncate text-xs">{user.email}</span>
                   </div>
                   <ChevronsUpDown className="ml-auto size-4" />
@@ -200,7 +202,7 @@ export function PlatformSidebar({
                     </AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold">Platform Admin</span>
+                    <span className="truncate font-semibold">{t('shell.platformAdmin')}</span>
                     <span className="truncate text-xs">{user.email}</span>
                   </div>
                 </div>
@@ -211,7 +213,7 @@ export function PlatformSidebar({
                   className="text-red-600 focus:text-red-600 focus:bg-red-50"
                 >
                   <LogOut className="size-4 mr-2" />
-                  {isLoggingOut ? "Logging out..." : "Log out"}
+                  {isLoggingOut ? t('shell.loggingOut') : t('shell.logOut')}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

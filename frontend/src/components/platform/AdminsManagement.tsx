@@ -2,6 +2,7 @@
 "use client"
 
 import * as React from "react"
+import { useTranslation } from 'react-i18next'
 import {
   Shield,
   Plus,
@@ -52,6 +53,7 @@ interface Props {
 }
 
 export default function AdminsManagement({ initialAdmins, currentAdminId }: Props) {
+  const { t } = useTranslation(['platform', 'common'])
   const [admins, setAdmins] = React.useState<PlatformAdmin[]>(initialAdmins)
   const [isAddDialogOpen, setIsAddDialogOpen] = React.useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false)
@@ -80,7 +82,7 @@ export default function AdminsManagement({ initialAdmins, currentAdminId }: Prop
 
   const handleAddAdmin = async () => {
     if (!newAdminEmail.trim()) {
-      toast.error("Please enter an email address")
+      toast.error(t('admins.enterEmailError'))
       return
     }
 
@@ -91,13 +93,13 @@ export default function AdminsManagement({ initialAdmins, currentAdminId }: Prop
         setAdmins([response.data, ...admins])
         setNewAdminEmail("")
         setIsAddDialogOpen(false)
-        toast.success("Platform admin added successfully")
+        toast.success(t('admins.addSuccess'))
       } else {
-        throw new Error(response.error || "Failed to add admin")
+        throw new Error(response.error || t('admins.addFailed'))
       }
     } catch (error: any) {
       console.error("Failed to add admin:", error)
-      toast.error(error.message || "Failed to add platform admin")
+      toast.error(error.message || t('admins.addFailed'))
     } finally {
       setIsAdding(false)
     }
@@ -113,13 +115,13 @@ export default function AdminsManagement({ initialAdmins, currentAdminId }: Prop
         setAdmins(admins.filter(a => a.id !== adminToDelete.id))
         setIsDeleteDialogOpen(false)
         setAdminToDelete(null)
-        toast.success("Platform admin removed")
+        toast.success(t('admins.removeSuccess'))
       } else {
-        throw new Error(response.error || "Failed to remove admin")
+        throw new Error(response.error || t('admins.removeFailed'))
       }
     } catch (error: any) {
       console.error("Failed to remove admin:", error)
-      toast.error(error.message || "Failed to remove platform admin")
+      toast.error(error.message || t('admins.removeFailed'))
     } finally {
       setIsDeleting(false)
     }
@@ -135,14 +137,14 @@ export default function AdminsManagement({ initialAdmins, currentAdminId }: Prop
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Platform Admins</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('users.platformAdmins')}</h1>
           <p className="text-sm text-muted-foreground">
-            Manage users with platform-level administrative access
+            {t('admins.description')}
           </p>
         </div>
         <Button onClick={() => setIsAddDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
-          Add Admin
+          {t('admins.addAdmin')}
         </Button>
       </div>
 
@@ -151,10 +153,9 @@ export default function AdminsManagement({ initialAdmins, currentAdminId }: Prop
         <CardContent className="flex items-start gap-3 p-4">
           <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
           <div>
-            <p className="font-medium text-blue-900 dark:text-blue-100">Platform Admin Access</p>
+            <p className="font-medium text-blue-900 dark:text-blue-100">{t('admins.accessTitle')}</p>
             <p className="text-sm text-blue-700 dark:text-blue-300">
-              Platform admins have full access to manage all clients, view billing information, 
-              and access platform-wide analytics. Only add trusted team members.
+              {t('admins.accessDescription')}
             </p>
           </div>
         </CardContent>
@@ -163,15 +164,15 @@ export default function AdminsManagement({ initialAdmins, currentAdminId }: Prop
       {/* Admins List */}
       <Card>
         <CardHeader>
-          <CardTitle>Current Administrators</CardTitle>
+          <CardTitle>{t('admins.currentAdmins')}</CardTitle>
           <CardDescription>
-            {admins.length} platform {admins.length === 1 ? 'admin' : 'admins'}
+            {t('admins.adminCount', { count: admins.length })}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {admins.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">
-              No platform admins found
+              {t('admins.noAdminsFound')}
             </p>
           ) : (
             <div className="space-y-3">
@@ -190,18 +191,18 @@ export default function AdminsManagement({ initialAdmins, currentAdminId }: Prop
                       <div className="flex items-center gap-2">
                         <p className="font-medium">{admin.email}</p>
                         {admin.id === currentAdminId && (
-                          <Badge variant="secondary" className="text-xs">You</Badge>
+                          <Badge variant="secondary" className="text-xs">{t('admins.you')}</Badge>
                         )}
                       </div>
                       <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Mail className="h-3 w-3" />
-                          Added {formatDate(admin.created_at)}
+                          {t('admins.added', { date: formatDate(admin.created_at) })}
                         </span>
                         {admin.last_login && (
                           <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            Last login {formatDate(admin.last_login)}
+                            {t('admins.lastLogin', { date: formatDate(admin.last_login) })}
                           </span>
                         )}
                       </div>
@@ -213,7 +214,7 @@ export default function AdminsManagement({ initialAdmins, currentAdminId }: Prop
                     className="text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={() => openDeleteDialog(admin)}
                     disabled={admin.id === currentAdminId}
-                    title={admin.id === currentAdminId ? "Cannot remove yourself" : "Remove admin"}
+                    title={admin.id === currentAdminId ? t('admins.cannotRemoveSelf') : t('admins.removeAdmin')}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -228,15 +229,14 @@ export default function AdminsManagement({ initialAdmins, currentAdminId }: Prop
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Platform Admin</DialogTitle>
+            <DialogTitle>{t('users.addPlatformAdmin')}</DialogTitle>
             <DialogDescription>
-              Add a new user with platform-level administrative access. The user must already 
-              have an account in the system.
+              {t('admins.addDialogDescription')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
+              <Label htmlFor="email">{t('admins.emailAddress')}</Label>
               <Input
                 id="email"
                 type="email"
@@ -248,10 +248,10 @@ export default function AdminsManagement({ initialAdmins, currentAdminId }: Prop
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button onClick={handleAddAdmin} disabled={isAdding}>
-              {isAdding ? "Adding..." : "Add Admin"}
+              {isAdding ? t('admins.adding') : t('admins.addAdmin')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -263,21 +263,20 @@ export default function AdminsManagement({ initialAdmins, currentAdminId }: Prop
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-destructive" />
-              Remove Platform Admin
+              {t('users.removePlatformAdmin')}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to remove <strong>{adminToDelete?.email}</strong> as a 
-              platform admin? They will lose all platform-level access immediately.
+              {t('admins.removeConfirmation', { email: adminToDelete?.email })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteAdmin}
               disabled={isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isDeleting ? "Removing..." : "Remove Admin"}
+              {isDeleting ? t('admins.removing') : t('admins.removeAdmin')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

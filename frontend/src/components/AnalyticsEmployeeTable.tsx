@@ -6,8 +6,8 @@
 
 "use client"
 
-import {
-  Card,
+import { useTranslation } from "react-i18next"
+import {Card,
   CardContent,
   CardDescription,
   CardHeader,
@@ -37,31 +37,32 @@ export function AnalyticsEmployeeTable({
   data, 
   dateRange 
 }: AnalyticsEmployeeTableProps) {
+  const { t } = useTranslation('dashboard');
   const totalEmails = data.reduce((sum, item) => sum + item.email_count, 0)
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Employee Performance Details</CardTitle>
+        <CardTitle>{t('charts.employeePerformance')}</CardTitle>
         <CardDescription>
-          {dateRange} • Total: {totalEmails} emails sent
+          {dateRange} • {t('charts.totalEmailsSent', { count: totalEmails })}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[50px]">Rank</TableHead>
-              <TableHead>Employee Name</TableHead>
-              <TableHead className="text-right">Emails Sent</TableHead>
-              <TableHead className="text-right">Percentage</TableHead>
+              <TableHead className="w-[50px]">{t('charts.rank')}</TableHead>
+              <TableHead>{t('charts.employeeName')}</TableHead>
+              <TableHead className="text-right">{t('charts.emailsSentColumn')}</TableHead>
+              <TableHead className="text-right">{t('charts.percentage')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {data.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} className="text-center text-muted-foreground">
-                  No data available for the selected period
+                  {t('analytics.noDataForPeriod')}
                 </TableCell>
               </TableRow>
             ) : (

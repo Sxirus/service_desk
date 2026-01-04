@@ -2,11 +2,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function MobileWarning() {
+  const { t } = useTranslation();
   const [isVisible, setIsVisible] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
 
@@ -43,9 +45,9 @@ export function MobileWarning() {
     <div className="fixed top-0 left-0 right-0 z-50 p-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <Alert variant="destructive" className="relative">
         <AlertTriangle className="h-4 w-4" />
-        <AlertTitle>Desktop Experience Recommended</AlertTitle>
+        <AlertTitle>{t('mobileWarning.title')}</AlertTitle>
         <AlertDescription>
-          This website is optimized for desktop viewing. Some features may not work properly on mobile devices.
+          {t('mobileWarning.subtitle')}
         </AlertDescription>
         <Button
           variant="ghost"

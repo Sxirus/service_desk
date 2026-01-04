@@ -17,6 +17,7 @@ import {
   Inbox,
   Shield,
 } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 import { NavMain } from "@/components/nav-main"
 import { NavProjects } from "@/components/nav-projects"
@@ -71,6 +72,8 @@ export function AppSidebar({
   subscriptionTier = "free",
   ...props 
 }: Props) {
+  const { t } = useTranslation('common');
+  
   // Userdaten befüllen
   const userName = userOverride?.name && userOverride.name.trim() 
     ? userOverride.name 
@@ -94,7 +97,7 @@ export function AppSidebar({
   const getNavItems = () => {
     // Build inbox items array with Dashboard and accessible inboxes
     const inboxItems = [
-      { title: "Your Assigned Tickets", url: "/dashboard" },
+      { title: t('sidebar.yourAssignedTickets'), url: "/dashboard" },
       ...accessibleInboxes.map(inbox => ({
         title: inbox.name,
         url: `/inboxes/${inbox.id}`,
@@ -104,7 +107,7 @@ export function AppSidebar({
 
     const baseItems = [
       {
-        title: "Inbox",
+        title: t('sidebar.inbox'),
         url: "/",
         icon: Home,
         isActive: currentPath === "/" || currentPath === "/dashboard" || currentPath.startsWith("/inboxes") || currentPath.startsWith("/tickets"),
@@ -115,41 +118,41 @@ export function AppSidebar({
     // Administration nur für Admins
     if (isAdmin) {
       baseItems.push({
-        title: "Administration",
+        title: t('sidebar.administration'),
         url: "/manage",
         icon: Bot,
         isActive: currentPath.startsWith("/manage"),
         items: [
           {
-            title: "General Settings",
+            title: t('sidebar.generalSettings'),
             url: "/manage/settings"
           },
           { 
-            title: "Users & Groups", 
+            title: t('sidebar.usersGroups'), 
             url: "/manage/users",
           },
           { 
-            title: "Billing data", 
+            title: t('sidebar.billingData'), 
             url: "/manage/client",
           },
           { 
-            title: "Integrations", 
+            title: t('sidebar.integrations'), 
             url: "/manage/shopify",
           },
           {
-            title: "Macros",
+            title: t('sidebar.macros'),
             url: "/manage/macro"
           },
           {
-            title: "Analytics",
+            title: t('sidebar.analytics'),
             url: "/manage/analytics"
           },
           {
-            title: "Inboxes",
+            title: t('sidebar.inboxes'),
             url: "/manage/inboxes"
           },
           {
-            title: "Subscription",
+            title: t('sidebar.subscription'),
             url: "/manage/subscription"
           }
         ],
@@ -159,29 +162,29 @@ export function AppSidebar({
     // Platform Management for platform admins
     if (isPlatformAdmin) {
       baseItems.push({
-        title: "Platform",
+        title: t('sidebar.platform'),
         url: "/platform",
         icon: Shield,
         isActive: currentPath.startsWith("/platform"),
         items: [
           {
-            title: "Dashboard",
+            title: t('sidebar.dashboard'),
             url: "/platform/dashboard"
           },
           {
-            title: "Clients",
+            title: t('sidebar.clients'),
             url: "/platform/clients"
           },
           {
-            title: "Billing",
+            title: t('sidebar.billing'),
             url: "/platform/billing"
           },
           {
-            title: "Analytics",
+            title: t('sidebar.analytics'),
             url: "/platform/analytics"
           },
           {
-            title: "Platform Admins",
+            title: t('sidebar.platformAdmins'),
             url: "/platform/admins"
           }
         ],

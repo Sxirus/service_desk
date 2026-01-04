@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useTranslation } from 'react-i18next'
 import { Loader2, Users, UserMinus } from "lucide-react"
 import { toast } from "sonner"
 import { actions } from "astro:actions"
@@ -44,6 +45,7 @@ export function ReassignTicketsDialog({
   user,
   mode,
 }: ReassignTicketsDialogProps) {
+  const { t } = useTranslation('manage')
   const [employees, setEmployees] = React.useState<Employee[]>([])
   const [selectedEmployeeId, setSelectedEmployeeId] = React.useState<string>("")
   const [isLoading, setIsLoading] = React.useState(false)
@@ -65,7 +67,7 @@ export function ReassignTicketsDialog({
         })
         .catch((err) => {
           console.error("Failed to load employees:", err)
-          toast.error("Failed to load employees")
+          toast.error(t('users.loadEmployeesFailed'))
         })
         .finally(() => {
           setIsLoading(false)
@@ -90,7 +92,7 @@ export function ReassignTicketsDialog({
         })
 
         if (!result?.data?.success) {
-          toast.error(result?.data?.message || "Failed to unassign tickets")
+          toast.error(result?.data?.message || t('users.failedToUnassign'))
           return
         }
 
@@ -100,7 +102,7 @@ export function ReassignTicketsDialog({
         window.location.reload()
       } else {
         if (!selectedEmployeeId) {
-          toast.error("Please select an employee to reassign tickets to")
+          toast.error(t('users.selectEmployeeToReassign'))
           return
         }
 
@@ -110,7 +112,7 @@ export function ReassignTicketsDialog({
         })
 
         if (!result?.data?.success) {
-          toast.error(result?.data?.message || "Failed to reassign tickets")
+          toast.error(result?.data?.message || t('users.failedToReassign'))
           return
         }
 
@@ -121,7 +123,7 @@ export function ReassignTicketsDialog({
       }
     } catch (err: any) {
       console.error("Error:", err)
-      toast.error("An unexpected error occurred")
+      toast.error(t('common.unexpectedError'))
     } finally {
       setIsSubmitting(false)
     }
@@ -135,25 +137,23 @@ export function ReassignTicketsDialog({
             {mode === "unassign" ? (
               <>
                 <UserMinus className="h-5 w-5" />
-                Unassign All Tickets
+                {t('users.unassignAllTickets')}
               </>
             ) : (
               <>
                 <Users className="h-5 w-5" />
-                Reassign All Tickets
+                {t('users.reassignAllTickets')}
               </>
             )}
           </DialogTitle>
           <DialogDescription>
             {mode === "unassign" ? (
               <>
-                This will unassign all tickets currently assigned to <strong>{user.name}</strong>.
-                The tickets will become unassigned and available for other agents to pick up.
+                {t('users.unassignDescription', { name: user.name })}
               </>
             ) : (
               <>
-                Transfer all tickets from <strong>{user.name}</strong> to another employee.
-                This is useful when an employee leaves or changes responsibilities.
+                {t('users.reassignDescription', { name: user.name })}
               </>
             )}
           </DialogDescription>
@@ -162,11 +162,11 @@ export function ReassignTicketsDialog({
         {mode === "reassign" && (
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="target-employee">Reassign to</Label>
+              <Label htmlFor="target-employee">{t('users.reassignTo')}</Label>
               {isLoading ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading employees...
+                  {t('users.loadingEmployees')}
                 </div>
               ) : (
                 <Select
@@ -174,12 +174,12 @@ export function ReassignTicketsDialog({
                   onValueChange={setSelectedEmployeeId}
                 >
                   <SelectTrigger id="target-employee">
-                    <SelectValue placeholder="Select an employee" />
+                    <SelectValue placeholder={t('users.selectEmployee')} />
                   </SelectTrigger>
                   <SelectContent>
                     {employees.length === 0 ? (
                       <SelectItem value="none" disabled>
-                        No other employees available
+                        {t('users.noOtherEmployees')}
                       </SelectItem>
                     ) : (
                       employees.map((emp) => (
@@ -201,7 +201,7 @@ export function ReassignTicketsDialog({
             onClick={() => onOpenChange(false)}
             disabled={isSubmitting}
           >
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             variant={mode === "unassign" ? "destructive" : "default"}
@@ -211,12 +211,12 @@ export function ReassignTicketsDialog({
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {mode === "unassign" ? "Unassigning..." : "Reassigning..."}
+                {mode === "unassign" ? t('users.unassigning') : t('users.reassigning')}
               </>
             ) : mode === "unassign" ? (
-              "Unassign All Tickets"
+              t('users.unassignAllTickets')
             ) : (
-              "Reassign All Tickets"
+              t('users.reassignAllTickets')
             )}
           </Button>
         </DialogFooter>

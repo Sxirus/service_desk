@@ -4,6 +4,12 @@ import InboxManagementPanel from "../../components/InboxManagementPanel";
 import AdminShell from "../../components/AdminShell";
 import { createClient } from "../../lib/supabase";
 import { getCompletePageContext } from "../../lib/auth-helpers";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const { t } = getTranslations(lang, 'manage');
+const tCommon = getTranslations(lang, 'common');
 
 // Initialize Supabase client
 const supabase = createClient({
@@ -51,14 +57,14 @@ try {
 }
 ---
 
-<BaseLayout title="Inbox Management">
+<BaseLayout title={t('pages.inboxes.pageTitle')}>
   <AdminShell
     client:load
     user={sidebarData.user}
     firstTeam={sidebarData.team ?? undefined}
-    crumbParentLabel="Administration"
+    crumbParentLabel={tCommon.t('sidebar.administration')}
     crumbParentHref="/manage"
-    crumbCurrent="Inbox Management"
+    crumbCurrent={t('pages.inboxes.pageTitle')}
     isAdmin={authContext.isAdmin}
     isPlatformAdmin={pageContext.isPlatformAdmin}
     currentPath="/manage/inboxes"
