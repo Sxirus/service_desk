@@ -1,16 +1,20 @@
 /**
  * Shopify Orders Component
  * 
- * A high-fidelity, professional interface inspired by modern SaaS design systems.
- * Built with shadcn/ui for perfect integration and visual consistency.
+ * Displays customer order history from Shopify with refund capabilities.
+ * Features:
+ * - Expandable order cards with line items
+ * - Financial status and fulfillment tracking
+ * - Refund workflow with calculation preview
+ * - Order cancellation for unfulfilled orders
+ * - Accessible keyboard navigation
  */
 
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { 
-  ShoppingBag, 
-  RefreshCcw, 
-  XCircle, 
+  ShoppingBag,
+  RefreshCcw,
   ChevronDown, 
   ChevronUp, 
   AlertCircle, 
@@ -21,10 +25,7 @@ import {
   Undo2,
   CheckCircle2,
   Clock,
-  Ban,
-  Tag,
-  Truck,
-  ReceiptEuro
+  Ban
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -44,12 +45,10 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 interface ShopifyOrdersProps {
@@ -58,28 +57,28 @@ interface ShopifyOrdersProps {
 }
 
 // ============================================================================
-// Status Styling Utility
+// Status Badge Component
 // ============================================================================
 
 const getStatusConfig = (status: string, type: 'financial' | 'fulfillment') => {
   const s = status.toLowerCase();
   if (type === 'financial') {
-    if (s === 'paid') return { color: 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20', icon: CheckCircle2 };
-    if (s === 'refunded' || s === 'voided') return { color: 'text-rose-600 bg-rose-50 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20', icon: Undo2 };
-    if (s === 'pending' || s === 'authorized') return { color: 'text-amber-600 bg-amber-50 border-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20', icon: Clock };
-    return { color: 'text-slate-600 bg-slate-50 border-slate-100', icon: Info };
+    if (s === 'paid') return { variant: 'default' as const, icon: CheckCircle2, color: 'text-green-600' };
+    if (s === 'refunded' || s === 'voided') return { variant: 'destructive' as const, icon: Undo2, color: 'text-red-600' };
+    if (s === 'pending' || s === 'authorized') return { variant: 'secondary' as const, icon: Clock, color: 'text-orange-500' };
+    return { variant: 'outline' as const, icon: Info, color: 'text-muted-foreground' };
   }
-  if (s === 'fulfilled') return { color: 'text-blue-600 bg-blue-50 border-blue-100 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20', icon: Package };
-  if (s === 'unfulfilled') return { color: 'text-slate-500 bg-slate-50 border-slate-200 border-dashed dark:bg-slate-800/50 dark:text-slate-400 dark:border-slate-700', icon: Clock };
-  return { color: 'text-indigo-600 bg-indigo-50 border-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20', icon: Package };
+  if (s === 'fulfilled') return { variant: 'default' as const, icon: Package, color: 'text-blue-500' };
+  if (s === 'unfulfilled') return { variant: 'outline' as const, icon: Clock, color: 'text-muted-foreground' };
+  return { variant: 'secondary' as const, icon: Package, color: 'text-muted-foreground' };
 };
 
 const StatusBadge = ({ status, type }: { status: string; type: 'financial' | 'fulfillment' }) => {
   const config = getStatusConfig(status, type);
   const Icon = config.icon;
   return (
-    <Badge variant="outline" className={cn("gap-1 px-1.5 py-0 h-5 text-[10px] font-bold uppercase tracking-tight", config.color)}>
-      <Icon className="w-2.5 h-2.5" />
+    <Badge variant={config.variant} className="gap-1.5 text-xs">
+      <Icon className="h-3 w-3" />
       {status}
     </Badge>
   );
@@ -92,6 +91,9 @@ const StatusBadge = ({ status, type }: { status: string; type: 'financial' | 'fu
 const RefundDialog = ({ order, onSuccess }: { order: ShopifyOrder; onSuccess: () => void }) => {
   const { t } = useTranslation('manage');
   const [isOpen, setIsOpen] = useState(false);
+  
+  // Check if any items can be refunded
+  const hasRefundableItems = order.line_items.some(item => item.refundableQuantity > 0);
   const [isCalculating, setIsCalculating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [quantities, setQuantities] = useState<Record<string, number>>(
@@ -132,30 +134,47 @@ const RefundDialog = ({ order, onSuccess }: { order: ShopifyOrder; onSuccess: ()
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="w-full h-9 gap-2 font-semibold">
-          <Undo2 className="h-4 w-4 text-blue-500" /> {t('shopify.refund')}
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl">
-        <DialogHeader className="p-6 bg-slate-50 dark:bg-slate-900 border-b">
-          <DialogTitle className="text-lg font-bold tracking-tight">Refund Order #{order.order_number}</DialogTitle>
-          <DialogDescription className="text-xs">{t('shopify.refundDialog.description')}</DialogDescription>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex-1">
+            <DialogTrigger asChild>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full gap-1.5" 
+                disabled={!hasRefundableItems}
+              >
+                <Undo2 className="h-4 w-4" />
+                {t('shopify.refund')}
+              </Button>
+            </DialogTrigger>
+          </div>
+        </TooltipTrigger>
+        {!hasRefundableItems && (
+          <TooltipContent>
+            <p>All items already refunded</p>
+          </TooltipContent>
+        )}
+      </Tooltip>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{t('shopify.refundDialog.title', { number: order.order_number })}</DialogTitle>
+          <DialogDescription>{t('shopify.refundDialog.description')}</DialogDescription>
         </DialogHeader>
-        <div className="p-6 space-y-6">
-          <ScrollArea className="max-h-[280px] -mr-2 pr-4">
-            <div className="space-y-3">
+        <div className="space-y-4">
+          <ScrollArea className="max-h-[280px]">
+            <div className="space-y-2 pr-4">
               {order.line_items.map(item => (
-                <div key={item.id} className="flex items-center justify-between p-3 rounded-xl border bg-card/50">
-                  <div className="space-y-1">
-                    <p className="text-[13px] font-bold leading-tight">{item.name}</p>
-                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
+                <div key={item.id} className="flex items-center justify-between gap-3 p-3 rounded-md border bg-muted/50">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{item.name}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       {item.refundableQuantity} available • {item.price} {order.currency}
                     </p>
                   </div>
                   <Input 
                     type="number" min="0" max={item.refundableQuantity} 
-                    className="w-14 h-8 text-center font-bold" value={quantities[item.id]} 
+                    className="w-16 text-center" value={quantities[item.id]} 
                     onChange={e => setQuantities({...quantities, [item.id]: Math.min(item.refundableQuantity, parseInt(e.target.value) || 0)})}
                   />
                 </div>
@@ -163,39 +182,42 @@ const RefundDialog = ({ order, onSuccess }: { order: ShopifyOrder; onSuccess: ()
             </div>
           </ScrollArea>
           
-          <div className="space-y-4 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-dashed">
-            <div className="flex items-center justify-between">
-              <Label className="text-[13px] font-bold">Shipping Refund</Label>
+          <div className="space-y-4 p-4 rounded-md bg-muted/50 border">
+            <div className="flex items-center justify-between gap-3">
+              <Label className="text-sm font-medium">Shipping Refund</Label>
               <div className="relative">
-                <Input type="number" className="w-24 h-8 pr-8 font-mono text-right" value={shippingAmount} onChange={e => setShippingAmount(e.target.value)} />
-                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-bold text-muted-foreground">{order.currency}</span>
+                <Input type="number" className="w-24 pr-12 text-right" value={shippingAmount} onChange={e => setShippingAmount(e.target.value)} />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{order.currency}</span>
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase font-black text-muted-foreground">Internal Note</Label>
-              <Input placeholder="Why are you refunding?" className="h-9 text-sm" value={note} onChange={e => setNote(e.target.value)} />
+            <div className="space-y-2">
+              <Label htmlFor="note" className="text-sm font-medium">Internal Note</Label>
+              <Input id="note" placeholder="Why are you refunding?" value={note} onChange={e => setNote(e.target.value)} />
             </div>
-            <div className="flex items-center gap-3">
-              <Checkbox id="notify" checked={notify} onCheckedChange={v => setNotify(!!v)} className="rounded-md" />
-              <Label htmlFor="notify" className="text-sm font-semibold cursor-pointer">Notify customer via email</Label>
+            <div className="flex items-center gap-2">
+              <Checkbox id="notify" checked={notify} onCheckedChange={v => setNotify(!!v)} />
+              <Label htmlFor="notify" className="text-sm font-medium cursor-pointer">Notify customer via email</Label>
             </div>
           </div>
 
           {calculatedTotal && (
-            <div className={cn("rounded-2xl bg-blue-600 p-4 text-white shadow-lg shadow-blue-500/20 space-y-1 transition-all duration-300", isCalculating && "opacity-70 scale-[0.98]")}>
-              <div className="flex justify-between text-[10px] font-black uppercase opacity-80"><span>Subtotal</span><span>{calculatedTotal.amountSet.shopMoney.amount} {order.currency}</span></div>
-              <div className="flex justify-between font-black text-lg pt-1 border-t border-white/20 mt-1">
-                <span className="tracking-tight uppercase">Total Refund</span>
-                <span className="font-mono tabular-nums">{calculatedTotal.amountSet.shopMoney.amount} {order.currency}</span>
+            <div className={cn("p-4 rounded-md bg-primary text-primary-foreground space-y-2 transition-opacity", isCalculating && "opacity-50")}>
+              <div className="flex justify-between text-xs opacity-90">
+                <span>Subtotal</span>
+                <span>{calculatedTotal.amountSet.shopMoney.amount} {order.currency}</span>
+              </div>
+              <div className="flex justify-between text-sm font-semibold pt-2 border-t border-primary-foreground/20">
+                <span>Total Refund</span>
+                <span>{calculatedTotal.amountSet.shopMoney.amount} {order.currency}</span>
               </div>
             </div>
           )}
         </div>
-        <DialogFooter className="p-4 bg-slate-50 dark:bg-slate-900 border-t">
-          <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)} className="font-bold">Cancel</Button>
-          <Button disabled={isSubmitting || !calculatedTotal} onClick={submit} className="bg-blue-600 hover:bg-blue-700 text-white font-bold h-9 px-6 rounded-lg shadow-md">
-            {isSubmitting ? <RefreshCcw className="w-4 h-4 animate-spin mr-2" /> : <Undo2 className="w-4 h-4 mr-2" />}
-            Confirm Refund
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setIsOpen(false)}>{t('shopify.cancel')}</Button>
+          <Button disabled={isSubmitting || !calculatedTotal} onClick={submit}>
+            {isSubmitting ? <RefreshCcw className="h-4 w-4 animate-spin mr-2" /> : <Undo2 className="h-4 w-4 mr-2" />}
+            {t('shopify.refundDialog.confirm')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -204,10 +226,10 @@ const RefundDialog = ({ order, onSuccess }: { order: ShopifyOrder; onSuccess: ()
 };
 
 // ============================================================================
-// Order Card Component
+// Order Item Component
 // ============================================================================
 
-const OrderCard = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: { 
+const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: { 
   order: ShopifyOrder; 
   isExpanded: boolean; 
   onToggle: () => void;
@@ -217,114 +239,112 @@ const OrderCard = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
   const { t } = useTranslation('manage');
   
   return (
-    <div className={cn(
-      "group border rounded-xl overflow-hidden transition-all duration-300",
-      isExpanded ? "bg-white dark:bg-slate-950 shadow-md ring-1 ring-primary/10 border-primary/20 scale-[1.01]" : "bg-card hover:border-slate-300 dark:hover:border-slate-700"
-    )}>
-      <div className="p-4 cursor-pointer select-none" onClick={onToggle}>
+    <div className="rounded-xl border bg-card p-4">
+      <div className="cursor-pointer hover:bg-accent/50 transition-colors rounded-lg -m-1 p-1" onClick={onToggle}>
         <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-base font-black tracking-tighter italic">#{order.order_number}</span>
-              {order.cancelled && <Badge variant="destructive" className="h-4 text-[8px] font-black px-1.5 uppercase">Cancelled</Badge>}
+              <span className="text-base font-semibold">#{order.order_number}</span>
+              {order.cancelled && <Badge variant="destructive" className="text-xs">{t('shopify.cancelled')}</Badge>}
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                {new Date(order.created_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}
-              </span>
-              <Separator orientation="vertical" className="h-3" />
-              <span className="text-[11px] font-black text-foreground tabular-nums">
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Clock className="h-3 w-3" />
+                {new Date(order.created_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}
+              </div>
+              <div className="text-sm font-semibold">
                 {order.total_price} {order.currency}
-              </span>
+              </div>
             </div>
           </div>
           <div className="flex flex-col items-end gap-1.5">
             <StatusBadge status={order.financial_status} type="financial" />
             <StatusBadge status={order.fulfillment_status} type="fulfillment" />
+            <div className="text-muted-foreground mt-1">
+              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </div>
           </div>
-        </div>
-        <div className="flex justify-center mt-3 text-muted-foreground/20 group-hover:text-muted-foreground/50 transition-colors">
-          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </div>
       </div>
 
       {isExpanded && (
-        <div className="px-4 pb-4 animate-in fade-in slide-in-from-top-2 duration-300">
-          <Separator className="mb-4 opacity-50" />
+        <div className="pt-4 space-y-4">
+          <Separator />
           
           {/* Line Items */}
-          <div className="space-y-3 mb-5">
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 flex items-center gap-1.5">
-              <Package className="w-3 h-3" /> Items
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+              <Package className="h-3 w-3" /> Items
             </p>
-            {order.line_items.map((item) => (
-              <div key={item.id} className="flex justify-between items-start text-xs group/item">
-                <div className="flex-1 pr-4">
-                  <div className="flex items-center gap-2">
-                    <span className="font-black text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 tabular-nums">{item.quantity}×</span>
-                    <span className="font-bold tracking-tight">{item.name}</span>
+            <div className="space-y-2">
+              {order.line_items.map((item) => (
+                <div key={item.id} className="flex justify-between items-start gap-3 text-sm">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium px-2 py-1 rounded bg-muted text-muted-foreground">{item.quantity}×</span>
+                      <span className="font-medium text-sm">{item.name}</span>
+                    </div>
+                    {item.variantTitle && <p className="text-xs text-muted-foreground mt-0.5 ml-8">{item.variantTitle}</p>}
                   </div>
-                  {item.variantTitle && <p className="text-[10px] text-muted-foreground font-medium mt-0.5 pl-9 italic opacity-70">{item.variantTitle}</p>}
+                  <span className="text-sm text-muted-foreground">{item.price} {order.currency}</span>
                 </div>
-                <span className="text-[11px] font-bold text-muted-foreground/80 tabular-nums">{item.price} {order.currency}</span>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
           {/* Financial Breakdown */}
-          <div className="bg-slate-50/50 dark:bg-slate-900/50 p-3 rounded-xl border border-dashed space-y-2">
-            <div className="flex justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-tight">
-              <span className="flex items-center gap-1.5"><ReceiptEuro className="w-3 h-3" /> Subtotal</span>
-              <span className="tabular-nums font-mono">{order.subtotal} {order.currency}</span>
+          <div className="p-3 rounded-md bg-muted/50 space-y-1.5">
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>{t('shopify.refundDialog.subtotal')}</span>
+              <span>{order.subtotal} {order.currency}</span>
             </div>
             
             {parseFloat(order.total_shipping) > 0 && (
-              <div className="flex justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-tight">
-                <span className="flex items-center gap-1.5"><Truck className="w-3 h-3" /> Shipping</span>
-                <span className="tabular-nums font-mono">{order.total_shipping} {order.currency}</span>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>{t('shopify.refundDialog.shipping')}</span>
+                <span>{order.total_shipping} {order.currency}</span>
               </div>
             )}
 
             {parseFloat(order.total_discounts) > 0 && (
-              <div className="flex justify-between text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-tight">
-                <span className="flex items-center gap-1.5"><Tag className="w-3 h-3" /> Discounts</span>
-                <span className="tabular-nums font-mono">-{order.total_discounts} {order.currency}</span>
+              <div className="flex justify-between text-xs text-red-600">
+                <span>Discounts</span>
+                <span>-{order.total_discounts} {order.currency}</span>
               </div>
             )}
 
-            <div className="flex justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-tight">
-              <span className="flex items-center gap-1.5"><Info className="w-3 h-3" /> Estimated Tax</span>
-              <span className="tabular-nums font-mono">{order.total_tax} {order.currency}</span>
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>{t('shopify.refundDialog.tax')}</span>
+              <span>{order.total_tax} {order.currency}</span>
             </div>
 
             {parseFloat(order.total_refunded) > 0 && (
-              <div className="flex justify-between text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-tight">
-                <span className="flex items-center gap-1.5"><Undo2 className="w-3 h-3" /> Already Refunded</span>
-                <span className="tabular-nums font-mono">-{order.total_refunded} {order.currency}</span>
+              <div className="flex justify-between text-xs text-red-600">
+                <span className="flex items-center gap-1.5"><Undo2 className="h-3 w-3" /> Refunded</span>
+                <span>-{order.total_refunded} {order.currency}</span>
               </div>
             )}
 
-            <Separator className="my-1 opacity-30" />
+            <Separator />
             
-            <div className="flex justify-between items-center pt-0.5">
-              <span className="text-[11px] font-black uppercase tracking-tighter">Current Total</span>
-              <span className="text-sm font-black tabular-nums font-mono text-primary">{order.total_price} {order.currency}</span>
+            <div className="flex justify-between items-center text-base font-semibold">
+              <span>{t('shopify.refundDialog.total')}</span>
+              <span>{order.total_price} {order.currency}</span>
             </div>
           </div>
 
           {/* Refund History */}
           {order.refunds.length > 0 && (
-            <div className="space-y-2 mt-4">
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 flex items-center gap-1.5">
-                <History className="w-3 h-3" /> Refund History
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                <History className="h-3 w-3" /> Refund History
               </p>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {order.refunds.map((refund) => (
-                  <div key={refund.id} className="text-[10px] p-2 rounded-lg bg-rose-50/30 dark:bg-rose-900/10 border border-rose-100/50 dark:border-rose-900/30">
-                    <div className="flex justify-between font-bold mb-1">
-                      <span className="text-rose-700 dark:text-rose-400">{new Date(refund.created_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                      <span className="font-mono">-{refund.amount} {order.currency}</span>
+                  <div key={refund.id} className="text-xs p-2 rounded-md bg-destructive/10 border border-destructive/20">
+                    <div className="flex justify-between font-medium mb-1">
+                      <span className="text-muted-foreground">{new Date(refund.created_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                      <span className="text-destructive">-{refund.amount} {order.currency}</span>
                     </div>
                     {refund.note && <p className="text-muted-foreground italic">"{refund.note}"</p>}
                   </div>
@@ -334,31 +354,38 @@ const OrderCard = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
           )}
 
           {/* Actions */}
-          <div className="grid grid-cols-2 gap-2 mt-4">
+          <div className="flex gap-2">
             <RefundDialog order={order} onSuccess={onRefresh} />
             {!order.cancelled && order.fulfillment_status === 'unfulfilled' && (
               <Button 
-                variant="outline" size="sm" 
-                className="h-9 text-rose-600 border-rose-100 hover:bg-rose-50 hover:text-rose-700 font-semibold"
+                variant="destructive" 
+                size="sm" 
+                className="flex-1 gap-1.5"
                 onClick={async () => {
-                  if (confirm('Are you sure you want to cancel this order?')) {
+                  if (confirm(t('shopify.cancelDialog.description'))) {
                     try {
                       await apiClient.post('/shopify/order/cancel', { orderId: order.id, reason: 'CUSTOMER', refundOriginalPaymentMethod: true });
-                      toast.success('Order cancelled');
+                      toast.success(t('shopify.cancelSuccess'));
                       onRefresh();
                     } catch (e: any) { toast.error(e.message); }
                   }
                 }}
               >
-                <Ban className="w-4 h-4 mr-2" /> Cancel
+                <Ban className="h-4 w-4" />
+                {t('shopify.cancel')}
               </Button>
             )}
-            <Button variant="ghost" size="sm" asChild className={cn("h-9 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary", !(!order.cancelled && order.fulfillment_status === 'unfulfilled') && "col-span-2")}>
-              <a href={`https://${shopifyStore}/admin/orders/${order.id.split('/').pop()}`} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="h-3 w-3 mr-2" /> View in Shopify
-              </a>
-            </Button>
           </div>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            asChild 
+            className="w-full mt-2"
+          >
+            <a href={`https://${shopifyStore}/admin/orders/${order.id.split('/').pop()}`} target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="h-3 w-3 mr-2" /> {t('shopify.viewInShopify')}
+            </a>
+          </Button>
         </div>
       )}
     </div>
@@ -398,62 +425,60 @@ export const ShopifyOrders: React.FC<ShopifyOrdersProps> = ({ shopifyConfig }) =
   if (!shopifyConfig.connected) return null;
 
   return (
-    <div className="space-y-4 mb-8">
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 bg-primary/10 rounded-lg">
-            <ShoppingBag className="h-4 w-4 text-primary" />
-          </div>
-          <h3 className="text-sm font-black tracking-tight uppercase">Recent Orders</h3>
+    <div className="rounded-lg border mb-6 bg-card text-card-foreground shadow-sm">
+      <div className="p-4 space-y-4">
+        {/* Header */}
+        <div className="flex items-center gap-2">
+          <ShoppingBag className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-semibold">{t('shopify.ordersTitle')}</h3>
         </div>
-        <Button variant="ghost" size="icon" onClick={load} disabled={loading} className="h-8 w-8 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800">
-          <RefreshCcw className={cn("h-3.5 w-3.5 text-muted-foreground", loading && "animate-spin")} />
-        </Button>
-      </div>
 
-      <div className="space-y-3">
+        {/* Loading State */}
         {loading && orders.length === 0 && (
-          <div className="grid gap-3">
-            {[1, 2, 3].map(i => <div key={i} className="h-20 rounded-xl border bg-slate-50/50 dark:bg-slate-900/50 animate-pulse" />)}
+          <div className="space-y-4 pt-3">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-20 rounded-md bg-muted/50 animate-pulse" />
+            ))}
           </div>
         )}
 
+        {/* Error State */}
         {error && (
-          <div className="p-6 rounded-2xl border-2 border-dashed border-destructive/20 bg-destructive/5 text-center space-y-2">
-            <AlertCircle className="h-8 w-8 text-destructive mx-auto opacity-50" />
-            <p className="text-xs font-bold text-destructive uppercase tracking-widest">{t('shopify.errorLoadingOrders')}</p>
-            <Button variant="outline" size="sm" onClick={load} className="h-8 text-[10px] font-black uppercase">Try Again</Button>
+          <div className="pt-3 text-center p-6 rounded-md bg-destructive/5 border border-destructive/20">
+            <AlertCircle className="h-6 w-6 text-destructive mx-auto mb-2" />
+            <p className="text-xs text-destructive mb-2">{t('shopify.errorLoadingOrders')}</p>
+            <Button variant="outline" size="sm" onClick={load}>Try Again</Button>
           </div>
         )}
 
+        {/* Empty State */}
         {!loading && !error && orders.length === 0 && (
-          <div className="py-12 text-center rounded-2xl border-2 border-dashed bg-slate-50/30 dark:bg-slate-900/30">
-            <History className="h-10 w-10 text-muted-foreground/20 mx-auto mb-2" />
-            <p className="text-xs font-black text-muted-foreground uppercase tracking-widest">{t('shopify.noOrdersFound')}</p>
+          <div className="pt-3 text-center py-12">
+            <div className="mx-auto h-12 w-12 text-muted-foreground/20 mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+              </svg>
+            </div>
+            <h3 className="text-sm font-medium text-foreground mb-1">No Orders Found</h3>
+            <p className="text-xs text-muted-foreground">{t('shopify.noOrdersFound')}</p>
           </div>
         )}
 
-        <div className="grid gap-3">
-          {orders.map((order) => (
-            <OrderCard 
-              key={order.id} 
-              order={order} 
-              shopifyStore={shopifyStore}
-              isExpanded={expandedId === order.id} 
-              onToggle={() => setExpandedId(expandedId === order.id ? null : order.id)}
-              onRefresh={load}
-            />
-          ))}
-        </div>
-      </div>
-      
-      <div className="flex items-center gap-3 p-4 rounded-2xl bg-slate-50/50 dark:bg-slate-900/50 border border-dashed border-slate-200 dark:border-slate-800">
-        <div className="p-1.5 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-          <Info className="h-3.5 w-3.5 text-blue-500" />
-        </div>
-        <p className="text-[10px] font-bold text-muted-foreground leading-normal uppercase tracking-tight">
-          Customer synced via email. Last 50 orders are displayed.
-        </p>
+        {/* Orders List */}
+        {!loading && !error && orders.length > 0 && (
+          <div className="space-y-2 pt-3">
+            {orders.map((order) => (
+              <OrderItem 
+                key={order.id} 
+                order={order} 
+                shopifyStore={shopifyStore}
+                isExpanded={expandedId === order.id} 
+                onToggle={() => setExpandedId(expandedId === order.id ? null : order.id)}
+                onRefresh={load}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -897,5 +897,3 @@ router.post('/order/cancel',
 );
 
 module.exports = router;
-
-module.exports = router;
