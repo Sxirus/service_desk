@@ -106,6 +106,8 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
    */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    
+    // Handle success
     if (params.get('shopify') === 'connected') {
       console.log('[SHOPIFY_PANEL] OAuth connection successful');
       
@@ -121,6 +123,20 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
       setTimeout(() => {
         window.location.reload();
       }, 1000);
+    }
+
+    // Handle error
+    const status = params.get('status');
+    const message = params.get('message');
+    if (status === 'error') {
+      console.error('[SHOPIFY_PANEL] OAuth connection failed:', message);
+      
+      toast.error(t('shopify.connectionTestFailed'), {
+        description: message || t('shopify.unknownError')
+      });
+
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
 
@@ -180,7 +196,7 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
    * 
    * @param e - Form submit event
    */
-  const handleConnectSubmit = (e: React.FormEvent) => {
+  const handleConnectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log('[SHOPIFY_PANEL] Connect form submitted');
 
@@ -200,15 +216,30 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
       description: t('shopify.redirectingDescription')
     });
 
-    // ✅ FIXED: Use relative path, let browser use current origin
-    // Build OAuth install URL with shop name and client ID
-    const targetUrl = `/api/shopify/install?shop=${encodeURIComponent(shopName.trim())}&clientId=${clientId}`;
-    console.log('[SHOPIFY_PANEL] Redirect URL:', targetUrl);
-    
-    // Small delay to allow toast to render before redirect
-    setTimeout(() => {
-      window.location.href = targetUrl;
-    }, 500);
+    try {
+      // ✅ FIXED: Use apiClient to initiate OAuth (handles auth headers)
+      const data = await apiClient.get(`/shopify/install?shop=${encodeURIComponent(shopName.trim())}`);
+
+      if (data.success && data.redirectUrl) {
+        console.log('[SHOPIFY_PANEL] Redirecting to Shopify:', data.redirectUrl);
+        // Redirect browser to the Shopify OAuth URL
+        if (typeof window !== 'undefined') {
+          window.location.href = data.redirectUrl;
+        }
+      } else {
+        console.error('[SHOPIFY_PANEL] Install failed:', data);
+        toast.dismiss();
+        toast.error(t('shopify.connectionTestFailed'), { // Generic error or add a new key
+          description: data.message || 'Failed to initiate connection'
+        });
+      }
+    } catch (err) {
+      console.error('[SHOPIFY_PANEL] Install error:', err);
+      toast.dismiss();
+      toast.error(t('shopify.unknownError'), {
+        description: err instanceof Error ? err.message : 'Network error'
+      });
+    }
   };
 
   /**
@@ -234,7 +265,7 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
       
       // ✅ FIXED: apiClient.get() returns JSON already, no need to call .json()
       // ✅ FIXED: Auth token automatically added by apiClient
-      const data = await apiClient.get('/shopify/testConnection');
+      const data = await apiClient.get('/shopify/test');
 
       console.log('[SHOPIFY_PANEL] Test response received:', data);
 

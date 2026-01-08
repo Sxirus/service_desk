@@ -29,11 +29,13 @@ export interface ShopifyClientData {
  * Line item in a Shopify order
  */
 export interface ShopifyLineItem {
+  id: string;
   name: string;
   quantity: number;
-  price?: string;
-  product_id?: string;
-  variant_id?: string;
+  refundableQuantity: number;
+  price: string;
+  variantTitle?: string;
+  sku?: string;
 }
 
 /**
@@ -43,15 +45,23 @@ export interface ShopifyOrder {
   id: string;
   order_number: string;
   created_at: string;
-  financial_status: 'paid' | 'pending' | 'refunded' | 'partially_paid' | 'authorized' | 'voided';
-  fulfillment_status?: 'fulfilled' | 'partial' | 'unfulfilled' | null;
+  financial_status: string;
+  fulfillment_status: string;
   total_price: string;
+  total_discounts: string;
+  total_shipping: string;
+  total_tax: string;
+  subtotal: string;
+  total_refunded: string;
+  refunds: {
+    id: string;
+    created_at: string;
+    note: string | null;
+    amount: string;
+  }[];
   currency: string;
-  line_items?: ShopifyLineItem[];
-  customer_id?: string;
-  email?: string;
-  note?: string;
-  tags?: string;
+  cancelled: boolean;
+  line_items: ShopifyLineItem[];
 }
 
 /**
@@ -59,6 +69,7 @@ export interface ShopifyOrder {
  */
 export interface ShopifyOrdersResponse {
   orders: ShopifyOrder[];
+  shopifyStore?: string;
   error?: string;
 }
 
