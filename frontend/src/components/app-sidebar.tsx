@@ -3,6 +3,7 @@
 import * as React from "react"
 import {
   Bot,
+  GalleryVerticalEnd,
   Settings2,
   Users,
   Home,
