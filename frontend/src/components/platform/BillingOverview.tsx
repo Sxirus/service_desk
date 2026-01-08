@@ -16,14 +16,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { SimpleDataTable, type SimpleColumnDef } from "@/components/datatable/SimpleDataTable"
 
 interface BillingClient {
   id: number
@@ -161,178 +154,166 @@ export default function BillingOverview({ billingData, summary }: Props) {
       </div>
 
       {/* Paid Clients */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CheckCircle className="h-5 w-5 text-green-500" />
-            {t('billing.proPlanClients')}
-          </CardTitle>
-          <CardDescription>
-            {t('billing.activeSubscriptions', { count: paidClients.length })}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {paidClients.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              {t('billing.noPaidSubscriptions')}
-            </p>
-          ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t('billing.client')}</TableHead>
-                    <TableHead>{t('billing.seats')}</TableHead>
-                    <TableHead>{t('billing.stripe')}</TableHead>
-                    <TableHead>{t('billing.created')}</TableHead>
-                    <TableHead className="w-[100px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paidClients.map((client) => (
-                    <TableRow key={client.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4 text-muted-foreground" />
-                          <a 
-                            href={`/platform/clients/${client.id}`}
-                            className="font-medium hover:underline"
-                          >
-                            {client.name}
-                          </a>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Users className="h-4 w-4 text-muted-foreground" />
-                          {client.employee_count}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {client.has_subscription ? (
-                          <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                            {t('billing.active')}
-                          </Badge>
-                        ) : client.has_stripe ? (
-                          <Badge variant="secondary">
-                            {t('billing.customerOnly')}
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline">
-                            {t('billing.notConnected')}
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatDate(client.created_at)}
-                      </TableCell>
-                      <TableCell>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => window.location.href = `/platform/clients/${client.id}`}
-                        >
-                          {t('billing.view')}
-                          <ExternalLink className="h-3 w-3 ml-1" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <SimpleDataTable
+        data={paidClients}
+        getRowKey={(client) => client.id}
+        cardConfig={{
+          title: t('billing.proPlanClients'),
+          description: t('billing.activeSubscriptions', { count: paidClients.length }),
+          icon: <CheckCircle className="h-5 w-5 text-green-500" />,
+        }}
+        emptyMessage={t('billing.noPaidSubscriptions')}
+        columns={[
+          {
+            id: 'client',
+            header: t('billing.client'),
+            cell: (client) => (
+              <div className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+                <a 
+                  href={`/platform/clients/${client.id}`}
+                  className="font-medium hover:underline"
+                >
+                  {client.name}
+                </a>
+              </div>
+            ),
+          },
+          {
+            id: 'seats',
+            header: t('billing.seats'),
+            cell: (client) => (
+              <div className="flex items-center gap-1">
+                <Users className="h-4 w-4 text-muted-foreground" />
+                {client.employee_count}
+              </div>
+            ),
+          },
+          {
+            id: 'stripe',
+            header: t('billing.stripe'),
+            cell: (client) => (
+              client.has_subscription ? (
+                <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                  {t('billing.active')}
+                </Badge>
+              ) : client.has_stripe ? (
+                <Badge variant="secondary">
+                  {t('billing.customerOnly')}
+                </Badge>
+              ) : (
+                <Badge variant="outline">
+                  {t('billing.notConnected')}
+                </Badge>
+              )
+            ),
+          },
+          {
+            id: 'created',
+            header: t('billing.created'),
+            cellClassName: 'text-muted-foreground',
+            cell: (client) => formatDate(client.created_at),
+          },
+          {
+            id: 'actions',
+            header: '',
+            headerClassName: 'w-[100px]',
+            cell: (client) => (
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => window.location.href = `/platform/clients/${client.id}`}
+              >
+                {t('billing.view')}
+                <ExternalLink className="h-3 w-3 ml-1" />
+              </Button>
+            ),
+          },
+        ]}
+      />
 
       {/* Free Clients */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <XCircle className="h-5 w-5 text-muted-foreground" />
-            {t('billing.freePlanClients')}
-          </CardTitle>
-          <CardDescription>
-            {t('billing.freePlanDescription', { count: freeClients.length })}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {freeClients.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              {t('billing.noFreeClients')}
-            </p>
-          ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t('billing.client')}</TableHead>
-                    <TableHead>{t('billing.employees')}</TableHead>
-                    <TableHead>{t('billing.stripeStatus')}</TableHead>
-                    <TableHead>{t('billing.created')}</TableHead>
-                    <TableHead className="w-[100px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {freeClients.slice(0, 10).map((client) => (
-                    <TableRow key={client.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4 text-muted-foreground" />
-                          <a 
-                            href={`/platform/clients/${client.id}`}
-                            className="font-medium hover:underline"
-                          >
-                            {client.name}
-                          </a>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Users className="h-4 w-4 text-muted-foreground" />
-                          {client.employee_count}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {client.has_stripe ? (
-                          <Badge variant="secondary">
-                            {t('billing.hasCustomerId')}
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline">
-                            {t('billing.notConnected')}
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatDate(client.created_at)}
-                      </TableCell>
-                      <TableCell>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => window.location.href = `/platform/clients/${client.id}`}
-                        >
-                          {t('billing.view')}
-                          <ExternalLink className="h-3 w-3 ml-1" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              {freeClients.length > 10 && (
-                <div className="p-3 text-center text-sm text-muted-foreground border-t">
-                  {t('billing.showingOf', { shown: 10, total: freeClients.length })}{" "}
-                  <a href="/platform/clients" className="text-primary hover:underline">
-                    {t('billing.viewAll')}
-                  </a>
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <SimpleDataTable
+        data={freeClients.slice(0, 10)}
+        getRowKey={(client) => client.id}
+        cardConfig={{
+          title: t('billing.freePlanClients'),
+          description: t('billing.freePlanDescription', { count: freeClients.length }),
+          icon: <XCircle className="h-5 w-5 text-muted-foreground" />,
+        }}
+        emptyMessage={t('billing.noFreeClients')}
+        footer={freeClients.length > 10 && (
+          <div className="p-3 text-center text-sm text-muted-foreground border-t">
+            {t('billing.showingOf', { shown: 10, total: freeClients.length })}{" "}
+            <a href="/platform/clients" className="text-primary hover:underline">
+              {t('billing.viewAll')}
+            </a>
+          </div>
+        )}
+        columns={[
+          {
+            id: 'client',
+            header: t('billing.client'),
+            cell: (client) => (
+              <div className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+                <a 
+                  href={`/platform/clients/${client.id}`}
+                  className="font-medium hover:underline"
+                >
+                  {client.name}
+                </a>
+              </div>
+            ),
+          },
+          {
+            id: 'employees',
+            header: t('billing.employees'),
+            cell: (client) => (
+              <div className="flex items-center gap-1">
+                <Users className="h-4 w-4 text-muted-foreground" />
+                {client.employee_count}
+              </div>
+            ),
+          },
+          {
+            id: 'stripeStatus',
+            header: t('billing.stripeStatus'),
+            cell: (client) => (
+              client.has_stripe ? (
+                <Badge variant="secondary">
+                  {t('billing.hasCustomerId')}
+                </Badge>
+              ) : (
+                <Badge variant="outline">
+                  {t('billing.notConnected')}
+                </Badge>
+              )
+            ),
+          },
+          {
+            id: 'created',
+            header: t('billing.created'),
+            cellClassName: 'text-muted-foreground',
+            cell: (client) => formatDate(client.created_at),
+          },
+          {
+            id: 'actions',
+            header: '',
+            headerClassName: 'w-[100px]',
+            cell: (client) => (
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => window.location.href = `/platform/clients/${client.id}`}
+              >
+                {t('billing.view')}
+                <ExternalLink className="h-3 w-3 ml-1" />
+              </Button>
+            ),
+          },
+        ]}
+      />
     </div>
   )
 }

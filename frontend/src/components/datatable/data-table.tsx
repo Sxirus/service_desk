@@ -1,3 +1,13 @@
+/**
+ * DataTable Component (Generic TanStack Table Wrapper)
+ * 
+ * A generic table component that wraps TanStack Table for column-based rendering.
+ * Used by ClientUsersTable for displaying employee/user data.
+ * 
+ * For simple static tables, consider using SimpleDataTable instead.
+ * For ticket-specific features (sorting, filtering, persistence), use TicketsDataTable.
+ */
+
 "use client"
  
 import {

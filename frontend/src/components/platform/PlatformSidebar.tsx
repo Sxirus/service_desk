@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   LogOut,
   ArrowLeft,
+  Bell,
 } from "lucide-react"
 
 import {
@@ -37,6 +38,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ChevronsUpDown } from "lucide-react"
 import { actions } from "astro:actions"
+import { NotificationBell } from "./NotificationBell"
 
 type PlatformUser = {
   email: string;
@@ -47,6 +49,7 @@ type Props = React.ComponentProps<typeof Sidebar> & {
   currentPath?: string;
   hasClientLink?: boolean;
   clientName?: string;
+  initialUnreadCount?: number;
 }
 
 export function PlatformSidebar({ 
@@ -54,6 +57,7 @@ export function PlatformSidebar({
   currentPath = "/platform/dashboard",
   hasClientLink = false,
   clientName,
+  initialUnreadCount = 0,
   ...props 
 }: Props) {
   const { t } = useTranslation('platform')
@@ -85,6 +89,11 @@ export function PlatformSidebar({
       url: "/platform/admins",
       icon: Users,
     },
+    {
+      title: t('sidebar.notifications'),
+      url: "/platform/notifications",
+      icon: Bell,
+    },
   ]
 
   const getInitials = (email: string) => {
@@ -114,15 +123,20 @@ export function PlatformSidebar({
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" className="pointer-events-none">
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Shield className="size-4" />
+            <div className="flex items-center justify-between w-full">
+              <SidebarMenuButton size="lg" className="pointer-events-none flex-1">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                  <Shield className="size-4" />
+                </div>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-semibold">{t('shell.platformAdmin')}</span>
+                  <span className="truncate text-xs text-muted-foreground">{t('shell.managementConsole')}</span>
+                </div>
+              </SidebarMenuButton>
+              <div className="group-data-[collapsible=icon]:hidden">
+                <NotificationBell initialUnreadCount={initialUnreadCount} />
               </div>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">{t('shell.platformAdmin')}</span>
-                <span className="truncate text-xs text-muted-foreground">{t('shell.managementConsole')}</span>
-              </div>
-            </SidebarMenuButton>
+            </div>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>

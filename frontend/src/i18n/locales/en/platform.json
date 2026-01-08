@@ -24,7 +24,12 @@
     "manageClientsDescription": "View and manage all platform clients",
     "billingOverview": "Billing Overview",
     "billingOverviewDescription": "View subscription and payment details",
-    "analyticsDescription": "View platform-wide metrics and trends"
+    "analyticsDescription": "View platform-wide metrics and trends",
+    "recentAlerts": "Recent Alerts",
+    "recentAlertsDescription": "Cancellations and payment failures",
+    "noAlerts": "No alerts",
+    "allGood": "All subscriptions are active",
+    "unknownClient": "Unknown client"
   },
   "overview": {
     "title": "Platform Overview",
@@ -354,7 +359,33 @@
     "billing": "Billing",
     "settings": "Settings",
     "logs": "Logs",
+    "notifications": "Notifications",
     "backToApp": "Back to App"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "description": "All platform notifications about cancellations, payments, and more",
+    "noNotifications": "No notifications",
+    "noNotificationsDescription": "You have no notifications",
+    "markAllRead": "Mark all as read",
+    "markRead": "Mark as read",
+    "viewAll": "View all",
+    "refresh": "Refresh",
+    "filter": "Filter",
+    "filterAll": "All",
+    "filterUnread": "Unread",
+    "filterCancelled": "Cancellations",
+    "filterPaymentFailed": "Payment failures",
+    "allNotifications": "All Notifications",
+    "allNotificationsDescription": "Chronological list of all platform notifications",
+    "unreadCount": "{{count}} unread",
+    "cancelled": "Cancelled",
+    "pending": "Pending",
+    "paymentFailed": "Payment failed",
+    "info": "Info",
+    "minutesAgo": "{{count}} minutes ago",
+    "hoursAgo": "{{count}} hours ago",
+    "daysAgo": "{{count}} days ago"
   },
   "pages": {
     "dashboard": {
@@ -376,6 +407,10 @@
     "billing": {
       "pageTitle": "Platform Billing",
       "heading": "Platform Billing"
+    },
+    "notifications": {
+      "pageTitle": "Platform Notifications",
+      "heading": "Platform Notifications"
     }
   }
 }

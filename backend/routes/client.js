@@ -302,6 +302,172 @@ router.post('/unassign',
 );
 
 /**
+ * Bulk assign employee or group to multiple customers
+ * POST /api/client/bulkAssign
+ * Body: { customerIds: number[], employeeId?: number, groupId?: number }
+ * 
+ * Authentication: Required
+ * Authorization: All customers and the assignee must belong to user's client
+ * 
+ * Note: Provide either employeeId OR groupId, not both.
+ * Setting employeeId clears groupId and vice versa.
+ */
+router.post('/bulkAssign',
+  authenticate,
+  async (req, res) => {
+    try {
+      const { customerIds, employeeId, groupId } = req.body;
+      const client_id = req.user.client_id;
+
+      // Validate input
+      if (!Array.isArray(customerIds) || customerIds.length === 0) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'customerIds must be a non-empty array' 
+        });
+      }
+
+      if (!employeeId && !groupId) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Either employeeId or groupId must be provided' 
+        });
+      }
+
+      if (employeeId && groupId) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Provide either employeeId or groupId, not both' 
+        });
+      }
+
+      const ids = customerIds.map(Number).filter(id => !isNaN(id));
+      if (ids.length === 0) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'No valid customer IDs provided' 
+        });
+      }
+
+      console.log('[CLIENT] Bulk assigning:', {
+        customerIds: ids,
+        employeeId,
+        groupId,
+        client_id
+      });
+
+      // Verify all customers belong to user's client
+      const { data: customers, error: customerError } = await supabase
+        .from('customers')
+        .select('id, client_id')
+        .in('id', ids);
+
+      if (customerError) {
+        console.error('[CLIENT] Customer verification error:', customerError);
+        return res.status(500).json({ success: false, error: 'Database error' });
+      }
+
+      const unauthorizedCustomer = customers.find(c => c.client_id !== client_id);
+      if (unauthorizedCustomer) {
+        console.warn('[CLIENT] Unauthorized bulk assign attempt for customer:', unauthorizedCustomer.id);
+        return res.status(403).json({ 
+          success: false, 
+          error: 'Access denied to one or more customers' 
+        });
+      }
+
+      const authorizedIds = customers.map(c => c.id);
+
+      // Verify employee or group belongs to user's client
+      if (employeeId) {
+        const empId = Number(employeeId);
+        const { data: employee, error: empError } = await supabase
+          .from('employees')
+          .select('id, client_id')
+          .eq('id', empId)
+          .single();
+
+        if (empError || !employee) {
+          return res.status(404).json({ success: false, error: 'Employee not found' });
+        }
+
+        if (employee.client_id !== client_id) {
+          return res.status(403).json({ 
+            success: false, 
+            error: 'Employee does not belong to your client' 
+          });
+        }
+
+        // Assign employee to all customers (clear group_id)
+        const { error } = await supabase
+          .from('customers')
+          .update({ 
+            employee_id: empId,
+            group_id: null 
+          })
+          .in('id', authorizedIds);
+
+        if (error) {
+          console.error('[CLIENT] Bulk employee assignment failed:', error.message);
+          return res.status(500).json({ success: false, error: error.message });
+        }
+
+        console.log('[CLIENT] Bulk assigned employee', empId, 'to', authorizedIds.length, 'customers');
+        return res.json({ 
+          success: true, 
+          updated: authorizedIds.length, 
+          assignee: { type: 'employee', id: empId } 
+        });
+      }
+
+      if (groupId) {
+        const grpId = Number(groupId);
+        const { data: group, error: grpError } = await supabase
+          .from('employee_groups')
+          .select('id, client_id')
+          .eq('id', grpId)
+          .single();
+
+        if (grpError || !group) {
+          return res.status(404).json({ success: false, error: 'Group not found' });
+        }
+
+        if (group.client_id !== client_id) {
+          return res.status(403).json({ 
+            success: false, 
+            error: 'Group does not belong to your client' 
+          });
+        }
+
+        // Assign group to all customers (clear employee_id)
+        const { error } = await supabase
+          .from('customers')
+          .update({ 
+            group_id: grpId,
+            employee_id: null 
+          })
+          .in('id', authorizedIds);
+
+        if (error) {
+          console.error('[CLIENT] Bulk group assignment failed:', error.message);
+          return res.status(500).json({ success: false, error: error.message });
+        }
+
+        console.log('[CLIENT] Bulk assigned group', grpId, 'to', authorizedIds.length, 'customers');
+        return res.json({ 
+          success: true, 
+          updated: authorizedIds.length, 
+          assignee: { type: 'group', id: grpId } 
+        });
+      }
+    } catch (err) {
+      console.error('[CLIENT] Server error:', err.message);
+      res.status(500).json({ success: false, error: 'Server error' });
+    }
+  }
+);
+
+/**
  * Create Stripe customer for a client
  * POST /api/client/createStripeCustomer
  * Body: { client_id, email, name, address_street, address_city, address_zip, address_country, vat }

@@ -24,7 +24,12 @@
     "manageClientsDescription": "Alle Plattformkunden anzeigen und verwalten",
     "billingOverview": "Abrechnungsübersicht",
     "billingOverviewDescription": "Abonnement- und Zahlungsdetails anzeigen",
-    "analyticsDescription": "Plattformweite Metriken und Trends anzeigen"
+    "analyticsDescription": "Plattformweite Metriken und Trends anzeigen",
+    "recentAlerts": "Aktuelle Warnungen",
+    "recentAlertsDescription": "Kündigungen und Zahlungsausfälle",
+    "noAlerts": "Keine Warnungen",
+    "allGood": "Alle Abonnements sind aktiv",
+    "unknownClient": "Unbekannter Kunde"
   },
   "overview": {
     "title": "Plattformübersicht",
@@ -354,7 +359,33 @@
     "billing": "Abrechnung",
     "settings": "Einstellungen",
     "logs": "Protokolle",
+    "notifications": "Benachrichtigungen",
     "backToApp": "Zurück zur App"  },
+  "notifications": {
+    "title": "Benachrichtigungen",
+    "description": "Alle Plattform-Benachrichtigungen zu Kündigungen, Zahlungen und mehr",
+    "noNotifications": "Keine Benachrichtigungen",
+    "noNotificationsDescription": "Sie haben keine Benachrichtigungen",
+    "markAllRead": "Alle als gelesen markieren",
+    "markRead": "Als gelesen markieren",
+    "viewAll": "Alle anzeigen",
+    "refresh": "Aktualisieren",
+    "filter": "Filter",
+    "filterAll": "Alle",
+    "filterUnread": "Ungelesen",
+    "filterCancelled": "Kündigungen",
+    "filterPaymentFailed": "Zahlungsausfälle",
+    "allNotifications": "Alle Benachrichtigungen",
+    "allNotificationsDescription": "Chronologische Liste aller Plattform-Benachrichtigungen",
+    "unreadCount": "{{count}} ungelesen",
+    "cancelled": "Gekündigt",
+    "pending": "Ausstehend",
+    "paymentFailed": "Zahlung fehlgeschlagen",
+    "info": "Info",
+    "minutesAgo": "vor {{count}} Minuten",
+    "hoursAgo": "vor {{count}} Stunden",
+    "daysAgo": "vor {{count}} Tagen"
+  },
   "pages": {
     "dashboard": {
       "pageTitle": "Plattform-Dashboard",
@@ -375,5 +406,10 @@
     "billing": {
       "pageTitle": "Plattform-Abrechnung",
       "heading": "Plattform-Abrechnung"
-    }  }
+    },
+    "notifications": {
+      "pageTitle": "Plattform-Benachrichtigungen",
+      "heading": "Plattform-Benachrichtigungen"
+    }
+  }
 }

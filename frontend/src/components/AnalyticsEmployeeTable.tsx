@@ -1,26 +1,15 @@
 /**
  * Analytics Employee Table Component
  * 
- * Table showing detailed breakdown of emails sent per employee
+ * Table showing detailed breakdown of emails sent per employee.
+ * Refactored to use the reusable SimpleDataTable component.
  */
 
 "use client"
 
+import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import {Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { SimpleDataTable, type SimpleColumnDef } from "@/components/datatable/SimpleDataTable"
 
 interface EmployeeStats {
   employee_id: number;
@@ -40,50 +29,49 @@ export function AnalyticsEmployeeTable({
   const { t } = useTranslation('dashboard');
   const totalEmails = data.reduce((sum, item) => sum + item.email_count, 0)
 
+  const columns: SimpleColumnDef<EmployeeStats>[] = useMemo(() => [
+    {
+      id: 'rank',
+      header: t('charts.rank'),
+      headerClassName: 'w-[50px]',
+      cell: (_, index) => <span className="font-medium">#{index + 1}</span>,
+    },
+    {
+      id: 'employee_name',
+      header: t('charts.employeeName'),
+      cell: (row) => row.employee_name,
+    },
+    {
+      id: 'email_count',
+      header: t('charts.emailsSentColumn'),
+      headerClassName: 'text-right',
+      cellClassName: 'text-right',
+      cell: (row) => row.email_count,
+    },
+    {
+      id: 'percentage',
+      header: t('charts.percentage'),
+      headerClassName: 'text-right',
+      cellClassName: 'text-right',
+      cell: (row) => {
+        const percentage = totalEmails > 0 
+          ? ((row.email_count / totalEmails) * 100).toFixed(1) 
+          : '0.0';
+        return `${percentage}%`;
+      },
+    },
+  ], [t, totalEmails]);
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t('charts.employeePerformance')}</CardTitle>
-        <CardDescription>
-          {dateRange} • {t('charts.totalEmailsSent', { count: totalEmails })}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[50px]">{t('charts.rank')}</TableHead>
-              <TableHead>{t('charts.employeeName')}</TableHead>
-              <TableHead className="text-right">{t('charts.emailsSentColumn')}</TableHead>
-              <TableHead className="text-right">{t('charts.percentage')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground">
-                  {t('analytics.noDataForPeriod')}
-                </TableCell>
-              </TableRow>
-            ) : (
-              data.map((employee, index) => {
-                const percentage = totalEmails > 0 
-                  ? ((employee.email_count / totalEmails) * 100).toFixed(1) 
-                  : '0.0';
-                
-                return (
-                  <TableRow key={employee.employee_id}>
-                    <TableCell className="font-medium">#{index + 1}</TableCell>
-                    <TableCell>{employee.employee_name}</TableCell>
-                    <TableCell className="text-right">{employee.email_count}</TableCell>
-                    <TableCell className="text-right">{percentage}%</TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+    <SimpleDataTable
+      data={data}
+      columns={columns}
+      getRowKey={(row) => row.employee_id}
+      cardConfig={{
+        title: t('charts.employeePerformance'),
+        description: `${dateRange} • ${t('charts.totalEmailsSent', { count: totalEmails })}`,
+      }}
+      emptyMessage={t('analytics.noDataForPeriod')}
+    />
   )
 }

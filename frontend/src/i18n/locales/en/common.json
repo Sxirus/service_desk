@@ -198,6 +198,7 @@
   "owner": "Owner",
   "manager": "Manager",
   "employee": "Employee",
+  "employees": "Employees",
   "customer": "Customer",
   "customers": "Customers",
   "team": "Team",

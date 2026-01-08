@@ -506,6 +506,25 @@ async function getPlatformRevenueMetrics() {
   }
 }
 
+/**
+ * Verify Stripe webhook signature
+ * @param {Buffer} payload - Raw request body
+ * @param {string} signature - Stripe signature header
+ * @param {string} secret - Webhook secret
+ * @returns {Object} Constructed event
+ */
+function constructWebhookEvent(payload, signature, secret) {
+  return stripe.webhooks.constructEvent(payload, signature, secret);
+}
+
+/**
+ * Get Stripe instance for direct API calls
+ * @returns {Stripe} Stripe instance
+ */
+function getStripeInstance() {
+  return stripe;
+}
+
 module.exports = {
   createStripeCustomer,
   updateStripeCustomer,
@@ -519,4 +538,6 @@ module.exports = {
   getSubscriptionMRR,
   getCustomerTotalRevenue,
   getPlatformRevenueMetrics,
+  constructWebhookEvent,
+  getStripeInstance,
 };

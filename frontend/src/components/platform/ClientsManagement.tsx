@@ -17,14 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { SimpleDataTable, type SimpleColumnDef } from "@/components/datatable/SimpleDataTable"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -174,112 +167,116 @@ export default function ClientsManagement({ initialClients }: Props) {
           </div>
 
           {/* Clients Table */}
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t('clients.client')}</TableHead>
-                  <TableHead>{t('clients.plan')}</TableHead>
-                  <TableHead>{t('clients.employees')}</TableHead>
-                  <TableHead>{t('clients.integrations')}</TableHead>
-                  <TableHead>{t('clients.created')}</TableHead>
-                  <TableHead className="w-[50px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredClients.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      {t('clients.noClientsFound')}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredClients.map((client) => (
-                    <TableRow key={client.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-                            <Building2 className="h-4 w-4 text-primary" />
-                          </div>
-                          <div>
-                            <a 
-                              href={`/platform/clients/${client.id}`}
-                              className="font-medium hover:underline hover:text-primary"
-                            >
-                              {client.name}
-                            </a>
-                            {client.website && (
-                              <a 
-                                href={client.website.startsWith('http') ? client.website : `https://${client.website}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1"
-                              >
-                                {client.website}
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={client.subscription_tier === 'paid' ? 'default' : 'secondary'}>
-                          {client.subscription_tier === 'paid' ? t('clients.pro') : t('clients.free')}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Users className="h-4 w-4 text-muted-foreground" />
-                          <span>{client.employee_count}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {client.stripe_customer_id && (
-                            <Badge variant="outline" className="text-xs">
-                              <CreditCard className="h-3 w-3 mr-1" />
-                              Stripe
-                            </Badge>
-                          )}
-                          {client.shopify_connected && (
-                            <Badge variant="outline" className="text-xs">
-                              <ShoppingBag className="h-3 w-3 mr-1" />
-                              Shopify
-                            </Badge>
-                          )}
-                          {!client.stripe_customer_id && !client.shopify_connected && (
-                            <span className="text-muted-foreground text-sm">{t('clients.none')}</span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatDate(client.created_at)}
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => window.location.href = `/platform/clients/${client.id}`}>
-                              <Eye className="h-4 w-4 mr-2" />
-                              {t('clients.viewDetails')}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          <div className="mt-4 text-sm text-muted-foreground">
-            {t('clients.showingClients', { showing: filteredClients.length, total: clients.length })}
-          </div>
+          <SimpleDataTable
+            data={filteredClients}
+            getRowKey={(client) => client.id}
+            emptyMessage={t('clients.noClientsFound')}
+            columns={[
+              {
+                id: 'client',
+                header: t('clients.client'),
+                cell: (client) => (
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                      <Building2 className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <a 
+                        href={`/platform/clients/${client.id}`}
+                        className="font-medium hover:underline hover:text-primary"
+                      >
+                        {client.name}
+                      </a>
+                      {client.website && (
+                        <a 
+                          href={client.website.startsWith('http') ? client.website : `https://${client.website}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1"
+                        >
+                          {client.website}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                id: 'plan',
+                header: t('clients.plan'),
+                cell: (client) => (
+                  <Badge variant={client.subscription_tier === 'paid' ? 'default' : 'secondary'}>
+                    {client.subscription_tier === 'paid' ? t('clients.pro') : t('clients.free')}
+                  </Badge>
+                ),
+              },
+              {
+                id: 'employees',
+                header: t('clients.employees'),
+                cell: (client) => (
+                  <div className="flex items-center gap-1">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <span>{client.employee_count}</span>
+                  </div>
+                ),
+              },
+              {
+                id: 'integrations',
+                header: t('clients.integrations'),
+                cell: (client) => (
+                  <div className="flex items-center gap-2">
+                    {client.stripe_customer_id && (
+                      <Badge variant="outline" className="text-xs">
+                        <CreditCard className="h-3 w-3 mr-1" />
+                        Stripe
+                      </Badge>
+                    )}
+                    {client.shopify_connected && (
+                      <Badge variant="outline" className="text-xs">
+                        <ShoppingBag className="h-3 w-3 mr-1" />
+                        Shopify
+                      </Badge>
+                    )}
+                    {!client.stripe_customer_id && !client.shopify_connected && (
+                      <span className="text-muted-foreground text-sm">{t('clients.none')}</span>
+                    )}
+                  </div>
+                ),
+              },
+              {
+                id: 'created',
+                header: t('clients.created'),
+                cellClassName: 'text-muted-foreground',
+                cell: (client) => formatDate(client.created_at),
+              },
+              {
+                id: 'actions',
+                header: '',
+                headerClassName: 'w-[50px]',
+                cell: (client) => (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => window.location.href = `/platform/clients/${client.id}`}>
+                        <Eye className="h-4 w-4 mr-2" />
+                        {t('clients.viewDetails')}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ),
+              },
+            ]}
+            footer={
+              <div className="mt-4 text-sm text-muted-foreground">
+                {t('clients.showingClients', { showing: filteredClients.length, total: clients.length })}
+              </div>
+            }
+          />
         </CardContent>
       </Card>
     </div>

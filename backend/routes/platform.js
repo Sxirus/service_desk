@@ -937,7 +937,7 @@ router.get('/audit-log', async (req, res) => {
         details,
         ip_address,
         created_at,
-        platform_admins!inner(email)
+        platform_admins(email)
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
@@ -967,6 +967,139 @@ router.get('/audit-log', async (req, res) => {
     });
   } catch (error) {
     console.error('[PLATFORM] Error fetching audit log:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+/**
+ * GET /api/platform/notifications
+ * Get platform notifications (cancellations, payment failures, etc.)
+ */
+router.get('/notifications', async (req, res) => {
+  try {
+    const { limit = 50, offset = 0, unread_only = 'false', type } = req.query;
+
+    let query = supabase
+      .from('platform_notifications')
+      .select(`
+        id,
+        type,
+        client_id,
+        title,
+        message,
+        metadata,
+        read,
+        created_at,
+        clients(id, name)
+      `, { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
+
+    if (unread_only === 'true') {
+      query = query.eq('read', false);
+    }
+    if (type) {
+      query = query.eq('type', type);
+    }
+
+    const { data: notifications, error, count } = await query;
+
+    if (error) {
+      console.error('[PLATFORM] Failed to fetch notifications:', error);
+      return res.status(500).json({ error: 'Failed to fetch notifications' });
+    }
+
+    // Get unread count
+    const { count: unreadCount } = await supabase
+      .from('platform_notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('read', false);
+
+    res.json({
+      success: true,
+      data: notifications,
+      unread_count: unreadCount || 0,
+      pagination: {
+        total: count,
+        limit: parseInt(limit),
+        offset: parseInt(offset)
+      }
+    });
+  } catch (error) {
+    console.error('[PLATFORM] Error fetching notifications:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * PUT /api/platform/notifications/:id/read
+ * Mark a notification as read
+ */
+router.put('/notifications/:id/read', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { error } = await supabase
+      .from('platform_notifications')
+      .update({ read: true })
+      .eq('id', id);
+
+    if (error) {
+      console.error('[PLATFORM] Failed to mark notification as read:', error);
+      return res.status(500).json({ error: 'Failed to update notification' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[PLATFORM] Error updating notification:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * PUT /api/platform/notifications/mark-all-read
+ * Mark all notifications as read
+ */
+router.put('/notifications/mark-all-read', async (req, res) => {
+  try {
+    const { error } = await supabase
+      .from('platform_notifications')
+      .update({ read: true })
+      .eq('read', false);
+
+    if (error) {
+      console.error('[PLATFORM] Failed to mark all notifications as read:', error);
+      return res.status(500).json({ error: 'Failed to update notifications' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[PLATFORM] Error updating notifications:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * GET /api/platform/notifications/unread-count
+ * Get count of unread notifications (for badge)
+ */
+router.get('/notifications/unread-count', async (req, res) => {
+  try {
+    const { count } = await supabase
+      .from('platform_notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('read', false);
+
+    res.json({
+      success: true,
+      count: count || 0
+    });
+  } catch (error) {
+    console.error('[PLATFORM] Error fetching unread count:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

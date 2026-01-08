@@ -14,6 +14,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { RecentCancellationsCard } from "./RecentCancellationsCard"
 
 interface RecentClient {
   id: number
@@ -129,6 +130,9 @@ export default function PlatformDashboard({ stats }: Props) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Alerts Section - Cancellations, Payment Failures */}
+      <RecentCancellationsCard />
 
       {/* Recent Clients */}
       <div className="grid gap-4 md:grid-cols-2">

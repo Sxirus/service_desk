@@ -21,6 +21,10 @@ app.use(cors({
   credentials: true  // CRITICAL: Enable credentials
 }));
 
+// IMPORTANT: Stripe webhook route must be registered BEFORE express.json()
+// because Stripe requires the raw body for signature verification
+app.use('/api/webhooks/stripe', require('./routes/webhooks'));
+
 app.use(express.json({ limit: '10mb' }));    // Parse JSON payloads up to 10MB (for file uploads)
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded form data with extended syntax support
 
