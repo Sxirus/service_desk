@@ -46,8 +46,9 @@ const emailSignIn = async (
 
     console.log("[actions.signIn] ok:", data?.user?.id);
     return { success: true, message: "Successfully logged in" };
-  } catch (err: any) {
-    console.error("[actions.signIn] unexpected:", err?.message ?? err);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[actions.signIn] unexpected:", message);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -78,9 +79,10 @@ const passwordReset = async (
     console.log("[actions.resetPassword] Supabase client created");
 
     // Send password reset email with redirect URL
+    const baseUrl = import.meta.env.PUBLIC_SITE_URL || 'http://localhost:4321';
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
       captchaToken,
-      redirectTo: "http://localhost:4321/update-password",
+      redirectTo: `${baseUrl}/update-password`,
     });
     console.log("[actions.resetPassword] Password reset email attempt completed");
 
@@ -92,8 +94,9 @@ const passwordReset = async (
 
     console.log("[actions.resetPassword] ok:", data);
     return { success: true, message: "Password reset email sent" };
-  } catch (err: any) {
-    console.error("[actions.resetPassword] unexpected:", err?.message ?? err);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[actions.resetPassword] unexpected:", message);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -207,8 +210,9 @@ const updateMyProfile = async (
     console.log("[actions.updateMyProfile] Profile updated successfully");
 
     return { success: true, message: "Profile updated successfully" };
-  } catch (err: any) {
-    console.error("[actions.updateMyProfile] unexpected:", err?.message ?? err);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[actions.updateMyProfile] unexpected:", message);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -236,8 +240,9 @@ const sendPasswordResetEmail = async (
     console.log("[actions.sendPasswordResetEmail] User authenticated:", user.id);
 
     // 2) Send password reset email
+    const baseUrl = import.meta.env.PUBLIC_SITE_URL || 'http://localhost:4321';
     const { error } = await ssr.auth.resetPasswordForEmail(user.email, {
-      redirectTo: "http://localhost:4321/update-password",
+      redirectTo: `${baseUrl}/update-password`,
     });
 
     if (error) {
@@ -247,8 +252,9 @@ const sendPasswordResetEmail = async (
 
     console.log("[actions.sendPasswordResetEmail] Email sent to:", user.email);
     return { success: true, message: "Password reset email sent" };
-  } catch (err: any) {
-    console.error("[actions.sendPasswordResetEmail] unexpected:", err?.message ?? err);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[actions.sendPasswordResetEmail] unexpected:", message);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -1881,8 +1887,9 @@ const unassignAllTickets = async (
       message: `Successfully unassigned ${affectedCount || 0} ticket(s) from ${targetEmployee.name}`,
       count: affectedCount || 0
     };
-  } catch (err: any) {
-    console.error("[actions.unassignAllTickets] unexpected:", err?.message ?? err);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[actions.unassignAllTickets] unexpected:", message);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -1992,8 +1999,9 @@ const reassignAllTickets = async (
       message: `Successfully reassigned ${affectedCount || 0} ticket(s) from ${fromEmployee.name} to ${toEmployee.name}`,
       count: affectedCount || 0
     };
-  } catch (err: any) {
-    console.error("[actions.reassignAllTickets] unexpected:", err?.message ?? err);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[actions.reassignAllTickets] unexpected:", message);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -2036,8 +2044,9 @@ const getEmployeesForReassignment = async (
       success: true, 
       employees: employees || [] 
     };
-  } catch (err: any) {
-    console.error("[actions.getEmployeesForReassignment] error:", err?.message);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[actions.getEmployeesForReassignment] error:", message);
     return { success: false, message: "Unexpected error", employees: [] };
   }
 };

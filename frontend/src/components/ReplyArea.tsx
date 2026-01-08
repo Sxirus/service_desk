@@ -744,7 +744,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
               >
                 {attachments.map((fileState, index) => (
                   <AttachmentPreviewItem
-                    key={index}
+                    key={fileState.objectURL}
                     fileState={fileState}
                     index={index}
                     onRemove={handleRemoveAttachment}

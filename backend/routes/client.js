@@ -44,14 +44,14 @@ router.get('/getEmployees',
 
       if (error) {
         console.error('[CLIENT] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[CLIENT] Fetched', data.length, 'employees');
       res.json({success: true, data});
     } catch (err) {
       console.error('[CLIENT] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -134,14 +134,14 @@ router.post('/assignEmployee',
 
       if (error) {
         console.error('[CLIENT] Assignment update failed:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[CLIENT] Successfully assigned employee', employee_id, 'to customer', customer_id);
       res.json({ success: true, data });
     } catch (err) {
       console.error('[CLIENT] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -224,14 +224,14 @@ router.post('/assignGroup',
 
       if (error) {
         console.error('[CLIENT] Group assignment update failed:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[CLIENT] Successfully assigned group', group_id, 'to customer', customer_id);
       res.json({ success: true, data });
     } catch (err) {
       console.error('[CLIENT] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -289,14 +289,14 @@ router.post('/unassign',
 
       if (error) {
         console.error('[CLIENT] Unassign update failed:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[CLIENT] Successfully unassigned customer', customer_id);
       res.json({ success: true, data });
     } catch (err) {
       console.error('[CLIENT] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -318,12 +318,20 @@ router.post('/bulkAssign',
     try {
       const { customerIds, employeeId, groupId } = req.body;
       const client_id = req.user.client_id;
+      const MAX_BULK_SIZE = 500;
 
       // Validate input
       if (!Array.isArray(customerIds) || customerIds.length === 0) {
         return res.status(400).json({ 
           success: false, 
           error: 'customerIds must be a non-empty array' 
+        });
+      }
+
+      if (customerIds.length > MAX_BULK_SIZE) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `Maximum ${MAX_BULK_SIZE} customers per request` 
         });
       }
 

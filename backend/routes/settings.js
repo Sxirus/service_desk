@@ -113,19 +113,20 @@ router.post('/updateEmailConfig',
   }
 );
 
-//uptaing the confimation mail send when a customer sends a mail to the client
+//updating the confirmation mail sent when a customer sends a mail to the client
 router.post('/updateConfirmMail', 
-  authenticate, 
+  authenticate,
+  sanitizeText('subject', { required: false, maxLength: 500 }),
+  sanitizeText('body', { required: false, maxLength: 10000 }),
   async (req, res) => {
     try {
-      const subject = req.body.subject;
-      const body = req.body.body;
+      const subject = req.sanitized?.subject ?? req.body.subject;
+      const body = req.sanitized?.body ?? req.body.body;
       const client_id = req.user.client_id;
-      console.log(subject, body, client_id);
 
       console.log('[SETTINGS] Updating confirmation mail for client:', client_id);
 
-      const { data, error} = await supabase
+      const { data, error } = await supabase
         .from('clients')
         .update({
           confirm_mail: body,
@@ -139,10 +140,10 @@ router.post('/updateConfirmMail',
       }
 
       console.log('[SETTINGS] Confirm mail updated successfully');
-      res.json({ success: true, data })
+      res.json({ success: true, data });
     } catch (err) {
       console.error('[SETTINGS] Server error:', err.message);
-      res.status(500).json({ success: false, error: 'Servererror' });
+      res.status(500).json({ success: false, error: 'Server error' });
     }
 });
 
@@ -169,7 +170,7 @@ router.get('/getAllSettings',
 
       if (error) {
         console.error('[SETTINGS] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       if (!data) {
@@ -197,7 +198,7 @@ router.get('/getAllSettings',
       res.json({success: true, safeData});
     } catch (err) {
       console.error('[SETTINGS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -302,7 +303,7 @@ router.get('/getShopifyStatus',
 
       if (error) {
         console.error('[SETTINGS] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[SETTINGS] Shopify status fetched');
@@ -313,7 +314,7 @@ router.get('/getShopifyStatus',
       });
     } catch (err) {
       console.error('[SETTINGS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -342,7 +343,7 @@ router.post('/updateAutoAssignEmployeeOnSend',
       res.json({success: true, data})
     } catch (err) {
       console.error('[SETTINGS] Server error:', err.message);
-      res.status(500).json({ success: false, error: 'Servererror' });
+      res.status(500).json({ success: false, error: 'Server error' });
     }
   }
 )

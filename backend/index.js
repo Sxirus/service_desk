@@ -6,7 +6,19 @@ require('dotenv').config();                   // Load environment variables from
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const { initializeWorkers } = require('./services/workerManager');
-const bodyParser = require('body-parser');
+
+// Validate required environment variables at startup
+const requiredEnvVars = [
+  'SUPABASE_URL',
+  'SUPABASE_KEY',
+  'FRONTEND_URL'
+];
+
+const missingEnvVars = requiredEnvVars.filter(v => !process.env[v]);
+if (missingEnvVars.length > 0) {
+  console.error('FATAL: Missing required environment variables:', missingEnvVars.join(', '));
+  process.exit(1);
+}
 
 // Initialize Express application and configure port
 const app = express();
@@ -27,9 +39,6 @@ app.use('/api/webhooks/stripe', require('./routes/webhooks'));
 
 app.use(express.json({ limit: '10mb' }));    // Parse JSON payloads up to 10MB (for file uploads)
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded form data with extended syntax support
-
-// to be able to send bodys in requests
-app.use(bodyParser.json());
 
 // cookie parser to read cookies
 app.use(cookieParser());

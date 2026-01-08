@@ -64,7 +64,7 @@ export function Assign({
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(-1);
-  const listboxId = useMemo(() => `listbox-${customerId}`);
+  const listboxId = useMemo(() => `listbox-${customerId}`, [customerId]);
   const inputRef = useRef(null);
   const listRef = useRef(null);
 

@@ -129,9 +129,10 @@ router.post('/getSignedUrls',
     });
 
     try {
-      const urls = {};
       const errors = [];
 
+      // First, validate all paths and filter valid ones
+      const validPaths = [];
       for (const path of paths) {
         if (!path || typeof path !== 'string') {
           continue;
@@ -151,18 +152,29 @@ router.post('/getSignedUrls',
           continue;
         }
 
-        // Generate signed URL
-        const { data, error } = await supabase
-          .storage
-          .from('avatars')
-          .createSignedUrl(path, 60 * 60);
+        validPaths.push(path);
+      }
 
-        if (error) {
-          errors.push({ path, error: error.message });
-          continue;
+      // Generate signed URLs in parallel for better performance
+      const results = await Promise.all(
+        validPaths.map(async (path) => {
+          const { data, error } = await supabase
+            .storage
+            .from('avatars')
+            .createSignedUrl(path, 60 * 60);
+          
+          return { path, url: data?.signedUrl, error };
+        })
+      );
+
+      // Build urls object and collect errors
+      const urls = {};
+      for (const result of results) {
+        if (result.error) {
+          errors.push({ path: result.path, error: result.error.message || result.error });
+        } else if (result.url) {
+          urls[result.path] = result.url;
         }
-
-        urls[path] = data.signedUrl;
       }
 
       if (errors.length > 0) {

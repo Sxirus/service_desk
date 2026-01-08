@@ -50,14 +50,14 @@ router.get('/getInboxes',
 
       if (error) {
         console.error('[INBOXES] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[INBOXES] Fetched', data.length, 'inboxes');
       res.json({success: true, data});
     } catch (err) {
       console.error('[INBOXES] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -86,7 +86,7 @@ router.get('/getAccessibleInboxes',
 
       if (groupsError) {
         console.error('[INBOXES] Error fetching employee groups:', groupsError.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       const groupIds = employeeGroups.map(g => g.group_id);
@@ -113,7 +113,7 @@ router.get('/getAccessibleInboxes',
 
       if (inboxError) {
         console.error('[INBOXES] Error fetching inbox groups:', inboxError.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       // Extract unique inboxes and filter by client
@@ -131,7 +131,7 @@ router.get('/getAccessibleInboxes',
       res.json({success: true, data: uniqueInboxes});
     } catch (err) {
       console.error('[INBOXES] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -162,7 +162,7 @@ router.get('/getInboxEmails',
 
       if (groupsError) {
         console.error('[INBOXES] Error fetching employee groups:', groupsError.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       const groupIds = employeeGroups.map(g => g.group_id);
@@ -191,7 +191,7 @@ router.get('/getInboxEmails',
 
       if (filtersError) {
         console.error('[INBOXES] Error fetching filters:', filtersError.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       // Build query based on filters
@@ -268,14 +268,14 @@ router.get('/getInboxEmails',
 
       if (error) {
         console.error('[INBOXES] Error fetching emails:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[INBOXES] Fetched', data.length, 'filtered emails');
       res.json({success: true, data});
     } catch (err) {
       console.error('[INBOXES] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -315,14 +315,14 @@ router.post('/createInbox',
 
       if (error) {
         console.error('[INBOXES] Create failed:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[INBOXES] Inbox created successfully:', data.id);
       res.json({ success: true, data });
     } catch (err) {
       console.error('[INBOXES] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -379,14 +379,14 @@ router.put('/updateInbox',
 
       if (error) {
         console.error('[INBOXES] Update failed:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[INBOXES] Inbox updated successfully');
       res.json({ success: true, data });
     } catch (err) {
       console.error('[INBOXES] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -432,14 +432,14 @@ router.delete('/deleteInbox',
 
       if (error) {
         console.error('[INBOXES] Delete failed:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[INBOXES] Inbox deleted successfully');
       res.json({ success: true });
     } catch (err) {
       console.error('[INBOXES] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -480,13 +480,13 @@ router.post('/addGroup',
 
       if (error) {
         console.error('[INBOXES] Add group failed:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       res.json({ success: true, data });
     } catch (err) {
       console.error('[INBOXES] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -504,6 +504,18 @@ router.delete('/removeGroup',
     try {
       const inbox_id = req.sanitized.inbox_id;
       const group_id = req.sanitized.group_id;
+      const client_id = req.user.client_id;
+
+      // Verify inbox belongs to user's client
+      const { data: inbox, error: inboxError } = await supabase
+        .from('inboxes')
+        .select('client_id')
+        .eq('id', inbox_id)
+        .single();
+
+      if (inboxError || !inbox || inbox.client_id !== client_id) {
+        return res.status(403).json({ error: 'Access denied to this inbox' });
+      }
 
       const { error } = await supabase
         .from('inbox_groups')
@@ -513,13 +525,13 @@ router.delete('/removeGroup',
 
       if (error) {
         console.error('[INBOXES] Remove group failed:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       res.json({ success: true });
     } catch (err) {
       console.error('[INBOXES] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -573,14 +585,14 @@ router.post('/setFilters',
 
         if (error) {
           console.error('[INBOXES] Set filters failed:', error.message);
-          return res.status(500).json({ error: 'Datenbankfehler' });
+          return res.status(500).json({ error: 'Database error' });
         }
       }
 
       res.json({ success: true });
     } catch (err) {
       console.error('[INBOXES] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -621,7 +633,7 @@ router.get('/getCounts',
 
       if (groupsError) {
         console.error('[INBOXES] Error fetching employee groups:', groupsError.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       const groupIds = employeeGroups.map(g => g.group_id);
@@ -654,7 +666,7 @@ router.get('/getCounts',
 
       if (inboxError) {
         console.error('[INBOXES] Error fetching inbox groups:', inboxError.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       // Get unique inbox IDs
@@ -734,7 +746,7 @@ router.get('/getCounts',
       });
     } catch (err) {
       console.error('[INBOXES] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );

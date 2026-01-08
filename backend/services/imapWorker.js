@@ -23,6 +23,11 @@ async function startImapWorker({ email, password, imapHost, imapPort, clientId }
     // Execute first poll immediately
     await pollNewEmailsSinceLast({ email, password, imapHost, imapPort, clientId }, confirmation);
     
+    // Clear existing interval if present (prevents memory leak on restart)
+    if (pollingIntervals.has(email)) {
+        clearInterval(pollingIntervals.get(email));
+    }
+    
     // Set up polling interval (5 minutes = 300000 ms)
     const interval = setInterval(async () => {
         await pollNewEmailsSinceLast({ email, password, imapHost, imapPort, clientId }, confirmation);

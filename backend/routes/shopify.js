@@ -133,19 +133,37 @@ router.get('/callback',
         });
       }
 
-      // Exchange authorization code for access token
-      const tokenResponse = await fetch(
-        `https://${shop}/admin/oauth/access_token`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            client_id: process.env.SHOPIFY_CLIENT_ID,
-            client_secret: process.env.SHOPIFY_SECRET,
-            code: code,
-          }),
-        }
-      );
+      // Validate required environment variables
+      if (!process.env.SHOPIFY_CLIENT_ID || !process.env.SHOPIFY_SECRET) {
+        console.error('[SHOPIFY_CALLBACK] Missing Shopify credentials in environment');
+        return res.status(500).json({ 
+          error: 'Configuration Error',
+          message: 'Shopify credentials not configured' 
+        });
+      }
+
+      // Exchange authorization code for access token with timeout
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+
+      let tokenResponse;
+      try {
+        tokenResponse = await fetch(
+          `https://${shop}/admin/oauth/access_token`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              client_id: process.env.SHOPIFY_CLIENT_ID,
+              client_secret: process.env.SHOPIFY_SECRET,
+              code: code,
+            }),
+            signal: controller.signal,
+          }
+        );
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (!tokenResponse.ok) {
         const errorText = await tokenResponse.text();

@@ -38,7 +38,7 @@ router.get('/getCustomerById',
 
       if (error) {
         console.error('[CUSTOMERS] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       if (!data) {
@@ -61,7 +61,7 @@ router.get('/getCustomerById',
       res.json({success: true, data: [data]}); // Return as array to match original API format
     } catch (err) {
       console.error('[CUSTOMERS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -117,14 +117,14 @@ router.get('/getAssignedCustomers',
 
       if (error) {
         console.error('[CUSTOMERS] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[CUSTOMERS] Fetched', data.length, 'assigned customers');
       res.json({success: true, data});
     } catch (err) {
       console.error('[CUSTOMERS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -154,14 +154,14 @@ router.get('/getAllCustomers',
 
       if (error) {
         console.error('[CUSTOMERS] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[CUSTOMERS] Fetched', data.length, 'customers');
       res.json({success: true, data});
     } catch (err) {
       console.error('[CUSTOMERS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -194,7 +194,7 @@ router.post(
 
       if (emailErr) {
         console.error('[CUSTOMERS] Error finding email address:', emailErr);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       if (emailRow?.customer_id) {
@@ -207,12 +207,12 @@ router.post(
 
         if (customerErr) {
           console.error('[CUSTOMERS] Error loading customer for email:', customerErr);
-          return res.status(500).json({ error: 'Datenbankfehler' });
+          return res.status(500).json({ error: 'Database error' });
         }
 
         if (!existingCustomer) {
           // Orphaned email row; treat as error.
-          return res.status(500).json({ error: 'Datenbankfehler' });
+          return res.status(500).json({ error: 'Database error' });
         }
 
         if (existingCustomer.client_id !== client_id) {
@@ -247,7 +247,7 @@ router.post(
 
       if (createCustomerErr) {
         console.error('[CUSTOMERS] Error creating customer:', createCustomerErr);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       const { error: createEmailErr } = await supabase
@@ -259,13 +259,13 @@ router.post(
 
       if (createEmailErr) {
         console.error('[CUSTOMERS] Error creating email address:', createEmailErr);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       return res.json({ success: true, customerId: createdCustomer.id, existed: false });
     } catch (err) {
       console.error('[CUSTOMERS] Server error:', err.message);
-      return res.status(500).json({ error: 'Serverfehler' });
+      return res.status(500).json({ error: 'Server error' });
     }
   }
 );

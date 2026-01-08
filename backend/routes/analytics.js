@@ -64,13 +64,26 @@ router.get('/email-stats',
         });
       }
 
+      // Limit date range to prevent excessive queries
+      const MAX_DATE_RANGE_DAYS = 365;
+      const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+      if (daysDiff > MAX_DATE_RANGE_DAYS) {
+        return res.status(400).json({ 
+          error: 'Bad Request',
+          message: `Date range cannot exceed ${MAX_DATE_RANGE_DAYS} days` 
+        });
+      }
+
       console.log('[ANALYTICS] Fetching email stats for client:', client_id, 'from:', from, 'to:', to);
 
-      // Get all customer IDs for this client
+      // Get customer IDs for this client with a reasonable limit
+      // For very large clients, we use direct client_id filtering on incoming-mails
+      const MAX_CUSTOMER_IDS = 10000;
       const { data: clientCustomers, error: customersError } = await supabase
         .from('customers')
         .select('id')
-        .eq('client_id', client_id);
+        .eq('client_id', client_id)
+        .limit(MAX_CUSTOMER_IDS);
 
       if (customersError) {
         console.error('[ANALYTICS] Error fetching customer IDs:', customersError.message);

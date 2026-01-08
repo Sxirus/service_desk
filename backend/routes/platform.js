@@ -146,24 +146,24 @@ router.get('/clients/:id', async (req, res) => {
       console.error('[PLATFORM] Error fetching employees:', empError);
     }
 
-    // Get emails sent count via customer_ids
+    // Get emails sent and received counts in parallel for better performance
     let emailsSentCount = 0;
-    if (customerIds.length > 0) {
-      const { count } = await supabase
-        .from('sent-mail')
-        .select('id', { count: 'exact', head: true })
-        .in('customer_id', customerIds);
-      emailsSentCount = count || 0;
-    }
-
-    // Get emails received count
     let emailsReceivedCount = 0;
+    
     if (customerIds.length > 0) {
-      const { count } = await supabase
-        .from('incoming-mails')
-        .select('id', { count: 'exact', head: true })
-        .in('customer_id', customerIds);
-      emailsReceivedCount = count || 0;
+      const [sentResult, receivedResult] = await Promise.all([
+        supabase
+          .from('sent-mail')
+          .select('id', { count: 'exact', head: true })
+          .in('customer_id', customerIds),
+        supabase
+          .from('incoming-mails')
+          .select('id', { count: 'exact', head: true })
+          .in('customer_id', customerIds)
+      ]);
+      
+      emailsSentCount = sentResult.count || 0;
+      emailsReceivedCount = receivedResult.count || 0;
     }
 
     // Get employee emails via RPC (since emails are in auth.users)

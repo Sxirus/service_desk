@@ -34,14 +34,14 @@ router.get('/getGroups',
 
       if (error) {
         console.error('[GROUPS] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[GROUPS] Fetched', data.length, 'groups');
       res.json({success: true, data});
     } catch (err) {
       console.error('[GROUPS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -98,7 +98,7 @@ router.get('/getGroupMembers',
 
       if (error) {
         console.error('[GROUPS] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       const members = data.map(m => ({
@@ -110,7 +110,7 @@ router.get('/getGroupMembers',
       res.json({success: true, data: members});
     } catch (err) {
       console.error('[GROUPS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -148,14 +148,14 @@ router.post('/createGroup',
 
       if (error) {
         console.error('[GROUPS] Create failed:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[GROUPS] Group created successfully:', data.id);
       res.json({ success: true, data });
     } catch (err) {
       console.error('[GROUPS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -217,14 +217,14 @@ router.put('/updateGroup',
 
       if (error) {
         console.error('[GROUPS] Update failed:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[GROUPS] Group updated successfully');
       res.json({ success: true, data });
     } catch (err) {
       console.error('[GROUPS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -276,14 +276,14 @@ router.delete('/deleteGroup',
 
       if (error) {
         console.error('[GROUPS] Delete failed:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[GROUPS] Group deleted successfully');
       res.json({ success: true });
     } catch (err) {
       console.error('[GROUPS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -363,14 +363,14 @@ router.post('/addMember',
 
       if (error) {
         console.error('[GROUPS] Add member failed:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[GROUPS] Member added successfully');
       res.json({ success: true, data });
     } catch (err) {
       console.error('[GROUPS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -425,14 +425,14 @@ router.delete('/removeMember',
 
       if (error) {
         console.error('[GROUPS] Remove member failed:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[GROUPS] Member removed successfully');
       res.json({ success: true });
     } catch (err) {
       console.error('[GROUPS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );

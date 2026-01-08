@@ -3,7 +3,6 @@
 // Handles customer creation, email address management, and email storage for the service desk system
 
 // Import required modules
-const { parse } = require('postcss');
 const supabase = require('../config/supabase');  // Supabase client for database operations
 const { storeIncomingAttachmentInDB } = require('./attachments/incoming');
 const nodemailer = require('nodemailer');

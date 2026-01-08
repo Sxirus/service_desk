@@ -41,7 +41,7 @@ router.get('/getMails',
 
       if (custErr) {
         console.error('[EMAILS] Customers fetch error:', custErr.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       const ids = (unassignedCustomers ?? []).map(c => c.id);
@@ -61,7 +61,7 @@ router.get('/getMails',
 
       if (error) {
         console.error('[EMAILS] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       const mails = data ?? [];
@@ -70,7 +70,7 @@ router.get('/getMails',
       res.json({success: true, data: mails});
     } catch (err) {
       console.error('[EMAILS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -100,7 +100,7 @@ router.get('/getEmailsFromCustomer',
 
       if (errorIncoming) {
         console.error('[EMAILS] Error fetching incoming mails:', errorIncoming);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       // Fetch sent mails
@@ -111,7 +111,7 @@ router.get('/getEmailsFromCustomer',
       
       if (errorSent) {
         console.error('[EMAILS] Error fetching sent mails:', errorSent);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       // Combine and sort by date
@@ -149,7 +149,7 @@ router.get('/getEmailsFromCustomer',
       res.json({success: true, allMails});
     } catch (err) {
       console.error('[EMAILS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -312,7 +312,7 @@ router.post('/sendMail',
 
           if (error) {
             console.error('[Emails] Auto-assignment update failed:', error.message);
-            return res.status(500).json({ error: 'Datenbankfehler' });
+            return res.status(500).json({ error: 'Database error' });
           }
 
           console.log('[Emails] Successfully auto-assigned employee', employee_id, 'to customer', customerId);
@@ -475,7 +475,7 @@ router.post('/updateStatus',
       res.json({ success: true, status });
     } catch (err) {
       console.error('[EMAILS] Server error:', err.message);
-      res.status(500).json({ success: false, error: 'Servererror' });
+      res.status(500).json({ success: false, error: 'Server error' });
     } 
   }
 );
@@ -524,7 +524,7 @@ router.post('/bulkUpdateStatus',
 
       if (customerError) {
         console.error('[EMAILS] Customer verification error:', customerError);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       const unauthorizedCustomer = customers.find(c => c.client_id !== client_id);
@@ -550,7 +550,7 @@ router.post('/bulkUpdateStatus',
       res.json({ success: true, updated: authorizedIds.length, status });
     } catch (err) {
       console.error('[EMAILS] Server error:', err.message);
-      res.status(500).json({ success: false, error: 'Servererror' });
+      res.status(500).json({ success: false, error: 'Server error' });
     }
   }
 );
@@ -623,7 +623,7 @@ router.get('/getMailsbyCustomerIds',
 
       if (customerError) {
         console.error('[EMAILS] Customer verification error:', customerError);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       // Check if any customer doesn't belong to user's client
@@ -646,14 +646,14 @@ router.get('/getMailsbyCustomerIds',
 
       if (error) {
         console.error('[EMAILS] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[EMAILS] Fetched', data.length, 'mails for', authorizedIds.length, 'customers');
       res.json({success: true, data});    
     } catch (err) {
       console.error('[EMAILS] Server error:', err.message);
-      res.status(500).json({ success: false, error: 'Servererror' });
+      res.status(500).json({ success: false, error: 'Server error' });
     }
   }
 );
@@ -838,11 +838,35 @@ router.post('/getSignedUrl',
   async (req, res) => {
     const location = req.body.location;
     const path = req.body.path;
+    const client_id = req.user.client_id;
+
+    // Security: Validate that the path belongs to the user's client
+    if (!path || typeof path !== 'string') {
+      return res.status(400).json({ error: 'Path is required' });
+    }
+
+    // Validate allowed storage locations
+    const allowedLocations = ['attachments', 'avatars'];
+    if (!location || !allowedLocations.includes(location)) {
+      return res.status(400).json({ error: 'Invalid storage location' });
+    }
+
+    // Security check: Verify the path starts with the user's client_id
+    // This prevents accessing other clients' files
+    if (!path.startsWith(`${client_id}/`)) {
+      console.warn('[EMAILS] Access denied - path does not belong to client:', {
+        path,
+        client_id,
+        requestedBy: req.user.employee_id
+      });
+      return res.status(403).json({ error: 'Access denied to this resource' });
+    }
 
     console.log('[EMAILS] creating signed url for', {
       path: path,
-      location: location
-    })
+      location: location,
+      client_id: client_id
+    });
 
     try {
       const { data, error } = await supabase
@@ -851,11 +875,11 @@ router.post('/getSignedUrl',
         .createSignedUrl(path, 60 * 5);
 
       if (error) {
-        return res.status(500).json({error: error.message});
+        return res.status(500).json({ error: error.message });
       }
-      const signedUrl = data.signedUrl
+      const signedUrl = data.signedUrl;
 
-      return res.json({success: true, signedUrl});
+      return res.json({ success: true, signedUrl });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
