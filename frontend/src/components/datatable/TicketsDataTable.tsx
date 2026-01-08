@@ -77,7 +77,6 @@ import {
   MoreHorizontal, 
   Filter, 
   X, 
-  Calendar,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -117,7 +116,6 @@ import { useTicketViewers } from "@/components/TicketPresenceProvider"
 import { 
   useTablePersistence, 
   saveTicketOrder,
-  type DateRangeFilter,
 } from "@/hooks/useTablePersistence"
 import { formatRelativeTime, useRelativeTimeUpdater } from "@/hooks/useRelativeTime"
 
@@ -195,16 +193,6 @@ const STATUS_CONFIG: Record<TicketStatus, {
  */
 const ALL_STATUSES: TicketStatus[] = ['new', 'open', 'waiting', 'resolved']
 
-/**
- * Date range presets for quick filtering
- */
-const DATE_PRESETS = [
-  { key: 'today', days: 0 },
-  { key: 'yesterday', days: 1 },
-  { key: 'last7Days', days: 7 },
-  { key: 'last30Days', days: 30 },
-] as const
-
 // ============================================================================
 // Props Interface
 // ============================================================================
@@ -264,8 +252,7 @@ function calculateTicketOrder(
   data: TicketEmail[],
   sorting: SortingState,
   columnFilters: ColumnFiltersState,
-  statusFilter: string[],
-  dateRange: DateRangeFilter | null
+  statusFilter: string[]
 ): string[] {
   let filtered = [...data]
 
@@ -279,16 +266,6 @@ function calculateTicketOrder(
   // Apply status filter
   if (statusFilter.length > 0) {
     filtered = filtered.filter((t) => statusFilter.includes(t.status))
-  }
-
-  // Apply date range filter
-  if (dateRange) {
-    const fromDate = dateRange.from ? new Date(dateRange.from).getTime() : 0
-    const toDate = dateRange.to ? new Date(dateRange.to).getTime() : Date.now()
-    filtered = filtered.filter((t) => {
-      const ticketDate = new Date(t.send_at).getTime()
-      return ticketDate >= fromDate && ticketDate <= toDate
-    })
   }
 
   // Apply sorting
@@ -447,83 +424,6 @@ function StatusFilterDropdown({
 }
 
 /**
- * DateRangeFilterPopover - Date range picker for filtering
- */
-function DateRangeFilterPopover({
-  value,
-  onChange,
-}: {
-  value: DateRangeFilter | null
-  onChange: (value: DateRangeFilter | null) => void
-}) {
-  const { t } = useTranslation('dashboard')
-  const [isOpen, setIsOpen] = React.useState(false)
-
-  const applyPreset = (preset: typeof DATE_PRESETS[number]) => {
-    const now = new Date()
-    const to = now.toISOString()
-    const from = new Date(now.getTime() - preset.days * 24 * 60 * 60 * 1000).toISOString()
-    onChange({ from, to, preset: preset.key as DateRangeFilter['preset'] })
-    setIsOpen(false)
-  }
-
-  const clearFilter = () => {
-    onChange(null)
-    setIsOpen(false)
-  }
-
-  return (
-    <Popover open={isOpen} onOpenChange={setIsOpen}>
-      <PopoverTrigger asChild>
-        <Button 
-          variant="outline" 
-          size="sm"
-          className="h-8"
-          aria-label={t('table.filterByDate')}
-        >
-          <Calendar className="h-4 w-4 mr-1" />
-          {t('table.date')}
-          {value && (
-            <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
-              1
-            </Badge>
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-48 p-2" align="start">
-        <div className="space-y-1">
-          {DATE_PRESETS.map(preset => (
-            <Button
-              key={preset.key}
-              variant={value?.preset === preset.key ? 'secondary' : 'ghost'}
-              size="sm"
-              className="w-full justify-start"
-              onClick={() => applyPreset(preset)}
-            >
-              {t(`table.${preset.key}`)}
-            </Button>
-          ))}
-          {value && (
-            <>
-              <div className="border-t my-2" />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start text-destructive"
-                onClick={clearFilter}
-              >
-                <X className="h-4 w-4 mr-2" />
-                {t('table.clearFilters')}
-              </Button>
-            </>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
-/**
  * RelativeTimeCell - Displays time with relative format for recent items
  */
 function RelativeTimeCell({ 
@@ -582,15 +482,14 @@ export function TicketsDataTable({
         data, 
         state.sorting, 
         state.columnFilters,
-        state.statusFilter,
-        state.dateRange
+        state.statusFilter
       )
       saveTicketOrder(tableId, order, String(customerId))
     } catch (e) {
       console.warn('[TicketsDataTable] Failed to persist ticket order:', e)
     }
     window.location.href = buildTicketUrl(customerId, tableId)
-  }, [tableId, data, state.sorting, state.columnFilters, state.statusFilter, state.dateRange])
+  }, [tableId, data, state.sorting, state.columnFilters, state.statusFilter])
 
   // Column definitions with proper memoization
   const columns: ColumnDef<TicketEmail>[] = React.useMemo(() => [
@@ -800,18 +699,8 @@ export function TicketsDataTable({
       result = result.filter(ticket => state.statusFilter.includes(ticket.status))
     }
 
-    // Apply date range filter
-    if (state.dateRange) {
-      const fromDate = state.dateRange.from ? new Date(state.dateRange.from).getTime() : 0
-      const toDate = state.dateRange.to ? new Date(state.dateRange.to).getTime() : Date.now()
-      result = result.filter(ticket => {
-        const ticketDate = new Date(ticket.send_at).getTime()
-        return ticketDate >= fromDate && ticketDate <= toDate
-      })
-    }
-
     return result
-  }, [data, state.statusFilter, state.dateRange])
+  }, [data, state.statusFilter])
 
   // TanStack Table instance
   const table = useReactTable({
@@ -858,7 +747,6 @@ export function TicketsDataTable({
   // Count active filters
   const activeFilterCount = 
     (state.statusFilter.length > 0 ? 1 : 0) + 
-    (state.dateRange ? 1 : 0) +
     (state.columnFilters.some(f => f.value) ? 1 : 0)
 
   // Handle row click navigation
@@ -895,12 +783,6 @@ export function TicketsDataTable({
               value={state.statusFilter}
               onChange={(value) => updateState({ statusFilter: value })}
             />
-            
-            {/* Date filter */}
-            <DateRangeFilterPopover
-              value={state.dateRange}
-              onChange={(value) => updateState({ dateRange: value })}
-            />
 
             {/* Clear all filters */}
             {activeFilterCount > 0 && (
@@ -911,7 +793,6 @@ export function TicketsDataTable({
                 onClick={() => {
                   updateState({ 
                     statusFilter: [], 
-                    dateRange: null,
                     columnFilters: []
                   })
                   table.getColumn("subject")?.setFilterValue("")
