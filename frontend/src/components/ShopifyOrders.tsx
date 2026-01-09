@@ -74,12 +74,13 @@ const getStatusConfig = (status: string, type: 'financial' | 'fulfillment') => {
 };
 
 const StatusBadge = ({ status, type }: { status: string; type: 'financial' | 'fulfillment' }) => {
+  const { t } = useTranslation('manage');
   const config = getStatusConfig(status, type);
   const Icon = config.icon;
   return (
     <Badge variant={config.variant} className="gap-1.5 text-xs">
       <Icon className="h-3 w-3" />
-      {status}
+      {t(`shopify.status.${status.toLowerCase()}`, status)}
     </Badge>
   );
 };
@@ -94,28 +95,35 @@ const RefundDialog = ({ order, onSuccess }: { order: ShopifyOrder; onSuccess: ()
   
   // Check if any items can be refunded
   const hasRefundableItems = order.line_items.some(item => item.refundableQuantity > 0);
+  const canRefund = order.financial_status !== 'refunded' && order.financial_status !== 'voided';
+  
   const [isCalculating, setIsCalculating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [quantities, setQuantities] = useState<Record<string, number>>(
     Object.fromEntries(order.line_items.map(item => [item.id, 0]))
   );
   const [shippingAmount, setShippingAmount] = useState('0.00');
+  const [customAmount, setCustomAmount] = useState('0.00');
   const [calculatedTotal, setCalculatedTotal] = useState<any>(null);
   const [note, setNote] = useState('');
   const [notify, setNotify] = useState(true);
 
   useEffect(() => {
-    const hasValue = Object.values(quantities).some(q => q > 0) || parseFloat(shippingAmount) > 0;
+    const hasValue = Object.values(quantities).some(q => q > 0) || parseFloat(shippingAmount) > 0 || parseFloat(customAmount) > 0;
     if (!hasValue) { setCalculatedTotal(null); return; }
     const timer = setTimeout(() => calculate(), 400);
     return () => clearTimeout(timer);
-  }, [quantities, shippingAmount]);
+  }, [quantities, shippingAmount, customAmount]);
 
   const calculate = async () => {
     setIsCalculating(true);
     try {
       const items = Object.entries(quantities).filter(([_, q]) => q > 0).map(([id, q]) => ({ lineItemId: id, quantity: q }));
-      const res = await apiClient.post('/shopify/refund/calculate', { orderId: order.id, refundLineItems: items });
+      const res = await apiClient.post('/shopify/refund/calculate', { 
+        orderId: order.id, 
+        refundLineItems: items,
+        customAmount: parseFloat(customAmount) > 0 ? customAmount : undefined
+      });
       if (res.success) setCalculatedTotal(res.suggestedRefund);
     } finally { setIsCalculating(false); }
   };
@@ -126,7 +134,8 @@ const RefundDialog = ({ order, onSuccess }: { order: ShopifyOrder; onSuccess: ()
       const items = Object.entries(quantities).filter(([_, q]) => q > 0).map(([id, q]) => ({ lineItemId: id, quantity: q }));
       const res = await apiClient.post('/shopify/refund/create', { 
         orderId: order.id, refundLineItems: items, notifyCustomer: notify, note, 
-        shippingAmount: parseFloat(shippingAmount) > 0 ? shippingAmount : undefined 
+        shippingAmount: parseFloat(shippingAmount) > 0 ? shippingAmount : undefined,
+        customAmount: parseFloat(customAmount) > 0 ? customAmount : undefined
       });
       if (res.success) { toast.success(t('shopify.refundSuccess')); setIsOpen(false); onSuccess(); }
     } catch (e: any) { toast.error(e.message); } finally { setIsSubmitting(false); }
@@ -142,7 +151,7 @@ const RefundDialog = ({ order, onSuccess }: { order: ShopifyOrder; onSuccess: ()
                 variant="outline" 
                 size="sm" 
                 className="w-full gap-1.5" 
-                disabled={!hasRefundableItems}
+                disabled={!canRefund}
               >
                 <Undo2 className="h-4 w-4" />
                 {t('shopify.refund')}
@@ -150,9 +159,9 @@ const RefundDialog = ({ order, onSuccess }: { order: ShopifyOrder; onSuccess: ()
             </DialogTrigger>
           </div>
         </TooltipTrigger>
-        {!hasRefundableItems && (
+        {!canRefund && (
           <TooltipContent>
-            <p>All items already refunded</p>
+            <p>{t('shopify.allRefunded')}</p>
           </TooltipContent>
         )}
       </Tooltip>
@@ -169,7 +178,7 @@ const RefundDialog = ({ order, onSuccess }: { order: ShopifyOrder; onSuccess: ()
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{item.name}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {item.refundableQuantity} available • {item.price} {order.currency}
+                      {t('shopify.available', { count: item.refundableQuantity })} • {item.price} {order.currency}
                     </p>
                   </div>
                   <Input 
@@ -184,30 +193,55 @@ const RefundDialog = ({ order, onSuccess }: { order: ShopifyOrder; onSuccess: ()
           
           <div className="space-y-4 p-4 rounded-md bg-muted/50 border">
             <div className="flex items-center justify-between gap-3">
-              <Label className="text-sm font-medium">Shipping Refund</Label>
+              <Label className="text-sm font-medium">{t('shopify.refundDialog.shippingRefund')}</Label>
               <div className="relative">
                 <Input type="number" className="w-24 pr-12 text-right" value={shippingAmount} onChange={e => setShippingAmount(e.target.value)} />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{order.currency}</span>
               </div>
             </div>
+            <div className="flex items-center justify-between gap-3">
+              <Label className="text-sm font-medium">{t('shopify.refundDialog.customAmount')}</Label>
+              <div className="relative">
+                <Input type="number" className="w-24 pr-12 text-right" value={customAmount} onChange={e => setCustomAmount(e.target.value)} />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{order.currency}</span>
+              </div>
+            </div>
             <div className="space-y-2">
-              <Label htmlFor="note" className="text-sm font-medium">Internal Note</Label>
-              <Input id="note" placeholder="Why are you refunding?" value={note} onChange={e => setNote(e.target.value)} />
+              <Label htmlFor="note" className="text-sm font-medium">{t('shopify.refundDialog.internalNote')}</Label>
+              <Input id="note" placeholder={t('shopify.refundDialog.notePlaceholder')} value={note} onChange={e => setNote(e.target.value)} />
             </div>
             <div className="flex items-center gap-2">
               <Checkbox id="notify" checked={notify} onCheckedChange={v => setNotify(!!v)} />
-              <Label htmlFor="notify" className="text-sm font-medium cursor-pointer">Notify customer via email</Label>
+              <Label htmlFor="notify" className="text-sm font-medium cursor-pointer">{t('shopify.refundDialog.notifyCustomer')}</Label>
             </div>
           </div>
 
           {calculatedTotal && (
             <div className={cn("p-4 rounded-md bg-primary text-primary-foreground space-y-2 transition-opacity", isCalculating && "opacity-50")}>
               <div className="flex justify-between text-xs opacity-90">
-                <span>Subtotal</span>
-                <span>{calculatedTotal.amountSet.shopMoney.amount} {order.currency}</span>
+                <span>{t('shopify.refundDialog.subtotal')}</span>
+                <span>{calculatedTotal.subtotalSet?.shopMoney?.amount || '0.00'} {order.currency}</span>
               </div>
+              {parseFloat(calculatedTotal.shipping?.amountSet?.shopMoney?.amount || '0') > 0 && (
+                <div className="flex justify-between text-xs opacity-90">
+                  <span>{t('shopify.refundDialog.shipping')}</span>
+                  <span>{calculatedTotal.shipping.amountSet.shopMoney.amount} {order.currency}</span>
+                </div>
+              )}
+              {parseFloat(customAmount) > 0 && (
+                <div className="flex justify-between text-xs opacity-90">
+                  <span>{t('shopify.refundDialog.customAmount')}</span>
+                  <span>{customAmount} {order.currency}</span>
+                </div>
+              )}
+              {parseFloat(calculatedTotal.totalTaxSet?.shopMoney?.amount || '0') > 0 && (
+                <div className="flex justify-between text-xs opacity-90">
+                  <span>{t('shopify.refundDialog.tax')}</span>
+                  <span>{calculatedTotal.totalTaxSet.shopMoney.amount} {order.currency}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm font-semibold pt-2 border-t border-primary-foreground/20">
-                <span>Total Refund</span>
+                <span>{t('shopify.refundDialog.total')}</span>
                 <span>{calculatedTotal.amountSet.shopMoney.amount} {order.currency}</span>
               </div>
             </div>
@@ -274,7 +308,7 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
           {/* Line Items */}
           <div className="space-y-2">
             <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-              <Package className="h-3 w-3" /> Items
+              <Package className="h-3 w-3" /> {t('shopify.items')}
             </p>
             <div className="space-y-2">
               {order.line_items.map((item) => (
@@ -296,8 +330,36 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
           <div className="p-3 rounded-md bg-muted/50 space-y-1.5">
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>{t('shopify.refundDialog.subtotal')}</span>
-              <span>{order.subtotal} {order.currency}</span>
+              <span>{(parseFloat(order.subtotal) + parseFloat(order.total_discounts)).toFixed(2)} {order.currency}</span>
             </div>
+
+            {parseFloat(order.total_discounts) > 0 && (
+              <div className="flex justify-between text-xs text-red-600">
+                <div className="flex items-center gap-1.5">
+                  <span>{t('shopify.discounts')}</span>
+                  {order.discount_applications && order.discount_applications.length > 0 && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3 w-3 cursor-help opacity-70 hover:opacity-100 transition-opacity" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <div className="space-y-1">
+                          {order.discount_applications.map((discount, i) => (
+                            <div key={i} className="text-xs">
+                              <span className="font-semibold">{discount.title}</span>: 
+                              {discount.value.percentage 
+                                ? ` ${discount.value.percentage}%` 
+                                : ` -${discount.value.amount} ${discount.value.currency || order.currency}`}
+                            </div>
+                          ))}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
+                <span>-{order.total_discounts} {order.currency}</span>
+              </div>
+            )}
             
             {parseFloat(order.total_shipping) > 0 && (
               <div className="flex justify-between text-xs text-muted-foreground">
@@ -306,38 +368,38 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
               </div>
             )}
 
-            {parseFloat(order.total_discounts) > 0 && (
-              <div className="flex justify-between text-xs text-red-600">
-                <span>Discounts</span>
-                <span>-{order.total_discounts} {order.currency}</span>
-              </div>
-            )}
-
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>{t('shopify.refundDialog.tax')}</span>
               <span>{order.total_tax} {order.currency}</span>
             </div>
 
-            {parseFloat(order.total_refunded) > 0 && (
-              <div className="flex justify-between text-xs text-red-600">
-                <span className="flex items-center gap-1.5"><Undo2 className="h-3 w-3" /> Refunded</span>
-                <span>-{order.total_refunded} {order.currency}</span>
-              </div>
-            )}
-
             <Separator />
             
             <div className="flex justify-between items-center text-base font-semibold">
-              <span>{t('shopify.refundDialog.total')}</span>
+              <span>{t('shopify.total')}</span>
               <span>{order.total_price} {order.currency}</span>
             </div>
+
+            {parseFloat(order.total_refunded) > 0 && (
+              <>
+                <Separator className="my-1.5" />
+                <div className="flex justify-between text-xs text-red-600">
+                  <span className="flex items-center gap-1.5"><Undo2 className="h-3 w-3" /> Refunded</span>
+                  <span>-{order.total_refunded} {order.currency}</span>
+                </div>
+                <div className="flex justify-between text-sm font-medium pt-1">
+                  <span>{t('shopify.refundDialog.netTotal')}</span>
+                  <span>{(parseFloat(order.total_price) - parseFloat(order.total_refunded)).toFixed(2)} {order.currency}</span>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Refund History */}
           {order.refunds.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                <History className="h-3 w-3" /> Refund History
+                <History className="h-3 w-3" /> {t('shopify.refundHistory')}
               </p>
               <div className="space-y-1.5">
                 {order.refunds.map((refund) => (
@@ -447,7 +509,7 @@ export const ShopifyOrders: React.FC<ShopifyOrdersProps> = ({ shopifyConfig }) =
           <div className="pt-3 text-center p-6 rounded-md bg-destructive/5 border border-destructive/20">
             <AlertCircle className="h-6 w-6 text-destructive mx-auto mb-2" />
             <p className="text-xs text-destructive mb-2">{t('shopify.errorLoadingOrders')}</p>
-            <Button variant="outline" size="sm" onClick={load}>Try Again</Button>
+            <Button variant="outline" size="sm" onClick={load}>{t('common.tryAgain')}</Button>
           </div>
         )}
 
@@ -459,7 +521,7 @@ export const ShopifyOrders: React.FC<ShopifyOrdersProps> = ({ shopifyConfig }) =
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
               </svg>
             </div>
-            <h3 className="text-sm font-medium text-foreground mb-1">No Orders Found</h3>
+            <h3 className="text-sm font-medium text-foreground mb-1">{t('shopify.noOrdersFoundTitle')}</h3>
             <p className="text-xs text-muted-foreground">{t('shopify.noOrdersFound')}</p>
           </div>
         )}

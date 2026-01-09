@@ -51,7 +51,7 @@ export function ParsedEmailContent({ textContent }: ParsedEmailContentProps) {
       {/* Render original content first */}
       {originalSegments.map((segment: EmailSegment, index: number) => (
         <div 
-          key={`original-${index}`}
+          key={`original-${index}-${segment.depth}`}
           className="text-sm text-foreground whitespace-pre-wrap leading-relaxed"
           style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
         >

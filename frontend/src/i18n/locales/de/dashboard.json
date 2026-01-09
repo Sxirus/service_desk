@@ -176,6 +176,7 @@
     "htmlVersionOfEmail": "HTML-Version der E-Mail",
     "noMessagesFound": "Keine Nachrichten in dieser Konversation gefunden.",
     "emailConversationThread": "E-Mail-Konversation",
+    "conversationWith": "Konversation mit",
     "oneNewMessage": "1 neue Nachricht",
     "multipleNewMessages": "{{count}} neue Nachrichten",
     "scrollToNewMessages": "Zu neuen Nachrichten scrollen",

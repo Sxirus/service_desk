@@ -53,6 +53,15 @@ export interface ShopifyOrder {
   total_tax: string;
   subtotal: string;
   total_refunded: string;
+  discount_applications: {
+    type: string;
+    title: string;
+    value: {
+      amount?: string;
+      currency?: string;
+      percentage?: number;
+    };
+  }[];
   refunds: {
     id: string;
     created_at: string;

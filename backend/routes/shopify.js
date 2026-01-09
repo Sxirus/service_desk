@@ -614,6 +614,41 @@ router.get('/orders',
                       totalTaxSet { shopMoney { amount } }
                       subtotalPriceSet { shopMoney { amount } }
                       totalRefundedSet { shopMoney { amount } }
+                      discountApplications(first: 10) {
+                        edges {
+                          node {
+                            __typename
+                            ... on DiscountCodeApplication {
+                              code
+                              value {
+                                ... on MoneyV2 { amount currencyCode }
+                                ... on PricingPercentageValue { percentage }
+                              }
+                            }
+                            ... on ManualDiscountApplication {
+                              title
+                              value {
+                                ... on MoneyV2 { amount currencyCode }
+                                ... on PricingPercentageValue { percentage }
+                              }
+                            }
+                            ... on ScriptDiscountApplication {
+                              title
+                              value {
+                                ... on MoneyV2 { amount currencyCode }
+                                ... on PricingPercentageValue { percentage }
+                              }
+                            }
+                            ... on AutomaticDiscountApplication {
+                              title
+                              value {
+                                ... on MoneyV2 { amount currencyCode }
+                                ... on PricingPercentageValue { percentage }
+                              }
+                            }
+                          }
+                        }
+                      }
                       refunds {
                         id
                         createdAt
@@ -663,6 +698,11 @@ router.get('/orders',
           total_tax: node.totalTaxSet?.shopMoney?.amount || "0.00",
           subtotal: node.subtotalPriceSet?.shopMoney?.amount || "0.00",
           total_refunded: node.totalRefundedSet?.shopMoney?.amount || "0.00",
+          discount_applications: (node.discountApplications?.edges || []).map(e => ({
+            type: e.node.__typename,
+            title: e.node.code || e.node.title,
+            value: e.node.value.percentage ? { percentage: e.node.value.percentage } : { amount: e.node.value.amount, currency: e.node.value.currencyCode }
+          })),
           refunds: (node.refunds || []).map(r => ({
             id: r.id,
             created_at: r.createdAt,
@@ -698,7 +738,7 @@ router.post('/refund/calculate',
   authenticate,
   async (req, res) => {
     try {
-      const { orderId, refundLineItems } = req.body;
+      const { orderId, refundLineItems, customAmount = 0 } = req.body;
       const clientId = req.user.client_id;
 
       const { data: client } = await supabase
@@ -721,6 +761,7 @@ router.post('/refund/calculate',
                 order(id: $id) {
                   suggestedRefund(refundLineItems: $items) {
                     amountSet { shopMoney { amount currencyCode } }
+                    subtotalSet { shopMoney { amount currencyCode } }
                     totalTaxSet { shopMoney { amount currencyCode } }
                     shipping { amountSet { shopMoney { amount currencyCode } } }
                   }
@@ -735,7 +776,16 @@ router.post('/refund/calculate',
       const json = await response.json();
       if (json.errors) throw new Error(json.errors[0].message);
 
-      res.json({ success: true, suggestedRefund: json.data.order.suggestedRefund });
+      const suggestedRefund = json.data.order.suggestedRefund;
+      
+      // Add custom amount to the total
+      if (customAmount > 0) {
+        const currentAmount = parseFloat(suggestedRefund.amountSet.shopMoney.amount);
+        const newAmount = (currentAmount + parseFloat(customAmount)).toFixed(2);
+        suggestedRefund.amountSet.shopMoney.amount = newAmount;
+      }
+
+      res.json({ success: true, suggestedRefund });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -750,8 +800,9 @@ router.post('/refund/create',
   authenticate,
   async (req, res) => {
     try {
-      const { orderId, refundLineItems, notifyCustomer, note, shippingAmount } = req.body;
+      const { orderId, refundLineItems, notifyCustomer, note, shippingAmount, customAmount = 0 } = req.body;
       const clientId = req.user.client_id;
+      const employeeName = req.user.employee_name;
 
       const { data: client } = await supabase
         .from('clients')
@@ -779,6 +830,13 @@ router.post('/refund/create',
                       parentTransaction { id }
                     }
                   }
+                  transactions(first: 10) {
+                    id
+                    kind
+                    status
+                    gateway
+                    amountSet { shopMoney { amount currencyCode } }
+                  }
                 }
               }
             `,
@@ -788,12 +846,43 @@ router.post('/refund/create',
       );
 
       const calcJson = await calcResponse.json();
-      const transactions = calcJson.data.order.suggestedRefund.suggestedTransactions.map(t => ({
+      if (calcJson.errors) throw new Error(calcJson.errors[0].message);
+
+      let transactions = calcJson.data.order.suggestedRefund.suggestedTransactions.map(t => ({
+        orderId: orderId,
         gateway: t.gateway,
         amount: t.amountSet.shopMoney.amount,
-        parentTransactionId: t.parentTransaction.id,
+        parentId: t.parentTransaction.id,
         kind: 'REFUND'
       }));
+
+      // If we have a custom amount, we need to add it to the transaction
+      if (parseFloat(customAmount) > 0) {
+        if (transactions.length > 0) {
+          // If we have suggested transactions, add to the first one
+          const currentAmount = parseFloat(transactions[0].amount);
+          transactions[0].amount = (currentAmount + parseFloat(customAmount)).toFixed(2);
+        } else {
+          // If no suggested transactions (e.g. no items refunded), find a parent transaction from the order
+          const parentTransaction = calcJson.data.order.transactions.find(t => 
+            (t.kind === 'SALE' || t.kind === 'CAPTURE') && t.status === 'SUCCESS'
+          );
+
+          if (!parentTransaction) {
+            throw new Error('No valid parent transaction found for custom refund');
+          }
+
+          transactions = [{
+            orderId: orderId,
+            gateway: parentTransaction.gateway,
+            amount: parseFloat(customAmount).toFixed(2),
+            parentId: parentTransaction.id,
+            kind: 'REFUND'
+          }];
+        }
+      }
+
+      const fullNote = note ? `${note}\n[Refunded by: ${employeeName}]` : `[Refunded by: ${employeeName}]`;
 
       const mutationResponse = await fetch(
         `https://${client.shopify_store_url}/admin/api/2025-01/graphql.json`,
@@ -817,7 +906,7 @@ router.post('/refund/create',
                 orderId,
                 refundLineItems,
                 notify: notifyCustomer,
-                note,
+                note: fullNote,
                 transactions,
                 shipping: shippingAmount ? { amount: shippingAmount, fullRefund: false } : undefined
               }
