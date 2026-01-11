@@ -545,6 +545,15 @@
     "total": "Gesamt",
     "available": "{{count}} verfügbar",
     "discounts": "Rabatte",
+    "paymentMethod": "Zahlungsmethode",
+    "paymentGateways": {
+      "manual": "Manuell",
+      "paypal": "PayPal",
+      "stripe": "Stripe",
+      "shopify_payments": "Shopify Payments",
+      "gift_card": "Geschenkgutschein",
+      "bogus": "Test-Anbieter"
+    },
     "status": {
       "paid": "Bezahlt",
       "refunded": "Erstattet",

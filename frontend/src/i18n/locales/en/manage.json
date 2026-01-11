@@ -545,6 +545,15 @@
     "total": "Total",
     "available": "{{count}} available",
     "discounts": "Discounts",
+    "paymentMethod": "Payment Method",
+    "paymentGateways": {
+      "manual": "Manual",
+      "paypal": "PayPal",
+      "stripe": "Stripe",
+      "shopify_payments": "Shopify Payments",
+      "gift_card": "Gift Card",
+      "bogus": "Test Provider"
+    },
     "status": {
       "paid": "Paid",
       "refunded": "Refunded",

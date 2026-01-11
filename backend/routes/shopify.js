@@ -649,6 +649,11 @@ router.get('/orders',
                           }
                         }
                       }
+                      transactions(first: 5) {
+                        gateway
+                        kind
+                        status
+                      }
                       refunds {
                         id
                         createdAt
@@ -713,6 +718,7 @@ router.get('/orders',
             title: e.node.code || e.node.title,
             value: e.node.value.percentage ? { percentage: e.node.value.percentage } : { amount: e.node.value.amount, currency: e.node.value.currencyCode }
           })),
+          payment_gateway: node.transactions?.find(t => (t.kind === 'SALE' || t.kind === 'CAPTURE') && t.status === 'SUCCESS')?.gateway || node.transactions?.[0]?.gateway || null,
           refunds: (node.refunds || []).map(r => ({
             id: r.id,
             created_at: r.createdAt,

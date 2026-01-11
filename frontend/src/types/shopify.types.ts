@@ -62,6 +62,7 @@ export interface ShopifyOrder {
       percentage?: number;
     };
   }[];
+  payment_gateway: string | null;
   refunds: {
     id: string;
     created_at: string;

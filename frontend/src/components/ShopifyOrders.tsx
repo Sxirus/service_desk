@@ -369,6 +369,14 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
 
           {/* Financial Breakdown */}
           <div className="p-3 rounded-md bg-muted/50 space-y-1.5">
+            {order.payment_gateway && (
+              <div className="flex justify-between text-xs text-muted-foreground pb-1 border-b border-muted">
+                <span>{t('shopify.paymentMethod', 'Payment Method')}</span>
+                <span className="font-medium">
+                  {t(`shopify.paymentGateways.${order.payment_gateway.toLowerCase()}`, order.payment_gateway)}
+                </span>
+              </div>
+            )}
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>{t('shopify.refundDialog.subtotal')}</span>
               <span>{(parseFloat(order.subtotal) + parseFloat(order.total_discounts)).toFixed(2)} {order.currency}</span>
