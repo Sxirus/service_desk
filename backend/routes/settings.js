@@ -148,6 +148,64 @@ router.post('/updateConfirmMail',
 });
 
 /**
+ * Get tracking settings
+ * GET /api/settings/tracking
+ */
+router.get('/tracking', authenticate, async (req, res) => {
+  try {
+    const client_id = req.user.client_id;
+    const { data, error } = await supabase
+      .from('clients')
+      .select('tracking_settings')
+      .eq('id', client_id)
+      .single();
+
+    if (error) throw error;
+
+    // Default structure if null
+    const settings = data.tracking_settings || { 
+      providers: ['17track', 'dhl', 'hermes', 'ups', 'fedex'], 
+      customProviders: [] 
+    };
+    
+    res.json({ success: true, settings });
+  } catch (err) {
+    console.error('[SETTINGS] Error fetching tracking settings:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Update tracking settings
+ * POST /api/settings/tracking
+ */
+router.post('/tracking', authenticate, async (req, res) => {
+  try {
+    const client_id = req.user.client_id;
+    const { providers, customProviders } = req.body;
+
+    // Basic validation
+    if (!Array.isArray(providers) || !Array.isArray(customProviders)) {
+      return res.status(400).json({ success: false, error: 'Invalid format' });
+    }
+
+    const { error } = await supabase
+      .from('clients')
+      .update({ 
+        tracking_settings: { providers, customProviders } 
+      })
+      .eq('id', client_id);
+
+    if (error) throw error;
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[SETTINGS] Error updating tracking settings:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * Get all settings for authenticated user's client
  * GET /api/settings/getAllSettings
  * 

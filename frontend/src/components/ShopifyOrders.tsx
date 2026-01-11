@@ -25,12 +25,14 @@ import {
   Undo2,
   CheckCircle2,
   Clock,
-  Ban
+  Ban,
+  Truck
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { apiClient } from '../utils/api';
 import type { ShopifyConfig, ShopifyClientData, ShopifyOrder } from '../types/shopify.types';
+import { TrackingPopup } from './TrackingPopup';
 
 import { Button } from '@/components/ui/button';
 import { 
@@ -271,6 +273,7 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
   onRefresh: () => void;
 }) => {
   const { t } = useTranslation('manage');
+  const [trackingNumber, setTrackingNumber] = useState<string | null>(null);
   
   return (
     <div className="rounded-xl border bg-card p-4">
@@ -301,10 +304,48 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
         </div>
       </div>
 
+      <TrackingPopup 
+        isOpen={!!trackingNumber} 
+        onClose={() => setTrackingNumber(null)} 
+        trackingNumber={trackingNumber || ''} 
+      />
+
       {isExpanded && (
         <div className="pt-4 space-y-4">
           <Separator />
           
+          {/* Fulfillments */}
+          {order.fulfillments && order.fulfillments.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                <Truck className="h-3 w-3" /> {t('shopify.shipments', 'Shipments')}
+              </p>
+              <div className="grid gap-2">
+                {order.fulfillments.map((fulfillment) => (
+                  <div key={fulfillment.id} className="flex flex-col gap-2 p-2 rounded-md bg-muted/30 border">
+                    {fulfillment.tracking_numbers && fulfillment.tracking_numbers.length > 0 ? (
+                      fulfillment.tracking_numbers.map((tn, idx) => (
+                        <div key={idx} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-sm">
+                            <Package className="h-3 w-3 text-muted-foreground" />
+                            <button 
+                              className="font-mono hover:underline hover:text-primary transition-colors text-left"
+                              onClick={() => setTrackingNumber(tn.number)}
+                            >
+                              {tn.number}
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-sm text-muted-foreground italic pl-1">{t('shopify.noTrackingInfo', 'No tracking info')}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Line Items */}
           <div className="space-y-2">
             <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">

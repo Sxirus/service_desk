@@ -617,7 +617,18 @@
     "disconnectSuccess": "Shopify store disconnected",
     "disconnectSuccessDescription": "Your store has been disconnected successfully.",
     "disconnectFailed": "Failed to disconnect",
-    "disconnectFailedDescription": "An error occurred while disconnecting."
+    "disconnectFailedDescription": "An error occurred while disconnecting.",
+    "connection": "Connection",
+    "tracking": "Tracking",
+    "shipments": "Shipments",
+    "noTrackingInfo": "No tracking info"
+  },
+  "tracking": {
+    "trackShipment": "Track Shipment",
+    "selectProvider": "Select a provider to track number",
+    "noProviders": "No tracking providers configured.",
+    "shortcutHint": "Use keys 1-9 to quickly select a provider",
+    "logoDisclaimer": "All logos and trademarks are property of their respective owners."
   },
   "table": {
     "openMenu": "Open menu",
@@ -677,7 +688,22 @@
       "notifications": {
         "title": "Notification Preferences",
         "description": "Manage how you want to be notified"
-      }
+      },
+      "tracking": {
+        "title": "Shipment Tracking",
+        "description": "Configure which tracking providers are available when viewing order shipments.",
+        "loadError": "Failed to load tracking settings",
+        "standardProviders": "Standard Providers",
+        "customProviders": "Custom Providers",
+        "providerName": "Provider Name",
+        "urlTemplate": "Tracking URL Template",
+        "logoUrl": "Logo URL (Optional)",
+        "urlHelp": "Must include {TRACKING_NUMBER}",
+        "addProvider": "Add Custom Provider",
+        "invalidUrl": "URL must contain {TRACKING_NUMBER} placeholder"
+      },
+      "saved": "Settings saved successfully",
+      "saveError": "Failed to save settings"
     },
     "macro": {
       "pageTitle": "Macro Editor",

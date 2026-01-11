@@ -71,6 +71,25 @@ export interface ShopifyOrder {
   currency: string;
   cancelled: boolean;
   line_items: ShopifyLineItem[];
+  fulfillments: {
+    id: string;
+    created_at: string;
+    tracking_number: string;
+    tracking_company: string;
+    tracking_url: string;
+    status: string;
+  }[];
+}
+
+export interface TrackingProvider {
+  name: string;
+  urlTemplate: string;
+  logoUrl?: string;
+}
+
+export interface TrackingSettings {
+  providers: string[]; // List of enabled default providers (ids)
+  customProviders: TrackingProvider[];
 }
 
 /**

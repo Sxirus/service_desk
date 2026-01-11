@@ -617,7 +617,18 @@
     "disconnectSuccess": "Shopify-Shop getrennt",
     "disconnectSuccessDescription": "Ihr Shop wurde erfolgreich getrennt.",
     "disconnectFailed": "Trennen fehlgeschlagen",
-    "disconnectFailedDescription": "Beim Trennen des Shops ist ein Fehler aufgetreten."
+    "disconnectFailedDescription": "Beim Trennen des Shops ist ein Fehler aufgetreten.",
+    "connection": "Verbindung",
+    "tracking": "Sendungsverfolgung",
+    "shipments": "Lieferungen",
+    "noTrackingInfo": "Keine Sendungsinformationen"
+  },
+  "tracking": {
+    "trackShipment": "Sendung verfolgen",
+    "selectProvider": "Wählen Sie einen Dienstleister für die Sendungsnummer",
+    "noProviders": "Keine Tracking-Dienstleister konfiguriert.",
+    "shortcutHint": "Nutzen Sie die Tasten 1-9 für die Schnellauswahl",
+    "logoDisclaimer": "Alle Logos und Marken sind Eigentum ihrer jeweiligen Inhaber."
   },
   "table": {
     "openMenu": "Menü öffnen",
@@ -677,7 +688,22 @@
       "notifications": {
         "title": "Benachrichtigungseinstellungen",
         "description": "Verwalten Sie, wie Sie benachrichtigt werden möchten"
-      }
+      },
+      "tracking": {
+        "title": "Sendungsverfolgung",
+        "description": "Konfigurieren Sie, welche Versanddienstleister bei der Anzeige von Bestelllieferungen verfügbar sind.",
+        "loadError": "Laden der Tracking-Einstellungen fehlgeschlagen",
+        "standardProviders": "Standard-Dienstleister",
+        "customProviders": "Benutzerdefinierte Dienstleister",
+        "providerName": "Dienstleister-Name",
+        "urlTemplate": "Tracking-URL-Vorlage",
+        "logoUrl": "Logo-URL (Optional)",
+        "urlHelp": "Muss den Platzhalter {TRACKING_NUMBER} enthalten",
+        "addProvider": "Dienstleister hinzufügen",
+        "invalidUrl": "URL muss den Platzhalter {TRACKING_NUMBER} enthalten"
+      },
+      "saved": "Einstellungen erfolgreich gespeichert",
+      "saveError": "Fehler beim Speichern der Einstellungen"
     },
     "macro": {
       "pageTitle": "Makro-Editor",

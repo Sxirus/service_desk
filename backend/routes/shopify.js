@@ -657,6 +657,16 @@ router.get('/orders',
                       }
                       cancelReason
                       cancelledAt
+                      fulfillments(first: 5) {
+                        id
+                        createdAt
+                        status
+                        trackingInfo(first: 5) {
+                          number
+                          url
+                          company
+                        }
+                      }
                       lineItems(first: 20) {
                         edges {
                           node {
@@ -711,6 +721,16 @@ router.get('/orders',
           })),
           currency: node.totalPriceSet?.shopMoney?.currencyCode,
           cancelled: !!node.cancelledAt,
+          fulfillments: (node.fulfillments || []).map(f => ({
+            id: f.id,
+            created_at: f.createdAt,
+            status: f.status,
+            tracking_numbers: (f.trackingInfo || []).map(ti => ({
+              number: ti.number,
+              url: ti.url,
+              company: ti.company
+            })).filter(tn => tn.number), // Only include entries with a number
+          })).filter(f => f.tracking_numbers && f.tracking_numbers.length > 0), // Only include fulfillments with tracking numbers
           line_items: node.lineItems.edges.map(li => ({
             id: li.node.id,
             name: li.node.title,

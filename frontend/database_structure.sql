@@ -80,6 +80,7 @@ CREATE TABLE public.clients (
   stripe_customer_id character varying,
   subscription_tier text DEFAULT 'free'::text,
   stripe_subscription_id text,
+  tracking_settings jsonb DEFAULT '{"providers": [], "customProviders": []}'::jsonb,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT clients_pkey PRIMARY KEY (id),
   CONSTRAINT clients_primary_email_id_fkey FOREIGN KEY (primary_email_id) REFERENCES public.client-emails(id)
