@@ -42,7 +42,7 @@ router.get('/install',
       // Get OAuth credentials from environment
       const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID;
       const REDIRECT_URI = process.env.SHOPIFY_REDIRECT_URI;
-      const SCOPES = 'read_orders,read_customers,read_products';
+      const SCOPES = 'read_orders,read_all_orders,read_customers,read_products';
 
       if (!CLIENT_ID || !REDIRECT_URI) {
         console.error('[SHOPIFY_INSTALL] Missing Shopify credentials in environment');
@@ -201,7 +201,7 @@ router.get('/callback',
 
       // Redirect to success page
       const redirectUrl = process.env.FRONTEND_URL + 
-        `/manage/shopify?status=connected&shop=${encodeURIComponent(shop)}`;
+        `/manage/shopify?shopify=connected&shop=${encodeURIComponent(shop)}`;
       
       res.redirect(redirectUrl);
 
@@ -255,23 +255,49 @@ router.get('/test',
         });
       }
 
-      // Test API connection by fetching shop info
-      const shopResponse = await fetch(
-        `https://${client.shopify_store_url}/admin/api/2024-01/shop.json`,
+      // Test API connection by fetching shop info via GraphQL
+      const shopifyResponse = await fetch(
+        `https://${client.shopify_store_url}/admin/api/2025-01/graphql.json`,
         {
+          method: 'POST',
           headers: {
             'X-Shopify-Access-Token': client.shopify_access_token,
+            'Content-Type': 'application/json',
           },
+          body: JSON.stringify({
+            query: `
+              {
+                shop {
+                  name
+                  email
+                  url
+                }
+                productsCount {
+                  count
+                }
+                ordersCount {
+                  count
+                }
+              }
+            `
+          })
         }
       );
 
-      if (!shopResponse.ok) {
-        const errorText = await shopResponse.text();
+      if (!shopifyResponse.ok) {
+        const errorText = await shopifyResponse.text();
         console.error('[SHOPIFY_TEST] API test failed:', errorText);
-        throw new Error(`Shopify API error: ${shopResponse.status}`);
+        throw new Error(`Shopify API error: ${shopifyResponse.status}`);
       }
 
-      const shopData = await shopResponse.json();
+      const responseJson = await shopifyResponse.json();
+      
+      if (responseJson.errors) {
+        console.error('[SHOPIFY_TEST] GraphQL errors:', responseJson.errors);
+        throw new Error(`GraphQL error: ${responseJson.errors[0].message}`);
+      }
+
+      const shopData = responseJson.data;
 
       console.log('[SHOPIFY_TEST] Connection successful');
 
@@ -280,6 +306,8 @@ router.get('/test',
         shop: client.shopify_store_url,
         shopName: shopData.shop?.name,
         email: shopData.shop?.email,
+        productsCount: shopData.productsCount?.count || 0,
+        ordersCount: shopData.ordersCount?.count || 0,
         connected: true
       });
 
@@ -411,14 +439,52 @@ router.get('/customer',
         });
       }
 
-      // Search customer in Shopify
+      // Search customer in Shopify via GraphQL
       const shopifyResponse = await fetch(
-        `https://${client.shopify_store_url}/admin/api/2024-01/customers/search.json?query=email:${encodeURIComponent(email)}`,
+        `https://${client.shopify_store_url}/admin/api/2025-01/graphql.json`,
         {
+          method: 'POST',
           headers: {
             'X-Shopify-Access-Token': client.shopify_access_token,
             'Content-Type': 'application/json',
           },
+          body: JSON.stringify({
+            query: `
+              query findCustomer($query: String!) {
+                customers(first: 1, query: $query) {
+                  edges {
+                    node {
+                      id
+                      email
+                      firstName
+                      lastName
+                      numberOfOrders
+                      amountSpent {
+                        amount
+                        currencyCode
+                      }
+                      defaultAddress {
+                        address1
+                        address2
+                        city
+                        province
+                        zip
+                        country
+                        company
+                      }
+                      phone
+                      verifiedEmail
+                      createdAt
+                      updatedAt
+                    }
+                  }
+                }
+              }
+            `,
+            variables: {
+              query: `email:"${email}"`
+            }
+          })
         }
       );
 
@@ -428,19 +494,53 @@ router.get('/customer',
         throw new Error(`Shopify API error: ${shopifyResponse.status}`);
       }
 
-      const data = await shopifyResponse.json();
+      const responseJson = await shopifyResponse.json();
+      
+      if (responseJson.errors) {
+        console.error('[SHOPIFY_CUSTOMER] GraphQL errors:', responseJson.errors);
+        throw new Error(`GraphQL error: ${responseJson.errors[0].message}`);
+      }
 
-      if (!data.customers || data.customers.length === 0) {
+      const edges = responseJson.data?.customers?.edges || [];
+
+      if (edges.length === 0) {
         return res.json({ 
           customer: null,
           message: 'No Shopify customer found for this email'
         });
       }
 
+      const node = edges[0].node;
+      const numericId = node.id.split('/').pop();
+
+      // Map GraphQL response to expected format
+      const mappedCustomer = {
+        id: numericId,
+        email: node.email,
+        first_name: node.firstName,
+        last_name: node.lastName,
+        orders_count: node.numberOfOrders,
+        total_spent: node.amountSpent?.amount || "0.00",
+        currency: node.amountSpent?.currencyCode,
+        phone: node.phone,
+        verified_email: node.verifiedEmail,
+        created_at: node.createdAt,
+        updated_at: node.updatedAt,
+        default_address: node.defaultAddress ? {
+          address1: node.defaultAddress.address1,
+          address2: node.defaultAddress.address2,
+          city: node.defaultAddress.city,
+          province: node.defaultAddress.province,
+          zip: node.defaultAddress.zip,
+          country: node.defaultAddress.country,
+          company: node.defaultAddress.company
+        } : null
+      };
+
       console.log('[SHOPIFY_CUSTOMER] Customer found');
 
       res.json({
-        customer: data.customers[0],
+        customer: mappedCustomer,
         shopifyStore: client.shopify_store_url,
       });
 
@@ -457,12 +557,6 @@ router.get('/customer',
 /**
  * Get customer orders from Shopify
  * GET /api/shopify/orders
- * 
- * Query params:
- * - customerId: Internal customer ID (required)
- * 
- * Authentication: Required
- * Authorization: Customer must belong to user's client
  */
 router.get('/orders',
   authenticate,
@@ -472,94 +566,447 @@ router.get('/orders',
       const customerId = req.sanitized.customerId;
       const clientId = req.user.client_id;
 
-      console.log('[SHOPIFY_ORDERS] Fetching orders:', { customerId, clientId });
-
-      // Fetch and verify customer
-      const { data: customer, error: customerError } = await supabase
-        .from('customers')
-        .select('id, name, client_id')
-        .eq('id', customerId)
-        .single();
-
-      if (customerError || !customer) {
-        return res.status(404).json({ 
-          orders: [],
-          error: 'Customer not found' 
-        });
-      }
-
-      if (customer.client_id !== clientId) {
-        console.warn('[SHOPIFY_ORDERS] Unauthorized access attempt');
-        return res.status(403).json({ 
-          orders: [],
-          error: 'Access denied' 
-        });
-      }
-
-      // Get customer email
-      const { data: emails, error: emailError } = await supabase
+      const { data: emails } = await supabase
         .from('incoming-mails')
         .select('email_address')
         .eq('customer_id', customerId)
         .order('send_at', { ascending: false })
         .limit(1);
 
-      if (emailError || !emails || emails.length === 0) {
-        return res.json({ 
-          orders: [],
-          error: 'No email found for customer' 
-        });
+      if (!emails || emails.length === 0) {
+        return res.json({ orders: [], error: 'No email found' });
       }
 
       const customerEmail = emails[0].email_address;
 
-      // Fetch client's Shopify credentials
-      const { data: client, error: clientError } = await supabase
+      const { data: client } = await supabase
         .from('clients')
         .select('shopify_store_url, shopify_access_token, shopify_connected')
         .eq('id', clientId)
         .single();
 
-      if (clientError || !client || !client.shopify_connected) {
-        return res.json({ 
-          orders: [],
-          error: 'Shopify not connected' 
-        });
+      if (!client?.shopify_connected) {
+        return res.json({ orders: [], error: 'Shopify not connected' });
       }
 
-      // Fetch orders from Shopify
       const shopifyResponse = await fetch(
-        `https://${client.shopify_store_url}/admin/api/2024-01/orders.json?limit=20&status=any&email=${encodeURIComponent(customerEmail)}`,
+        `https://${client.shopify_store_url}/admin/api/2025-01/graphql.json`,
         {
+          method: 'POST',
           headers: {
             'X-Shopify-Access-Token': client.shopify_access_token,
             'Content-Type': 'application/json',
           },
+          body: JSON.stringify({
+            query: `
+              query findOrdersByEmail($query: String!) {
+                orders(first: 50, query: $query, sortKey: CREATED_AT, reverse: true) {
+                  edges {
+                    node {
+                      id
+                      name
+                      createdAt
+                      displayFinancialStatus
+                      displayFulfillmentStatus
+                      totalPriceSet { shopMoney { amount currencyCode } }
+                      totalDiscountsSet { shopMoney { amount } }
+                      totalShippingPriceSet { shopMoney { amount } }
+                      totalTaxSet { shopMoney { amount } }
+                      subtotalPriceSet { shopMoney { amount } }
+                      totalRefundedSet { shopMoney { amount } }
+                      discountApplications(first: 10) {
+                        edges {
+                          node {
+                            __typename
+                            ... on DiscountCodeApplication {
+                              code
+                              value {
+                                ... on MoneyV2 { amount currencyCode }
+                                ... on PricingPercentageValue { percentage }
+                              }
+                            }
+                            ... on ManualDiscountApplication {
+                              title
+                              value {
+                                ... on MoneyV2 { amount currencyCode }
+                                ... on PricingPercentageValue { percentage }
+                              }
+                            }
+                            ... on ScriptDiscountApplication {
+                              title
+                              value {
+                                ... on MoneyV2 { amount currencyCode }
+                                ... on PricingPercentageValue { percentage }
+                              }
+                            }
+                            ... on AutomaticDiscountApplication {
+                              title
+                              value {
+                                ... on MoneyV2 { amount currencyCode }
+                                ... on PricingPercentageValue { percentage }
+                              }
+                            }
+                          }
+                        }
+                      }
+                      transactions(first: 5) {
+                        gateway
+                        kind
+                        status
+                      }
+                      refunds {
+                        id
+                        createdAt
+                        note
+                        totalRefundedSet { shopMoney { amount } }
+                      }
+                      cancelReason
+                      cancelledAt
+                      fulfillments(first: 5) {
+                        id
+                        createdAt
+                        status
+                        trackingInfo(first: 5) {
+                          number
+                          url
+                          company
+                        }
+                      }
+                      lineItems(first: 20) {
+                        edges {
+                          node {
+                            id
+                            title
+                            quantity
+                            refundableQuantity
+                            variant { title sku }
+                            originalUnitPriceSet { shopMoney { amount } }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `,
+            variables: {
+              query: `email:"${customerEmail}" (status:open OR status:closed OR status:cancelled)`
+            }
+          })
         }
       );
 
-      if (!shopifyResponse.ok) {
-        const errorText = await shopifyResponse.text();
-        console.error('[SHOPIFY_ORDERS] API error:', errorText);
-        throw new Error(`Shopify API error: ${shopifyResponse.status}`);
+      const responseJson = await shopifyResponse.json();
+      if (responseJson.errors) throw new Error(responseJson.errors[0].message);
+
+      const mappedOrders = (responseJson.data?.orders?.edges || []).map(edge => {
+        const node = edge.node;
+        return {
+          id: node.id,
+          order_number: node.name.replace('#', ''),
+          created_at: node.createdAt,
+          financial_status: node.displayFinancialStatus.toLowerCase(),
+          fulfillment_status: node.displayFulfillmentStatus.toLowerCase(),
+          total_price: node.totalPriceSet?.shopMoney?.amount || "0.00",
+          total_discounts: node.totalDiscountsSet?.shopMoney?.amount || "0.00",
+          total_shipping: node.totalShippingPriceSet?.shopMoney?.amount || "0.00",
+          total_tax: node.totalTaxSet?.shopMoney?.amount || "0.00",
+          subtotal: node.subtotalPriceSet?.shopMoney?.amount || "0.00",
+          total_refunded: node.totalRefundedSet?.shopMoney?.amount || "0.00",
+          discount_applications: (node.discountApplications?.edges || []).map(e => ({
+            type: e.node.__typename,
+            title: e.node.code || e.node.title,
+            value: e.node.value.percentage ? { percentage: e.node.value.percentage } : { amount: e.node.value.amount, currency: e.node.value.currencyCode }
+          })),
+          payment_gateway: node.transactions?.find(t => (t.kind === 'SALE' || t.kind === 'CAPTURE') && t.status === 'SUCCESS')?.gateway || node.transactions?.[0]?.gateway || null,
+          refunds: (node.refunds || []).map(r => ({
+            id: r.id,
+            created_at: r.createdAt,
+            note: r.note,
+            amount: r.totalRefundedSet.shopMoney.amount
+          })),
+          currency: node.totalPriceSet?.shopMoney?.currencyCode,
+          cancelled: !!node.cancelledAt,
+          fulfillments: (node.fulfillments || []).map(f => ({
+            id: f.id,
+            created_at: f.createdAt,
+            status: f.status,
+            tracking_numbers: (f.trackingInfo || []).map(ti => ({
+              number: ti.number,
+              url: ti.url,
+              company: ti.company
+            })).filter(tn => tn.number), // Only include entries with a number
+          })).filter(f => f.tracking_numbers && f.tracking_numbers.length > 0), // Only include fulfillments with tracking numbers
+          line_items: node.lineItems.edges.map(li => ({
+            id: li.node.id,
+            name: li.node.title,
+            quantity: li.node.quantity,
+            refundableQuantity: li.node.refundableQuantity,
+            price: li.node.originalUnitPriceSet.shopMoney.amount,
+            variantTitle: li.node.variant?.title,
+            sku: li.node.variant?.sku
+          }))
+        };
+      });
+
+      res.json({ orders: mappedOrders, shopifyStore: client.shopify_store_url });
+    } catch (error) {
+      res.json({ orders: [], error: error.message });
+    }
+  }
+);
+
+/**
+ * Calculate suggested refund
+ * POST /api/shopify/refund/calculate
+ */
+router.post('/refund/calculate',
+  authenticate,
+  async (req, res) => {
+    try {
+      const { orderId, refundLineItems, customAmount = 0 } = req.body;
+      const clientId = req.user.client_id;
+
+      const { data: client } = await supabase
+        .from('clients')
+        .select('shopify_store_url, shopify_access_token')
+        .eq('id', clientId)
+        .single();
+
+      const response = await fetch(
+        `https://${client.shopify_store_url}/admin/api/2025-01/graphql.json`,
+        {
+          method: 'POST',
+          headers: {
+            'X-Shopify-Access-Token': client.shopify_access_token,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            query: `
+              query suggestedRefund($id: ID!, $items: [RefundLineItemInput!]) {
+                order(id: $id) {
+                  suggestedRefund(refundLineItems: $items) {
+                    amountSet { shopMoney { amount currencyCode } }
+                    subtotalSet { shopMoney { amount currencyCode } }
+                    totalTaxSet { shopMoney { amount currencyCode } }
+                    shipping { amountSet { shopMoney { amount currencyCode } } }
+                  }
+                }
+              }
+            `,
+            variables: { id: orderId, items: refundLineItems }
+          })
+        }
+      );
+
+      const json = await response.json();
+      if (json.errors) throw new Error(json.errors[0].message);
+
+      const suggestedRefund = json.data.order.suggestedRefund;
+      
+      // Add custom amount to the total
+      if (customAmount > 0) {
+        const currentAmount = parseFloat(suggestedRefund.amountSet.shopMoney.amount);
+        const newAmount = (currentAmount + parseFloat(customAmount)).toFixed(2);
+        suggestedRefund.amountSet.shopMoney.amount = newAmount;
       }
 
-      const data = await shopifyResponse.json();
-
-      console.log('[SHOPIFY_ORDERS] Orders fetched:', data.orders?.length || 0);
-
-      res.json({
-        orders: data.orders || [],
-        customerEmail: customerEmail,
-        shopifyStore: client.shopify_store_url,
-      });
-
+      res.json({ success: true, suggestedRefund });
     } catch (error) {
-      console.error('[SHOPIFY_ORDERS] Error:', error);
-      res.json({
-        orders: [],
-        error: error.message
-      });
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+/**
+ * Create a refund
+ * POST /api/shopify/refund/create
+ */
+router.post('/refund/create',
+  authenticate,
+  async (req, res) => {
+    try {
+      const { orderId, refundLineItems, notifyCustomer, note, shippingAmount, customAmount = 0 } = req.body;
+      const clientId = req.user.client_id;
+      const employeeName = req.user.employee_name;
+
+      const { data: client } = await supabase
+        .from('clients')
+        .select('shopify_store_url, shopify_access_token')
+        .eq('id', clientId)
+        .single();
+
+      // We first calculate to get the currency and suggested transactions
+      const calcResponse = await fetch(
+        `https://${client.shopify_store_url}/admin/api/2025-01/graphql.json`,
+        {
+          method: 'POST',
+          headers: {
+            'X-Shopify-Access-Token': client.shopify_access_token,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            query: `
+              query suggestedRefund($id: ID!, $items: [RefundLineItemInput!]) {
+                order(id: $id) {
+                  suggestedRefund(refundLineItems: $items) {
+                    suggestedTransactions {
+                      gateway
+                      amountSet { shopMoney { amount currencyCode } }
+                      parentTransaction { id }
+                    }
+                  }
+                  transactions(first: 10) {
+                    id
+                    kind
+                    status
+                    gateway
+                    amountSet { shopMoney { amount currencyCode } }
+                  }
+                }
+              }
+            `,
+            variables: { id: orderId, items: refundLineItems }
+          })
+        }
+      );
+
+      const calcJson = await calcResponse.json();
+      if (calcJson.errors) throw new Error(calcJson.errors[0].message);
+
+      let transactions = calcJson.data.order.suggestedRefund.suggestedTransactions.map(t => ({
+        orderId: orderId,
+        gateway: t.gateway,
+        amount: t.amountSet.shopMoney.amount,
+        parentId: t.parentTransaction.id,
+        kind: 'REFUND'
+      }));
+
+      // If we have a custom amount, we need to add it to the transaction
+      if (parseFloat(customAmount) > 0) {
+        if (transactions.length > 0) {
+          // If we have suggested transactions, add to the first one
+          const currentAmount = parseFloat(transactions[0].amount);
+          transactions[0].amount = (currentAmount + parseFloat(customAmount)).toFixed(2);
+        } else {
+          // If no suggested transactions (e.g. no items refunded), find a parent transaction from the order
+          const parentTransaction = calcJson.data.order.transactions.find(t => 
+            (t.kind === 'SALE' || t.kind === 'CAPTURE') && t.status === 'SUCCESS'
+          );
+
+          if (!parentTransaction) {
+            throw new Error('No valid parent transaction found for custom refund');
+          }
+
+          transactions = [{
+            orderId: orderId,
+            gateway: parentTransaction.gateway,
+            amount: parseFloat(customAmount).toFixed(2),
+            parentId: parentTransaction.id,
+            kind: 'REFUND'
+          }];
+        }
+      }
+
+      const fullNote = note ? `${note}\n[Refunded by: ${employeeName}]` : `[Refunded by: ${employeeName}]`;
+
+      const mutationResponse = await fetch(
+        `https://${client.shopify_store_url}/admin/api/2025-01/graphql.json`,
+        {
+          method: 'POST',
+          headers: {
+            'X-Shopify-Access-Token': client.shopify_access_token,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            query: `
+              mutation refundCreate($input: RefundInput!) {
+                refundCreate(input: $input) {
+                  refund { id }
+                  userErrors { field message }
+                }
+              }
+            `,
+            variables: {
+              input: {
+                orderId,
+                refundLineItems,
+                notify: notifyCustomer,
+                note: fullNote,
+                transactions,
+                shipping: shippingAmount ? { amount: shippingAmount, fullRefund: false } : undefined
+              }
+            }
+          })
+        }
+      );
+
+      const result = await mutationResponse.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      if (result.data.refundCreate.userErrors.length > 0) {
+        throw new Error(result.data.refundCreate.userErrors[0].message);
+      }
+
+      res.json({ success: true, refund: result.data.refundCreate.refund });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+/**
+ * Cancel an order
+ * POST /api/shopify/order/cancel
+ */
+router.post('/order/cancel',
+  authenticate,
+  async (req, res) => {
+    try {
+      const { orderId, reason, notifyCustomer, refundOriginalPaymentMethod, staffNote } = req.body;
+      const clientId = req.user.client_id;
+
+      const { data: client } = await supabase
+        .from('clients')
+        .select('shopify_store_url, shopify_access_token')
+        .eq('id', clientId)
+        .single();
+
+      const response = await fetch(
+        `https://${client.shopify_store_url}/admin/api/2025-01/graphql.json`,
+        {
+          method: 'POST',
+          headers: {
+            'X-Shopify-Access-Token': client.shopify_access_token,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            query: `
+              mutation orderCancel($id: ID!, $reason: OrderCancelReason!, $notify: Boolean, $refund: OrderCancelRefundMethodInput, $note: String) {
+                orderCancel(orderId: $id, reason: $reason, notifyCustomer: $notify, refundMethod: $refund, restock: true, staffNote: $note) {
+                  orderCancelUserErrors { code message }
+                }
+              }
+            `,
+            variables: {
+              id: orderId,
+              reason,
+              notify: notifyCustomer,
+              refund: refundOriginalPaymentMethod ? { originalPaymentMethodsRefund: true } : undefined,
+              note: staffNote
+            }
+          })
+        }
+      );
+
+      const json = await response.json();
+      if (json.errors) throw new Error(json.errors[0].message);
+      if (json.data.orderCancel.orderCancelUserErrors.length > 0) {
+        throw new Error(json.data.orderCancel.orderCancelUserErrors[0].message);
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
     }
   }
 );

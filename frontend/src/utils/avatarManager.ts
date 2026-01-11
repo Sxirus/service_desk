@@ -33,8 +33,8 @@ export function isAvatarPath(value: string | null | undefined): boolean {
     return false;
   }
   
-  // Check if it matches the expected path pattern: {client_id}/{employee_id}/avatar.webp
-  const pathPattern = /^\d+\/\d+\/avatar\.webp$/;
+  // Check if it matches the expected path pattern: {client_id}/{employee_id}/{filename}
+  const pathPattern = /^\d+\/\d+\/.+$/;
   return pathPattern.test(value);
 }
 

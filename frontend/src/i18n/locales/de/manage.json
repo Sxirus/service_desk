@@ -529,6 +529,76 @@
     "testResultsTitle": "Testergebnisse der Verbindung",
     "products": "Produkte",
     "orders": "Bestellungen",
+    "ordersTitle": "Shopify Bestellungen",
+    "loadingOrders": "Lade Bestellungen...",
+    "errorLoadingOrders": "Fehler beim Laden der Bestellungen",
+    "noOrdersFoundTitle": "Keine Bestellungen gefunden",
+    "noOrdersFound": "Keine Bestellungen gefunden",
+    "refund": "Rückerstatten",
+    "cancel": "Stornieren",
+    "viewInShopify": "In Shopify anzeigen",
+    "cancelled": "Storniert",
+    "fulfillmentStatus": "Versandstatus",
+    "allRefunded": "Alle Artikel bereits erstattet",
+    "refundHistory": "Erstattungsverlauf",
+    "items": "Artikel",
+    "total": "Gesamt",
+    "available": "{{count}} verfügbar",
+    "discounts": "Rabatte",
+    "paymentMethod": "Zahlungsmethode",
+    "paymentGateways": {
+      "manual": "Manuell",
+      "paypal": "PayPal",
+      "stripe": "Stripe",
+      "shopify_payments": "Shopify Payments",
+      "gift_card": "Geschenkgutschein",
+      "bogus": "Test-Anbieter"
+    },
+    "status": {
+      "paid": "Bezahlt",
+      "refunded": "Erstattet",
+      "partially_refunded": "Teilweise erstattet",
+      "voided": "Ungültig",
+      "pending": "Ausstehend",
+      "authorized": "Autorisiert",
+      "fulfilled": "Erfüllt",
+      "unfulfilled": "Nicht erfüllt"
+    },
+    "refundDialog": {
+      "title": "Bestellung #{{number}} rückerstatten",
+      "description": "Wählen Sie Artikel und Mengen für die Rückerstattung aus.",
+      "refundableQuantity": "{{refundable}} von {{quantity}} erstattbar",
+      "shippingRefund": "Versanderstattung",
+      "customAmount": "Benutzerdefinierter Betrag",
+      "noteLabel": "Grund / Notiz",
+      "notePlaceholder": "Grund für die Erstattung?",
+      "internalNote": "Interne Notiz",
+      "notifyCustomer": "Kunden per E-Mail benachrichtigen",
+      "subtotal": "Zwischensumme",
+      "tax": "Steuern",
+      "shipping": "Versand",
+      "total": "Gesamte Rückerstattung",
+      "netTotal": "Nettosumme",
+      "confirm": "Rückerstattung bestätigen"
+    },
+    "cancelDialog": {
+      "title": "Bestellung #{{number}} stornieren",
+      "description": "Diese Aktion kann nicht rückgängig gemacht werden.",
+      "reasonLabel": "Grund für Stornierung",
+      "reasons": {
+        "customer": "Vom Kunden angefragt",
+        "inventory": "Artikel nicht vorrätig",
+        "fraud": "Betrugsverdacht",
+        "declined": "Zahlung abgelehnt",
+        "other": "Andere"
+      },
+      "internalNote": "Interne Notiz",
+      "refundOriginal": "Betrag automatisch rückerstatten",
+      "notifyCustomer": "Kunden per E-Mail benachrichtigen",
+      "confirm": "Bestellung stornieren"
+    },
+    "refundSuccess": "Rückerstattung erfolgreich erstellt",
+    "cancelSuccess": "Bestellung erfolgreich storniert",
     "howItWorksTitle": "So funktioniert es",
     "howItWorks": {
       "bullet1": "Klicken Sie auf \"Shopify-Shop verbinden\", um den OAuth-Flow zu starten",
@@ -556,7 +626,18 @@
     "disconnectSuccess": "Shopify-Shop getrennt",
     "disconnectSuccessDescription": "Ihr Shop wurde erfolgreich getrennt.",
     "disconnectFailed": "Trennen fehlgeschlagen",
-    "disconnectFailedDescription": "Beim Trennen des Shops ist ein Fehler aufgetreten."
+    "disconnectFailedDescription": "Beim Trennen des Shops ist ein Fehler aufgetreten.",
+    "connection": "Verbindung",
+    "tracking": "Sendungsverfolgung",
+    "shipments": "Lieferungen",
+    "noTrackingInfo": "Keine Sendungsinformationen"
+  },
+  "tracking": {
+    "trackShipment": "Sendung verfolgen",
+    "selectProvider": "Wählen Sie einen Dienstleister für die Sendungsnummer",
+    "noProviders": "Keine Tracking-Dienstleister konfiguriert.",
+    "shortcutHint": "Nutzen Sie die Tasten 1-9 für die Schnellauswahl",
+    "logoDisclaimer": "Alle Logos und Marken sind Eigentum ihrer jeweiligen Inhaber."
   },
   "table": {
     "openMenu": "Menü öffnen",
@@ -616,7 +697,22 @@
       "notifications": {
         "title": "Benachrichtigungseinstellungen",
         "description": "Verwalten Sie, wie Sie benachrichtigt werden möchten"
-      }
+      },
+      "tracking": {
+        "title": "Sendungsverfolgung",
+        "description": "Konfigurieren Sie, welche Versanddienstleister bei der Anzeige von Bestelllieferungen verfügbar sind.",
+        "loadError": "Laden der Tracking-Einstellungen fehlgeschlagen",
+        "standardProviders": "Standard-Dienstleister",
+        "customProviders": "Benutzerdefinierte Dienstleister",
+        "providerName": "Dienstleister-Name",
+        "urlTemplate": "Tracking-URL-Vorlage",
+        "logoUrl": "Logo-URL (Optional)",
+        "urlHelp": "Muss den Platzhalter {TRACKING_NUMBER} enthalten",
+        "addProvider": "Dienstleister hinzufügen",
+        "invalidUrl": "URL muss den Platzhalter {TRACKING_NUMBER} enthalten"
+      },
+      "saved": "Einstellungen erfolgreich gespeichert",
+      "saveError": "Fehler beim Speichern der Einstellungen"
     },
     "macro": {
       "pageTitle": "Makro-Editor",

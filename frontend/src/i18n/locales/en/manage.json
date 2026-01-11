@@ -529,6 +529,76 @@
     "testResultsTitle": "Connection Test Results",
     "products": "Products",
     "orders": "Orders",
+    "ordersTitle": "Shopify Orders",
+    "loadingOrders": "Loading orders...",
+    "errorLoadingOrders": "Failed to load orders",
+    "noOrdersFoundTitle": "No Orders Found",
+    "noOrdersFound": "No orders found",
+    "refund": "Refund",
+    "cancel": "Cancel",
+    "viewInShopify": "View in Shopify",
+    "cancelled": "Cancelled",
+    "fulfillmentStatus": "Fulfillment Status",
+    "allRefunded": "All items already refunded",
+    "refundHistory": "Refund History",
+    "items": "Items",
+    "total": "Total",
+    "available": "{{count}} available",
+    "discounts": "Discounts",
+    "paymentMethod": "Payment Method",
+    "paymentGateways": {
+      "manual": "Manual",
+      "paypal": "PayPal",
+      "stripe": "Stripe",
+      "shopify_payments": "Shopify Payments",
+      "gift_card": "Gift Card",
+      "bogus": "Test Provider"
+    },
+    "status": {
+      "paid": "Paid",
+      "refunded": "Refunded",
+      "partially_refunded": "Partially Refunded",
+      "voided": "Voided",
+      "pending": "Pending",
+      "authorized": "Authorized",
+      "fulfilled": "Fulfilled",
+      "unfulfilled": "Unfulfilled"
+    },
+    "refundDialog": {
+      "title": "Refund Order #{{number}}",
+      "description": "Select items and quantities to refund.",
+      "refundableQuantity": "{{refundable}} of {{quantity}} refundable",
+      "shippingRefund": "Shipping Refund",
+      "customAmount": "Custom Amount",
+      "noteLabel": "Reason / Note",
+      "notePlaceholder": "Why are you refunding?",
+      "internalNote": "Internal Note",
+      "notifyCustomer": "Notify customer via email",
+      "subtotal": "Subtotal",
+      "tax": "Tax",
+      "shipping": "Shipping",
+      "total": "Total Refund",
+      "netTotal": "Net Total",
+      "confirm": "Confirm Refund"
+    },
+    "cancelDialog": {
+      "title": "Cancel Order #{{number}}",
+      "description": "This action cannot be undone.",
+      "reasonLabel": "Reason for cancellation",
+      "reasons": {
+        "customer": "Requested by customer",
+        "inventory": "Items out of stock",
+        "fraud": "Suspected fraud",
+        "declined": "Payment declined",
+        "other": "Other"
+      },
+      "internalNote": "Internal Note",
+      "refundOriginal": "Refund to original payment method",
+      "notifyCustomer": "Notify customer via email",
+      "confirm": "Cancel Order"
+    },
+    "refundSuccess": "Refund created successfully",
+    "cancelSuccess": "Order cancelled successfully",
     "howItWorksTitle": "How it works",
     "howItWorks": {
       "bullet1": "Click \"Connect Shopify Store\" to start the OAuth flow",
@@ -556,7 +626,18 @@
     "disconnectSuccess": "Shopify store disconnected",
     "disconnectSuccessDescription": "Your store has been disconnected successfully.",
     "disconnectFailed": "Failed to disconnect",
-    "disconnectFailedDescription": "An error occurred while disconnecting."
+    "disconnectFailedDescription": "An error occurred while disconnecting.",
+    "connection": "Connection",
+    "tracking": "Tracking",
+    "shipments": "Shipments",
+    "noTrackingInfo": "No tracking info"
+  },
+  "tracking": {
+    "trackShipment": "Track Shipment",
+    "selectProvider": "Select a provider to track number",
+    "noProviders": "No tracking providers configured.",
+    "shortcutHint": "Use keys 1-9 to quickly select a provider",
+    "logoDisclaimer": "All logos and trademarks are property of their respective owners."
   },
   "table": {
     "openMenu": "Open menu",
@@ -616,7 +697,22 @@
       "notifications": {
         "title": "Notification Preferences",
         "description": "Manage how you want to be notified"
-      }
+      },
+      "tracking": {
+        "title": "Shipment Tracking",
+        "description": "Configure which tracking providers are available when viewing order shipments.",
+        "loadError": "Failed to load tracking settings",
+        "standardProviders": "Standard Providers",
+        "customProviders": "Custom Providers",
+        "providerName": "Provider Name",
+        "urlTemplate": "Tracking URL Template",
+        "logoUrl": "Logo URL (Optional)",
+        "urlHelp": "Must include {TRACKING_NUMBER}",
+        "addProvider": "Add Custom Provider",
+        "invalidUrl": "URL must contain {TRACKING_NUMBER} placeholder"
+      },
+      "saved": "Settings saved successfully",
+      "saveError": "Failed to save settings"
     },
     "macro": {
       "pageTitle": "Macro Editor",
