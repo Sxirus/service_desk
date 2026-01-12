@@ -290,5 +290,22 @@ export default function StripePaymentForm({ priceId, quantity, onSuccess, onBack
         <Button variant="outline" onClick={onBack}>
           <ChevronLeft className="mr-2 h-4 w-4" />
           {t('auth:wizard.payment.goBack')}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <CheckoutProvider
+      stripe={stripePromise}
+      options={{ clientSecret }}
+    >
+      <CheckoutForm
+        quantity={quantity}
+        sessionId={sessionId as string}
+        onSuccess={onSuccess}
+        onBack={onBack}
+      />
+    </CheckoutProvider>
   );
 }

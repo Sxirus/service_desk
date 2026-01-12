@@ -119,8 +119,6 @@ const EmailAccountsPanel: React.FC<Props> = ({ clientId, primaryEmailId: initial
         try {
             const [accRes, provRes] = await Promise.all([
                 apiClient.get('/email-accounts'),
-                // We need to use the existing action or an API endpoint for providers
-                // For now, let's assume we have an endpoint or fetch it manually
                 fetchProviders()
             ]);
 
@@ -135,14 +133,6 @@ const EmailAccountsPanel: React.FC<Props> = ({ clientId, primaryEmailId: initial
 
     const fetchProviders = async () => {
         try {
-            // Reusing the logic from RegisterWizard via a custom API call if possible, 
-            // or just a direct supabase fetch if we want to bypass the action.
-            // Since we are in a React component, apiClient is preferred.
-            // Let's assume we add an endpoint for this too.
-            // For now, I'll fetch them from the backend if I added the route, 
-            // but I didn't. I'll use the existing supabase logic in a temporary way 
-            // or just assume they are available.
-            // Actually, I'll add a route for providers in the backend.
             const res = await apiClient.get('/email-accounts/providers');
             if (res.success) setProviders(res.data);
         } catch (e) {
@@ -173,7 +163,7 @@ const EmailAccountsPanel: React.FC<Props> = ({ clientId, primaryEmailId: initial
         setCurrentAccount(account);
         setFormData({
             email_address: account.email_address ?? '',
-            password: '', // Don't show password
+            password: '', 
             provider_id: account.provider_id?.toString() ?? '',
             imap: account.imap || account["email-provider"]?.imap || '',
             imap_port: account.imap_port || account["email-provider"]?.imap_port || 993,
@@ -206,7 +196,7 @@ const EmailAccountsPanel: React.FC<Props> = ({ clientId, primaryEmailId: initial
         try {
             const res = await apiClient.post('/emails/test-mailbox', {
                 email_address: formData.email_address,
-                password: formData.password || 'KEEP_EXISTING', // Backend needs to handle this if editing
+                password: formData.password || 'KEEP_EXISTING',
                 imap: formData.imap,
                 imap_port: formData.imap_port,
                 smtp: formData.smtp,
@@ -373,8 +363,8 @@ const EmailAccountsPanel: React.FC<Props> = ({ clientId, primaryEmailId: initial
                                             {account.last_error && (
                                                 <TooltipProvider>
                                                     <Tooltip>
-                                                        <TooltipTrigger>
-                                                            <AlertCircle className="h-4 w-4 text-red-500" />
+                                                        <TooltipTrigger asChild>
+                                                            <AlertCircle className="h-4 w-4 text-red-500 cursor-help" />
                                                         </TooltipTrigger>
                                                         <TooltipContent>
                                                             <p className="max-w-xs text-xs">{account.last_error}</p>
@@ -445,7 +435,7 @@ const EmailAccountsPanel: React.FC<Props> = ({ clientId, primaryEmailId: initial
                                     <Input 
                                         type="email" 
                                         required 
-                                        value={formData.email_address || ''} 
+                                        value={formData.email_address ?? ''} 
                                         onChange={e => setFormData({...formData, email_address: e.target.value})} 
                                     />
                                 </div>
@@ -455,9 +445,9 @@ const EmailAccountsPanel: React.FC<Props> = ({ clientId, primaryEmailId: initial
                                 <Label>{t('inboxes.password')}</Label>
                                 <Input 
                                     type="password" 
-                                    placeholder={currentAccount ? `•••••••• (${t('emailAccounts.leaveBlankHint')})` : "••••••••"}
+                                    placeholder={currentAccount ? `•••••••• (${t('manage:emailAccounts.leaveBlankHint')})` : "••••••••"}
                                     required={!currentAccount}
-                                    value={formData.password || ''} 
+                                    value={formData.password ?? ''} 
                                     onChange={e => setFormData({...formData, password: e.target.value})} 
                                 />
                             </div>
@@ -465,22 +455,22 @@ const EmailAccountsPanel: React.FC<Props> = ({ clientId, primaryEmailId: initial
                             <div className="grid grid-cols-2 gap-4 border-t pt-4 mt-2">
                                 <div className="space-y-2">
                                     <Label>{t('emailAccounts.imapHost')}</Label>
-                                    <Input value={formData.imap || ''} onChange={e => setFormData({...formData, imap: e.target.value})} required />
+                                    <Input value={formData.imap ?? ''} onChange={e => setFormData({...formData, imap: e.target.value})} required />
                                 </div>
                                 <div className="space-y-2">
                                     <Label>{t('emailAccounts.imapPort')}</Label>
-                                    <Input type="number" value={formData.imap_port || ''} onChange={e => setFormData({...formData, imap_port: parseInt(e.target.value) || 0})} required />
+                                    <Input type="number" value={formData.imap_port ?? ''} onChange={e => setFormData({...formData, imap_port: parseInt(e.target.value) || 0})} required />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label>{t('emailAccounts.smtpHost')}</Label>
-                                    <Input value={formData.smtp || ''} onChange={e => setFormData({...formData, smtp: e.target.value})} required />
+                                    <Input value={formData.smtp ?? ''} onChange={e => setFormData({...formData, smtp: e.target.value})} required />
                                 </div>
                                 <div className="space-y-2">
                                     <Label>{t('emailAccounts.smtpPort')}</Label>
-                                    <Input type="number" value={formData.smtp_port || ''} onChange={e => setFormData({...formData, smtp_port: parseInt(e.target.value) || 0})} required />
+                                    <Input type="number" value={formData.smtp_port ?? ''} onChange={e => setFormData({...formData, smtp_port: parseInt(e.target.value) || 0})} required />
                                 </div>
                             </div>
                         </div>
