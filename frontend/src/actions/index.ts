@@ -2,6 +2,7 @@ import { defineAction, type ActionAPIContext } from "astro:actions";
 import { z } from "astro:schema";
 import { createClient as createSSR } from "../lib/supabase.ts";
 import { createClient as createAdmin } from "@supabase/supabase-js";
+import { encrypt } from "../utils/encryption";
 
 /* ----------------------- SIGN IN (Password) ----------------------- */
 
@@ -1673,44 +1674,40 @@ const registerCreateSupportMailbox = async (
   context: ActionAPIContext
 ) => {
   const ssr = createSSR({ request: context.request, cookies: context.cookies });
-  const { data: { user } } = await ssr.auth.getUser();
-  if (!user) return { success: false, message: "Unauthorized" };
-
-  // Ermittle employee & client_id des aktuellen Users
-  const admin = createAdmin(import.meta.env.SUPABASE_URL!, import.meta.env.SUPABASE_KEY!, {
-    auth: { persistSession: false },
-  });
-
-  const { data: employee, error: empErr } = await admin
-    .from("employees")
-    .select("id, client_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (empErr || !employee?.client_id) {
-    return { success: false, message: "No employee/client context" };
+  const { data: { session } } = await ssr.auth.getSession();
+  
+  if (!session?.access_token) {
+    return { success: false, message: "Unauthorized" };
   }
 
-  const payload = {
-    client_id: employee.client_id,
-    provider_id: input.provider_id,
-    email_address: input.email_address,
-    password: input.password,
-    imap: input.imap,
-    imap_port: input.imap_port,
-    smtp: input.smtp,
-    smtp_port: input.smtp_port,
-    created_by: user.id,
-  };
+  try {
+    const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
+    const response = await fetch(`${apiUrl}/email-accounts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(input),
+    });
 
-  const { data, error } = await admin
-    .from("client-emails")
-    .insert(payload)
-    .select("id")
-    .single();
+    const result = await response.json();
 
-  if (error || !data) return { success: false, message: error?.message || "Insert failed" };
-  return { success: true, client_email_id: data.id };
+    if (!response.ok || !result.success) {
+      return { 
+        success: false, 
+        message: result.error || result.message || "Failed to create mailbox" 
+      };
+    }
+
+    return { 
+      success: true, 
+      client_email_id: result.data.id 
+    };
+  } catch (e: any) {
+    console.error("[actions.registerCreateSupportMailbox] Error:", e);
+    return { success: false, message: e.message };
+  }
 };
 
 /* ======================================================

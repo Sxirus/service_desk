@@ -294,7 +294,14 @@
     "groupName": "Group Name",
     "saving": "Saving...",
     "back": "Back",
-    "variablesLabel": "Variables"
+    "variablesLabel": "Variables",
+    "search": {
+      "placeholder": "Search macros...",
+      "allRoot": "All (Root)",
+      "back": "Back",
+      "noResults": "No results found",
+      "helpText": "Type to search. Without input: browse groups & macros. ↑/↓ to navigate, Enter to select."
+    }
   },
   "settings": {
     "title": "Settings",
@@ -393,6 +400,7 @@
     "invalidBody": "Invalid body",
     "changesSaved": "Changes saved",
     "emailSignatureUpdatedSuccessfully": "Email signature has been updated successfully.",
+    "emailSignatureUpdatedSanitized": "Email signature has been updated (some unsafe content was removed).",
     "failedToSave": "Failed to save",
     "saveEmailConfiguration": "Save Email Configuration",
     "saveSignature": "Save Signature",
@@ -647,6 +655,44 @@
     "disabled": "Disabled",
     "cannotLogin": "This user cannot log in",
     "noResults": "No results."
+  },
+  "emailAccounts": {
+    "title": "Email Accounts",
+    "description": "Manage your IMAP and SMTP configurations for receiving and sending emails.",
+    "addAccount": "Add Email Account",
+    "editAccount": "Edit Email Account",
+    "deleteAccount": "Delete Email Account",
+    "accountDetails": "Account Details",
+    "provider": "Provider",
+    "status": "Status",
+    "encryption": "Encryption",
+    "encryptionTooltip": "Secure protocols (SSL/TLS) are used for all traffic. Ports 993, 465, and 587 indicate encrypted connections.",
+    "dataSafetyInfo": "Data Security: Your credentials are saved encrypted using industry-standard AES-256-GCM.",
+    "lastSync": "Last Polled",
+    "never": "Never",
+    "active": "Active",
+    "inactive": "Inactive",
+    "syncError": "Sync Error",
+    "testConnection": "Test Connection",
+    "saveAccount": "Save Account",
+    "leaveBlankHint": "Leave blank to keep current",
+    "deleteWarning": "Are you sure you want to delete this email account? This will stop all polling and sending from this address.",
+    "primaryBadge": "Primary",
+    "setAsPrimary": "Set as Primary",
+    "testSuccess": "Connection successful!",
+    "testFailed": "Connection failed",
+    "validation": {
+      "emailRequired": "Email address is required",
+      "passwordRequired": "Password is required",
+      "imapRequired": "IMAP host is required",
+      "smtpRequired": "SMTP host is required"
+    },
+    "imapHost": "IMAP Host",
+    "imapPort": "IMAP Port",
+    "smtpHost": "SMTP Host",
+    "smtpPort": "SMTP Port",
+    "selectProvider": "Select provider...",
+    "custom": "Custom"
   },
   "pages": {
     "users": {

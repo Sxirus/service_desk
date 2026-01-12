@@ -37,11 +37,13 @@ const clientMsgsJson = JSON.stringify({
   invalidSignature: t('settings.invalidSignature'),
   changesSaved: t('settings.changesSaved'),
   emailSignatureUpdatedSuccessfully: t('settings.emailSignatureUpdatedSuccessfully'),
+  emailSignatureUpdatedSanitized: t('settings.emailSignatureUpdatedSanitized'),
   saveSignature: t('settings.saveSignature'),
   invalidSubject: t('settings.invalidSubject'),
   invalidBody: t('settings.invalidBody'),
   commonSaveChanges: t('common.saveChanges'),
-  autoAssignEmployeeSaved: t('settings.autoAssignEmployeeSaved')
+  autoAssignEmployeeSaved: t('settings.autoAssignEmployeeSaved'),
+  unexpectedError: tCommon.t('errors.generic')
 });
 
 // Components
@@ -96,51 +98,59 @@ console.log("[general-settings] Admin access verified");
 console.log("[general-settings] Fetching settings for client_id:", clientId);
 
 // Fetch all required data
-const [ 
-  {data: clientSettings, error: clientSettingsError},
-  {data: confirmationJSON, error: confirmationFetchError},
-  {data: truefalseSettingsJSON, error: truefalseSettingsFetchError},
-  {data: clientEmails, error: clientEmailsError},
-] = await Promise.all([
-  // Client settings (signature, email mode, primary email)
-  supabase
-    .from('clients')
-    .select('email_signature, email_sending_mode, primary_email_id')
-    .eq("id", clientId)
-    .single(),
-  
-  //confirmation mail 
-  supabase
-    .from('clients')
-    .select('confirm_mail, confirmation_mail_subject')
-    .eq('id', clientId)
-    .single(),
+let clientSettings, confirmationJSON, truefalseSettingsJSON, clientEmails;
+let clientSettingsError, confirmationFetchError, truefalseSettingsFetchError, clientEmailsError;
 
-  //true false settings
-  supabase
-    .from('clients')
-    .select('auto_assign_employee_on_send')
-    .eq('id', clientId)
-    .single(),
+try {
+  [ 
+    {data: clientSettings, error: clientSettingsError},
+    {data: confirmationJSON, error: confirmationFetchError},
+    {data: truefalseSettingsJSON, error: truefalseSettingsFetchError},
+    {data: clientEmails, error: clientEmailsError},
+  ] = await Promise.all([
+    // Client settings (signature, email mode, primary email)
+    supabase
+      .from('clients')
+      .select('email_signature, email_sending_mode, primary_email_id')
+      .eq("id", clientId)
+      .single(),
+    
+    //confirmation mail 
+    supabase
+      .from('clients')
+      .select('confirm_mail, confirmation_mail_subject')
+      .eq('id', clientId)
+      .single(),
 
-  // All available client emails for dropdown - KORRIGIERT
-  supabase
-    .from('client-emails')
-    .select(`
-      id,
-      email_address,
-      active,
-      provider_id,
-      "email-provider" (
-        name,
-        smtp,
-        smtp_port
-      )
-    `)
-    .eq('client_id', clientId)  // WICHTIG: Nur Emails dieses Clients
-    .eq('active', true)
-    .order('email_address')
-])
+    //true false settings
+    supabase
+      .from('clients')
+      .select('auto_assign_employee_on_send')
+      .eq('id', clientId)
+      .single(),
+
+    // All available client emails for dropdown - KORRIGIERT
+    supabase
+      .from('client-emails')
+      .select(`
+        id,
+        email_address,
+        active,
+        provider_id,
+        "email-provider" (
+          name,
+          smtp,
+          smtp_port
+        )
+      `)
+      .eq('client_id', clientId)  // WICHTIG: Nur Emails dieses Clients
+      .eq('active', true)
+      .order('email_address')
+  ]);
+} catch (error) {
+  console.error('[general-settings] Critical error loading initial data:', error);
+  return new Response("Internal Server Error: Failed to load settings", { status: 500 });
+}
 
 //error handling
 
@@ -730,7 +740,7 @@ console.log("[general-settings] Page setup complete, rendering");
           if (sanitizedSignature !== signature) {
             signatureTextarea.value = sanitizedSignature;
             toast.success(msgs.changesSaved, {
-              description: "Email signature has been updated (some unsafe content was removed).",
+              description: msgs.emailSignatureUpdatedSanitized,
             });
           } else {
             toast.success(msgs.changesSaved, {
@@ -742,7 +752,7 @@ console.log("[general-settings] Page setup complete, rendering");
           console.error("[settings-script] Failed to save signature:", error);
           
           toast.error(msgs.failedToSave, {
-            description: error instanceof Error ? error.message : "An unexpected error occurred.",
+            description: error instanceof Error ? error.message : msgs.unexpectedError,
           });
         } finally {
           // Re-enable button

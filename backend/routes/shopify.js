@@ -9,6 +9,7 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('node:crypto');
 const supabase = require('../config/supabase');
+const encryption = require('../utils/encryption');
 const { authenticate } = require('../middleware/auth');
 const { authorizeClient } = require('../middleware/authorization');
 const { 
@@ -176,13 +177,16 @@ router.get('/callback',
 
       console.log('[SHOPIFY_CALLBACK] Access token received');
 
+      // Encrypt the access token before storing
+      const encryptedToken = encryption.encrypt(access_token);
+
       // Store credentials in database
       if (stateData.clientId) {
         const { error } = await supabase
           .from('clients')
           .update({
             shopify_store_url: shop,
-            shopify_access_token: access_token,
+            shopify_access_token: encryptedToken,
             shopify_connected: true,
             shopify_scope: scope,
           })
@@ -234,37 +238,39 @@ router.get('/test',
 
       console.log('[SHOPIFY_TEST] Testing connection for client:', clientId);
 
-      // Fetch client's Shopify credentials
-      const { data: client, error } = await supabase
-        .from('clients')
-        .select('shopify_store_url, shopify_access_token, shopify_connected')
-        .eq('id', clientId)
-        .single();
-
-      if (error || !client) {
-        return res.status(404).json({ 
-          error: 'Not Found',
-          message: 'Client not found' 
-        });
-      }
-
-      if (!client.shopify_connected || !client.shopify_access_token) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'Shopify not connected for this client' 
-        });
-      }
-
-      // Test API connection by fetching shop info via GraphQL
-      const shopifyResponse = await fetch(
-        `https://${client.shopify_store_url}/admin/api/2025-01/graphql.json`,
-        {
-          method: 'POST',
-          headers: {
-            'X-Shopify-Access-Token': client.shopify_access_token,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
+            // Fetch client's Shopify credentials
+            const { data: client, error } = await supabase
+              .from('clients')
+              .select('shopify_store_url, shopify_access_token, shopify_connected')
+              .eq('id', clientId)
+              .single();
+      
+            if (error || !client) {
+              return res.status(404).json({ 
+                error: 'Not Found',
+                message: 'Client not found' 
+              });
+            }
+      
+            if (!client.shopify_connected || !client.shopify_access_token) {
+              return res.status(400).json({ 
+                success: false, 
+                error: 'Shopify not connected for this client' 
+              });
+            }
+      
+            // Decrypt the access token
+            const decryptedToken = encryption.decrypt(client.shopify_access_token);
+      
+            // Test API connection by fetching shop info via GraphQL
+            const shopifyResponse = await fetch(
+              `https://${client.shopify_store_url}/admin/api/2025-01/graphql.json`,
+              {
+                method: 'POST',
+                headers: {
+                  'X-Shopify-Access-Token': decryptedToken,
+                  'Content-Type': 'application/json',
+                },          body: JSON.stringify({
             query: `
               {
                 shop {
@@ -439,13 +445,16 @@ router.get('/customer',
         });
       }
 
+      // Decrypt the access token
+      const decryptedToken = encryption.decrypt(client.shopify_access_token);
+
       // Search customer in Shopify via GraphQL
       const shopifyResponse = await fetch(
         `https://${client.shopify_store_url}/admin/api/2025-01/graphql.json`,
         {
           method: 'POST',
           headers: {
-            'X-Shopify-Access-Token': client.shopify_access_token,
+            'X-Shopify-Access-Token': decryptedToken,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -589,12 +598,15 @@ router.get('/orders',
         return res.json({ orders: [], error: 'Shopify not connected' });
       }
 
+      // Decrypt the access token
+      const decryptedToken = encryption.decrypt(client.shopify_access_token);
+
       const shopifyResponse = await fetch(
         `https://${client.shopify_store_url}/admin/api/2025-01/graphql.json`,
         {
           method: 'POST',
           headers: {
-            'X-Shopify-Access-Token': client.shopify_access_token,
+            'X-Shopify-Access-Token': decryptedToken,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -773,12 +785,15 @@ router.post('/refund/calculate',
         .eq('id', clientId)
         .single();
 
+      // Decrypt the access token
+      const decryptedToken = encryption.decrypt(client.shopify_access_token);
+
       const response = await fetch(
         `https://${client.shopify_store_url}/admin/api/2025-01/graphql.json`,
         {
           method: 'POST',
           headers: {
-            'X-Shopify-Access-Token': client.shopify_access_token,
+            'X-Shopify-Access-Token': decryptedToken,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -836,13 +851,16 @@ router.post('/refund/create',
         .eq('id', clientId)
         .single();
 
+      // Decrypt the access token
+      const decryptedToken = encryption.decrypt(client.shopify_access_token);
+
       // We first calculate to get the currency and suggested transactions
       const calcResponse = await fetch(
         `https://${client.shopify_store_url}/admin/api/2025-01/graphql.json`,
         {
           method: 'POST',
           headers: {
-            'X-Shopify-Access-Token': client.shopify_access_token,
+            'X-Shopify-Access-Token': decryptedToken,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -915,7 +933,7 @@ router.post('/refund/create',
         {
           method: 'POST',
           headers: {
-            'X-Shopify-Access-Token': client.shopify_access_token,
+            'X-Shopify-Access-Token': decryptedToken,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -971,12 +989,15 @@ router.post('/order/cancel',
         .eq('id', clientId)
         .single();
 
+      // Decrypt the access token
+      const decryptedToken = encryption.decrypt(client.shopify_access_token);
+
       const response = await fetch(
         `https://${client.shopify_store_url}/admin/api/2025-01/graphql.json`,
         {
           method: 'POST',
           headers: {
-            'X-Shopify-Access-Token': client.shopify_access_token,
+            'X-Shopify-Access-Token': decryptedToken,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({

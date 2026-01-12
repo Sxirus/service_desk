@@ -1,5 +1,6 @@
 import { ChevronRight, type LucideIcon } from "lucide-react"
 import * as React from "react"
+import { useTranslation } from 'react-i18next'
 
 import {
   Collapsible,
@@ -83,6 +84,7 @@ export function NavMain({
     }[]
   }[]
 }) {
+  const { t } = useTranslation('common');
   const { counts, loading } = useEmailCounts();
 
   // Funktion um den Count für ein Item zu bekommen
@@ -102,7 +104,7 @@ export function NavMain({
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>Platform</SidebarGroupLabel>
+      <SidebarGroupLabel>{t('sidebar.platform')}</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => (
           <Collapsible

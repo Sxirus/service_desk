@@ -659,8 +659,8 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                   {/* Status dropdown - above navigation */}
                   <div className="w-44">
                     <Select value={ticketStatus} onValueChange={handleChangeStatus}>
-                      <SelectTrigger aria-label="Set ticket status">
-                        <SelectValue placeholder="Status" />
+                      <SelectTrigger aria-label={t('tickets.setStatus')}>
+                        <SelectValue placeholder={t('tickets.statusPlaceholder')} />
                       </SelectTrigger>
                       <SelectContent>
                         {STATUS_OPTIONS.map((option) => (
@@ -677,8 +677,8 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                   {/* After sending behavior dropdown */}
                   <div className="w-44">
                     <Select value={postSendBehavior} onValueChange={handleChangeBehavior}>
-                      <SelectTrigger aria-label="After sending behavior">
-                        <SelectValue placeholder="After send..." />
+                      <SelectTrigger aria-label={t('tickets.afterSendBehavior')}>
+                        <SelectValue placeholder={t('tickets.afterSendPlaceholder')} />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="stay">{t('tickets.afterSend.stayInTicket')}</SelectItem>
@@ -694,7 +694,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                 onClick={handleSend}
                 disabled={isSending}
                 className="shrink-0 cursor-pointer"
-                aria-label="Send reply"
+                aria-label={t('tickets.sendReply')}
               >
               {isSending ? (
                 <>

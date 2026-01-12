@@ -9,6 +9,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require("../config/supabase");
 const nodemailer = require('nodemailer');
+const encryption = require('../utils/encryption');
 const { authenticate } = require('../middleware/auth');
 const { authorizeCustomerAccess } = require('../middleware/authorization');
 const { validateId, sanitizeText } = require('../middleware/validation');
@@ -700,13 +701,16 @@ async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
         const provider = threadEmail['email-provider'];
         console.log('[EMAILS] Using thread-based email:', threadEmail.email_address);
         
+        // Decrypt the password
+        const decryptedPassword = encryption.decrypt(threadEmail.password);
+
         return {
           host: provider.smtp,
           port: parseInt(provider.smtp_port),
           secure: parseInt(provider.smtp_port) === 465,
           auth: {
             user: threadEmail.email_address,
-            pass: threadEmail.password
+            pass: decryptedPassword
           },
           provider: 'Thread-Based: ' + threadEmail.email_address
         };
@@ -739,13 +743,16 @@ async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
         const provider = primaryEmail['email-provider'];
         console.log('[EMAILS] Using primary email:', primaryEmail.email_address);
         
+        // Decrypt the password
+        const decryptedPassword = encryption.decrypt(primaryEmail.password);
+
         return {
           host: provider.smtp,
           port: parseInt(provider.smtp_port),
           secure: parseInt(provider.smtp_port) === 465,
           auth: {
             user: primaryEmail.email_address,
-            pass: primaryEmail.password
+            pass: decryptedPassword
           },
           provider: 'Primary: ' + primaryEmail.email_address
         };
@@ -774,13 +781,16 @@ async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
       const provider = fallbackEmail['email-provider'];
       
       if (provider && provider.smtp) {
+        // Decrypt the password
+        const decryptedPassword = encryption.decrypt(fallbackEmail.password);
+
         return {
           host: provider.smtp,
           port: parseInt(provider.smtp_port),
           secure: parseInt(provider.smtp_port) === 465,
           auth: {
             user: fallbackEmail.email_address,
-            pass: fallbackEmail.password
+            pass: decryptedPassword
           },
           provider: 'Fallback: ' + fallbackEmail.email_address
         };

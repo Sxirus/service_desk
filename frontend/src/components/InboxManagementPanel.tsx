@@ -82,6 +82,7 @@ const InboxManagementPanel: React.FC<Props> = ({ groups }) => {
       }
     } catch (error) {
       console.error('Failed to load inboxes:', error);
+      toast.error(t('common.errors.generic') || 'Failed to load inboxes');
     } finally {
       setLoading(false);
     }

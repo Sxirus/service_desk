@@ -3,6 +3,7 @@
 // Manages lifecycle of IMAP polling workers for all client email accounts
 
 const supabase = require('../config/supabase');
+const encryption = require('../utils/encryption');
 const { startImapWorker, stopImapWorker, stopAllWorkers } = require('./imapWorker');
 
 // Track active workers to manage their lifecycle
@@ -46,9 +47,13 @@ async function initializeWorkers() {
         console.log(`Starting time-cutoff worker for ${email_address}`);
         
         try {
+            // Decrypt the password
+            const decryptedPassword = encryption.decrypt(password);
+
             await startImapWorker({
+                id,
                 email: email_address,
-                password,
+                password: decryptedPassword,
                 imapHost: provider.imap,
                 imapPort: provider.imap_port,
                 clientId: client_id

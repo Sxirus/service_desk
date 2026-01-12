@@ -294,7 +294,14 @@
     "groupName": "Gruppenname",
     "saving": "Wird gespeichert...",
     "back": "Zurück",
-    "variablesLabel": "Variablen"
+    "variablesLabel": "Variablen",
+    "search": {
+      "placeholder": "Makros suchen...",
+      "allRoot": "Alle (Root)",
+      "back": "Zurück",
+      "noResults": "Keine Treffer gefunden",
+      "helpText": "Tippen zum Suchen. Ohne Eingabe: Gruppen & Makros durchsuchen. ↑/↓ zum Navigieren, Enter zum Auswählen."
+    }
   },
   "settings": {
     "title": "Einstellungen",
@@ -393,6 +400,7 @@
     "invalidBody": "Ungültiger Text",
     "changesSaved": "Änderungen gespeichert",
     "emailSignatureUpdatedSuccessfully": "E-Mail-Signatur wurde erfolgreich aktualisiert.",
+    "emailSignatureUpdatedSanitized": "Die E-Mail-Signatur wurde aktualisiert (einige unsichere Inhalte wurden entfernt).",
     "failedToSave": "Speichern fehlgeschlagen",
     "saveEmailConfiguration": "E-Mail-Konfiguration speichern",
     "saveSignature": "Signatur speichern",
@@ -647,6 +655,44 @@
     "disabled": "Deaktiviert",
     "cannotLogin": "Dieser Benutzer kann sich nicht anmelden",
     "noResults": "Keine Ergebnisse."
+  },
+  "emailAccounts": {
+    "title": "E-Mail-Konten",
+    "description": "Verwalten Sie Ihre IMAP- und SMTP-Konfigurationen zum Empfangen und Senden von E-Mails.",
+    "addAccount": "E-Mail-Konto hinzufügen",
+    "editAccount": "E-Mail-Konto bearbeiten",
+    "deleteAccount": "E-Mail-Konto löschen",
+    "accountDetails": "Kontodetails",
+    "provider": "Anbieter",
+    "status": "Status",
+    "encryption": "Verschlüsselung",
+    "encryptionTooltip": "Sichere Protokolle (SSL/TLS) werden für den gesamten Datenverkehr verwendet. Die Ports 993, 465 und 587 weisen auf verschlüsselte Verbindungen hin.",
+    "dataSafetyInfo": "Datensicherheit: Ihre Zugangsdaten werden mit dem Industriestandard AES-256-GCM verschlüsselt und gespeichert.",
+    "lastSync": "Zuletzt abgefragt",
+    "never": "Nie",
+    "active": "Aktiv",
+    "inactive": "Inaktiv",
+    "syncError": "Synchronisierungsfehler",
+    "testConnection": "Verbindung testen",
+    "saveAccount": "Konto speichern",
+    "leaveBlankHint": "Leer lassen, um aktuelles zu behalten",
+    "deleteWarning": "Sind Sie sicher, dass Sie dieses E-Mail-Konto löschen möchten? Dies stoppt alle Abfragen und das Senden von dieser Adresse.",
+    "primaryBadge": "Primär",
+    "setAsPrimary": "Als primär festlegen",
+    "testSuccess": "Verbindung erfolgreich!",
+    "testFailed": "Verbindung fehlgeschlagen",
+    "validation": {
+      "emailRequired": "E-Mail-Adresse ist erforderlich",
+      "passwordRequired": "Passwort ist erforderlich",
+      "imapRequired": "IMAP-Host ist erforderlich",
+      "smtpRequired": "SMTP-Host ist erforderlich"
+    },
+    "imapHost": "IMAP-Host",
+    "imapPort": "IMAP-Port",
+    "smtpHost": "SMTP-Host",
+    "smtpPort": "SMTP-Port",
+    "selectProvider": "Anbieter auswählen...",
+    "custom": "Benutzerdefiniert"
   },
   "pages": {
     "users": {

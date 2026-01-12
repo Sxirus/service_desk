@@ -80,8 +80,10 @@ CREATE TABLE public.clients (
   stripe_customer_id character varying,
   subscription_tier text DEFAULT 'free'::text,
   stripe_subscription_id text,
-  tracking_settings jsonb DEFAULT '{"providers": [], "customProviders": []}'::jsonb,
   created_at timestamp with time zone DEFAULT now(),
+  subscription_cancelled_at timestamp with time zone,
+  subscription_ends_at timestamp with time zone,
+  tracking_settings jsonb DEFAULT '{"providers": [], "customProviders": []}'::jsonb,
   CONSTRAINT clients_pkey PRIMARY KEY (id),
   CONSTRAINT clients_primary_email_id_fkey FOREIGN KEY (primary_email_id) REFERENCES public.client-emails(id)
 );
@@ -141,6 +143,7 @@ CREATE TABLE public.employees (
   disabled boolean DEFAULT false,
   avatar_url text,
   created_at timestamp with time zone DEFAULT now(),
+  scheduled_disable_at timestamp with time zone,
   CONSTRAINT employees_pkey PRIMARY KEY (id),
   CONSTRAINT Employee_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.clients(id),
   CONSTRAINT employees_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
@@ -228,7 +231,7 @@ CREATE TABLE public.platform_admins (
 );
 CREATE TABLE public.platform_audit_log (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
-  admin_id uuid NOT NULL,
+  admin_id uuid,
   action text NOT NULL,
   target_type text NOT NULL,
   target_id text,
@@ -238,6 +241,26 @@ CREATE TABLE public.platform_audit_log (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT platform_audit_log_pkey PRIMARY KEY (id),
   CONSTRAINT platform_audit_log_admin_id_fkey FOREIGN KEY (admin_id) REFERENCES public.platform_admins(id)
+);
+CREATE TABLE public.platform_notifications (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  type text NOT NULL,
+  client_id bigint,
+  title text NOT NULL,
+  message text,
+  metadata jsonb,
+  read boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT platform_notifications_pkey PRIMARY KEY (id),
+  CONSTRAINT platform_notifications_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.clients(id)
+);
+CREATE TABLE public.processed_webhook_events (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  event_id text NOT NULL UNIQUE,
+  event_type text NOT NULL,
+  processed_at timestamp with time zone DEFAULT now(),
+  payload jsonb,
+  CONSTRAINT processed_webhook_events_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.registration_sessions (
   reg_nonce text NOT NULL,

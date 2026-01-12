@@ -11,7 +11,8 @@ const { initializeWorkers } = require('./services/workerManager');
 const requiredEnvVars = [
   'SUPABASE_URL',
   'SUPABASE_KEY',
-  'FRONTEND_URL'
+  'FRONTEND_URL',
+  'ENCRYPTION_SECRET'
 ];
 
 const missingEnvVars = requiredEnvVars.filter(v => !process.env[v]);
@@ -70,6 +71,8 @@ app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/groups', require('./routes/groups'));
 
 app.use('/api/inboxes', require('./routes/inboxes'));
+
+app.use('/api/email-accounts', require('./routes/email-accounts'));
 
 app.use('/api/avatars', require('./routes/avatars'));
 

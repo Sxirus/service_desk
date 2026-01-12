@@ -15,13 +15,13 @@ const pollingIntervals = new Map();
  * Start polling-based IMAP worker with time-cutoff strategy
  * @param {Object} config - Email account configuration
  */
-async function startImapWorker({ email, password, imapHost, imapPort, clientId }) {
+async function startImapWorker({ id, email, password, imapHost, imapPort, clientId }) {
     console.log(`[${email}] Starting time-cutoff polling worker (5min interval)`);
     
     const confirmation = await getConfirmation(clientId);
     
     // Execute first poll immediately
-    await pollNewEmailsSinceLast({ email, password, imapHost, imapPort, clientId }, confirmation);
+    await pollNewEmailsSinceLast({ id, email, password, imapHost, imapPort, clientId }, confirmation);
     
     // Clear existing interval if present (prevents memory leak on restart)
     if (pollingIntervals.has(email)) {
@@ -30,10 +30,29 @@ async function startImapWorker({ email, password, imapHost, imapPort, clientId }
     
     // Set up polling interval (5 minutes = 300000 ms)
     const interval = setInterval(async () => {
-        await pollNewEmailsSinceLast({ email, password, imapHost, imapPort, clientId }, confirmation);
+        await pollNewEmailsSinceLast({ id, email, password, imapHost, imapPort, clientId }, confirmation);
     }, 300000);
     
     pollingIntervals.set(email, interval);
+}
+
+/**
+ * Update the status of an email account in the database
+ */
+async function updateAccountStatus(id, errorMsg = null) {
+    try {
+        const updates = {
+            last_sync_at: new Date().toISOString(),
+            last_error: errorMsg
+        };
+
+        await supabase
+            .from('client-emails')
+            .update(updates)
+            .eq('id', id);
+    } catch (error) {
+        console.error(`[ID: ${id}] Failed to update account status:`, error.message);
+    }
 }
 
 /**
@@ -94,30 +113,31 @@ function formatDateForImap(date) {
  * Main polling function - fetches only emails since last processed email
  */
 async function pollNewEmailsSinceLast(config, confirmation) {
-    const { email, password, imapHost, imapPort, clientId } = config;
+    const { id, email, password, imapHost, imapPort, clientId } = config;
     
     console.log(`[${email}] Checking for new emails...`);
     
-    // Get cutoff time - we only want emails newer than this
-    const cutoffTime = await getLastEmailTime(email);
-    const imapDate = formatDateForImap(cutoffTime);
-    
-    console.log(`[${email}] Fetching emails since ${imapDate} (cutoff: ${cutoffTime.toISOString()})`);
-    
-    const imap = new Imap({
-        user: email,
-        password,
-        host: imapHost,
-        port: imapPort,
-        tls: true,
-        authTimeout: 15000,
-        connTimeout: 30000,
-        tlsOptions: {
-            rejectUnauthorized: false,
-        }
-    });
-
+    let imap;
     try {
+        // Get cutoff time - we only want emails newer than this
+        const cutoffTime = await getLastEmailTime(email);
+        const imapDate = formatDateForImap(cutoffTime);
+        
+        console.log(`[${email}] Fetching emails since ${imapDate} (cutoff: ${cutoffTime.toISOString()})`);
+        
+        imap = new Imap({
+            user: email,
+            password,
+            host: imapHost,
+            port: imapPort,
+            tls: true,
+            authTimeout: 15000,
+            connTimeout: 30000,
+            tlsOptions: {
+                rejectUnauthorized: false,
+            }
+        });
+
         await new Promise((resolve, reject) => {
             imap.once('ready', () => {
                 console.log(`[${email}] IMAP connected`);
@@ -145,8 +165,6 @@ async function pollNewEmailsSinceLast(config, confirmation) {
         });
 
         // Search for emails since our cutoff date
-        // Note: IMAP SINCE is inclusive and uses local date without time
-        // We'll do additional time filtering after fetching
         const results = await new Promise((resolve, reject) => {
             imap.search([['SINCE', imapDate]], (err, results) => {
                 if (err) {
@@ -164,12 +182,17 @@ async function pollNewEmailsSinceLast(config, confirmation) {
             console.log(`[${email}] No new emails found since cutoff`);
         }
 
+        // Success - clear error and update sync time
+        await updateAccountStatus(id, null);
+
     } catch (error) {
         console.error(`[${email}] Polling failed:`, error.message);
+        await updateAccountStatus(id, error.message);
     } finally {
-        // Always close connection to avoid resource leaks
-        imap.end();
-        console.log(`[${email}] IMAP connection closed`);
+        if (typeof imap !== 'undefined' && imap.state !== 'disconnected') {
+            imap.end();
+            console.log(`[${email}] IMAP connection closed`);
+        }
     }
 }
 

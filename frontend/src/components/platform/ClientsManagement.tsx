@@ -48,7 +48,7 @@ interface Props {
 }
 
 export default function ClientsManagement({ initialClients }: Props) {
-  const { t } = useTranslation('platform')
+  const { t, i18n } = useTranslation('platform')
   const [clients, setClients] = React.useState<Client[]>(initialClients)
   const [search, setSearch] = React.useState("")
   const [tierFilter, setTierFilter] = React.useState<string>("all")
@@ -66,7 +66,7 @@ export default function ClientsManagement({ initialClients }: Props) {
   }, [clients, search, tierFilter])
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    return new Date(dateString).toLocaleDateString(i18n.language, {
       month: 'short',
       day: 'numeric',
       year: 'numeric'

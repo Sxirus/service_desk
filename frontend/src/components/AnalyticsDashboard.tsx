@@ -19,6 +19,8 @@ import { AnalyticsEmployeeTable } from './AnalyticsEmployeeTable';
 import { apiClient } from '@/utils/api';
 import { formatDate } from '@/i18n/utils';
 
+import { toast } from 'sonner';
+
 interface DailyStats {
   date: string;
   incoming: number;
@@ -93,7 +95,7 @@ export function AnalyticsDashboard({
       setEmployeeDaily(employeeData.daily);
     } catch (error) {
       console.error('[Analytics] Failed to fetch data:', error);
-      alert(t('analytics.noDataForPeriod'));
+      toast.error(t('analytics.noDataForPeriod'));
     } finally {
       setIsLoading(false);
     }

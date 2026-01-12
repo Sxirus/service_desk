@@ -145,10 +145,10 @@ function DisabledTooltipContent() {
   return <>{t('table.cannotLogin')}</>
 }
 
-export const createColumns = (roles: Role[]): ColumnDef<User>[] => [
+export const createColumns = (roles: Role[], t: any): ColumnDef<User>[] => [
   {
     accessorKey: "name",
-    header: "User",
+    header: t('users.name'),
     cell: ({ row }) => {
       const user = row.original;
       return (
@@ -183,7 +183,7 @@ export const createColumns = (roles: Role[]): ColumnDef<User>[] => [
   },
   {
     accessorKey: "role",
-    header: "Role",
+    header: t('users.role'),
     cell: ({ row }) => {
       const role = row.original.role;
       const isAdmin = role.toLowerCase().includes('admin');
@@ -204,7 +204,7 @@ export const createColumns = (roles: Role[]): ColumnDef<User>[] => [
   },
   {
     id: "actions",
-    header: () => <span className="sr-only">Actions</span>,
+    header: () => <span className="sr-only">{t('table.actions')}</span>,
     cell: ({ row }) => {
       const user = row.original;
       return <UserActionsCell user={user} roles={roles} />;

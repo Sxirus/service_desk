@@ -145,6 +145,10 @@ export function AppSidebar({
             url: "/manage/inboxes"
           },
           {
+            title: t('sidebar.emailAccounts'),
+            url: "/manage/emails"
+          },
+          {
             title: t('sidebar.subscription'),
             url: "/manage/subscription"
           }
