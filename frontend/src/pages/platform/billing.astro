@@ -66,8 +66,10 @@ let summary = {
   totalRevenue: 0,
 };
 
+import { getApiUrl } from "../../lib/api-config";
+
 try {
-  const response = await fetch("http://localhost:3000/api/platform/billing", {
+  const response = await fetch(getApiUrl("/api/platform/billing"), {
     headers: {
       "Authorization": `Bearer ${session.access_token}`,
       "Content-Type": "application/json"

@@ -73,9 +73,11 @@ let analytics = {
   recentActivity: [] as any[],
 };
 
+import { getApiUrl } from "../../lib/api-config";
+
 try {
   // Fetch analytics from backend API
-  const analyticsResponse = await fetch("http://localhost:3000/api/platform/analytics", {
+  const analyticsResponse = await fetch(getApiUrl("/api/platform/analytics"), {
     headers: {
       "Authorization": `Bearer ${session.access_token}`,
       "Content-Type": "application/json"
@@ -102,7 +104,7 @@ try {
   }
 
   // Fetch audit log
-  const auditResponse = await fetch("http://localhost:3000/api/platform/audit-log?limit=10", {
+  const auditResponse = await fetch(getApiUrl("/api/platform/audit-log?limit=10"), {
     headers: {
       "Authorization": `Bearer ${session.access_token}`,
       "Content-Type": "application/json"

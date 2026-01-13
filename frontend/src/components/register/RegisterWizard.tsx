@@ -37,6 +37,7 @@ import { Separator } from "@/components/ui/separator";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { getApiUrl } from "@/lib/api-config";
 
 // Stripe payment form
 import StripePaymentForm from "./StripePaymentForm";
@@ -336,7 +337,7 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
               const { data: { session } } = await supabase.auth.getSession();
               
               if (session) {
-                const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
+                const apiUrl = getApiUrl('/api');
                 await fetch(`${apiUrl}/client/complete-subscription`, {
                   method: 'POST',
                   headers: {

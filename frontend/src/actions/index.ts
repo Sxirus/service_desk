@@ -3,6 +3,7 @@ import { z } from "astro:schema";
 import { createClient as createSSR } from "../lib/supabase.ts";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { encrypt } from "../utils/encryption";
+import { getApiUrl } from "../lib/api-config";
 
 /* ----------------------- SIGN IN (Password) ----------------------- */
 
@@ -389,7 +390,7 @@ const createEmployee = async (
       console.log("[actions.createEmployee] Updating subscription quantity to:", newQuantity);
 
       // Call backend to update Stripe subscription
-      const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
+      const apiUrl = getApiUrl('/api');
       const { data: { session: userSession } } = await ssr.auth.getSession();
       
       if (userSession?.access_token) {
@@ -718,7 +719,7 @@ const deleteEmployee = async (
       console.log("[actions.deleteEmployee] Updating subscription quantity to:", newQuantity);
 
       // Call backend to update Stripe subscription
-      const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
+      const apiUrl = getApiUrl('/api');
       const { data: { session: userSession } } = await ssr.auth.getSession();
       
       if (userSession?.access_token) {
@@ -844,7 +845,7 @@ const disableEmployee = async (
         .or("disabled.is.null,disabled.eq.false");
 
       const newQuantity = Math.max(activeCount || 1, 1);
-      const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
+      const apiUrl = getApiUrl('/api');
       const { data: { session: userSession } } = await ssr.auth.getSession();
       
       if (userSession?.access_token) {
@@ -956,7 +957,7 @@ const enableEmployee = async (
         .or("disabled.is.null,disabled.eq.false");
 
       const newQuantity = Math.max(activeCount || 1, 1);
-      const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
+      const apiUrl = getApiUrl('/api');
       const { data: { session: userSession } } = await ssr.auth.getSession();
       
       if (userSession?.access_token) {
@@ -1144,7 +1145,7 @@ const updateCompany = async (
     // 8) Sync changes to Stripe customer profile
     if (currentClient?.stripe_customer_id) {
       try {
-        const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
+        const apiUrl = getApiUrl('/api');
         const { data: { session: userSession } } = await ssr.auth.getSession();
         
         if (userSession?.access_token) {

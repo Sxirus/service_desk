@@ -54,10 +54,12 @@ if (!session) {
   return Astro.redirect("/");
 }
 
+import { getApiUrl } from "../../lib/api-config";
+
 // Fetch clients from backend API (uses service role, bypasses RLS)
 let enrichedClients: any[] = [];
 try {
-  const response = await fetch("http://localhost:3000/api/platform/clients", {
+  const response = await fetch(getApiUrl("/api/platform/clients"), {
     headers: {
       "Authorization": `Bearer ${session.access_token}`,
       "Content-Type": "application/json"

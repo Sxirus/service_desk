@@ -4,6 +4,7 @@ import { createClient } from "../lib/supabase.ts";
 import { checkPlatformAdmin } from "../lib/auth-helpers.ts";
 import { NewEmailPopover } from "@/components/NewEmailPopover";
 import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+import { getApiUrl } from "../lib/api-config";
 
 // Get translations
 const lang = getLanguageFromCookies(Astro.cookies);
@@ -60,7 +61,7 @@ let customersJSON: any[] = [];
 let mails: any[] = [];
 
 try {
-  const result_customers = await fetch(`http://localhost:3000/api/customers/getAssignedCustomers?employee_id=${me.id}`, {
+  const result_customers = await fetch(getApiUrl(`/api/customers/getAssignedCustomers?employee_id=${me.id}`), {
     headers: {
       'Authorization': `Bearer ${session.access_token}`,
       'Content-Type': 'application/json'
@@ -83,7 +84,7 @@ if (customers.length > 0) {
   try {
     const qs = customers.map(id => `ids=${encodeURIComponent(id)}`).join("&");
     
-    const mailresult = await fetch(`http://localhost:3000/api/emails/getMailsbyCustomerIds?${qs}`, {
+    const mailresult = await fetch(getApiUrl(`/api/emails/getMailsbyCustomerIds?${qs}`), {
       headers: {
         'Authorization': `Bearer ${session.access_token}`,
         'Content-Type': 'application/json'

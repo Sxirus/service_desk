@@ -5,6 +5,7 @@ import { createClient } from "../../lib/supabase";
 import { getCompletePageContext } from "../../lib/auth-helpers";
 import { TicketsDataTableWithPresence } from "@/components/datatable/TicketsDataTableWithPresence";
 import { NewEmailPopover } from "@/components/NewEmailPopover";
+import { getApiUrl } from "../../lib/api-config";
 
 // Initialize Supabase client
 const supabase = createClient({
@@ -40,7 +41,7 @@ let error = null;
 
 try {
   const inboxResponse = await fetch(
-    `http://localhost:3000/api/inboxes/getAccessibleInboxes`,
+    getApiUrl(`/api/inboxes/getAccessibleInboxes`),
     {
       headers: {
         Authorization: `Bearer ${session.access_token}`,
@@ -63,7 +64,7 @@ try {
   // Fetch emails for this inbox
   if (inbox) {
     const emailsResponse = await fetch(
-      `http://localhost:3000/api/inboxes/getInboxEmails?inbox_id=${inboxId}`,
+      getApiUrl(`/api/inboxes/getInboxEmails?inbox_id=${inboxId}`),
       {
         headers: {
           Authorization: `Bearer ${session.access_token}`,

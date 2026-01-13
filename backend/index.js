@@ -6,6 +6,7 @@ require('dotenv').config();                   // Load environment variables from
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const { initializeWorkers } = require('./services/workerManager');
+const logger = require('./utils/logger');
 
 // Validate required environment variables at startup
 const requiredEnvVars = [
@@ -17,7 +18,7 @@ const requiredEnvVars = [
 
 const missingEnvVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingEnvVars.length > 0) {
-  console.error('FATAL: Missing required environment variables:', missingEnvVars.join(', '));
+  logger.error('FATAL: Missing required environment variables:', { missing: missingEnvVars });
   process.exit(1);
 }
 
@@ -81,7 +82,7 @@ app.use('/api/platform', require('./routes/platform'));
 // Global error handling middleware
 // This catches any unhandled errors from routes and provides consistent error responses
 app.use((err, req, res, next) => {
-  console.error(err.stack);                   // Log error details to console for debugging
+  logger.error('Unhandled error', { error: err.stack });
   res.status(500).json({ 
     error: 'Something went wrong!',
     // Only show detailed error messages in development for security
@@ -89,16 +90,12 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start the email monitoring service
-// This begins listening for incoming emails to process as support tickets
-
 // Start the HTTP server
 app.listen(PORT, async () => {
-    console.log(`Server running on port ${PORT}`);
+    logger.info(`Server running on port ${PORT}`);
     try {
         await initializeWorkers();
     } catch (err) {
-        console.error('Failed to initialize workers:', err);
+        logger.error('Failed to initialize workers:', { error: err.message });
     }
-
 });

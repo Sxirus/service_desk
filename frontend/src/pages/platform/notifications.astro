@@ -64,11 +64,13 @@ if (!session) {
   return Astro.redirect("/");
 }
 
+import { getApiUrl } from "../../lib/api-config";
+
 // Fetch initial notifications from backend API
 let notifications: any[] = [];
 let unreadCount = 0;
 try {
-  const response = await fetch("http://localhost:3000/api/platform/notifications?limit=50", {
+  const response = await fetch(getApiUrl("/api/platform/notifications?limit=50"), {
     headers: {
       "Authorization": `Bearer ${session.access_token}`,
       "Content-Type": "application/json"

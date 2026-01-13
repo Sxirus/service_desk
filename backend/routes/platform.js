@@ -1,1106 +1,238 @@
 /**
- * Platform Administration API Routes
- * Provides endpoints for platform-level management across all clients
- * 
- * All routes require platform admin authentication.
- * These routes bypass normal client-scoping to allow cross-client access.
+ * Platform Admin Routes - SECURED
+ * Routes for platform administration (super-admin)
+ * Refactored to use platformService
  */
 
 const express = require('express');
 const router = express.Router();
-const supabase = require('../config/supabase');
+const supabase = require("../config/supabase");
+const { authenticate } = require('../middleware/auth');
 const { authenticatePlatformAdmin, logPlatformAction } = require('../middleware/platformAuth');
-const stripeService = require('../services/stripeService');
+const { validateId } = require('../middleware/validation');
+const platformService = require('../services/platformService');
+const logger = require('../utils/logger');
 
-// Apply platform admin authentication to all routes
+// Middleware to ensure user is platform admin
 router.use(authenticatePlatformAdmin);
 
-// ============================================================================
-// CLIENT MANAGEMENT
-// ============================================================================
-
 /**
- * GET /api/platform/clients
- * List all clients with summary statistics
- */
-router.get('/clients', async (req, res) => {
-  try {
-    const { search, tier, sort = 'created_at', order = 'desc', limit = 50, offset = 0 } = req.query;
-
-    // Build query
-    let query = supabase
-      .from('clients')
-      .select(`
-        id,
-        name,
-        website,
-        subscription_tier,
-        stripe_customer_id,
-        stripe_subscription_id,
-        shopify_connected,
-        created_at
-      `, { count: 'exact' });
-
-    // Apply filters
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,website.ilike.%${search}%`);
-    }
-    if (tier) {
-      query = query.eq('subscription_tier', tier);
-    }
-
-    // Apply sorting and pagination
-    query = query.order(sort, { ascending: order === 'asc' })
-      .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
-
-    const { data: clients, error, count } = await query;
-
-    if (error) {
-      console.error('[PLATFORM] Failed to fetch clients:', error);
-      return res.status(500).json({ error: 'Failed to fetch clients' });
-    }
-
-    // Get employee counts for each client
-    const clientIds = clients.map(c => c.id);
-    const { data: employeeCounts } = await supabase
-      .from('employees')
-      .select('client_id')
-      .in('client_id', clientIds);
-
-    // Count employees per client
-    const employeeCountMap = {};
-    employeeCounts?.forEach(e => {
-      employeeCountMap[e.client_id] = (employeeCountMap[e.client_id] || 0) + 1;
-    });
-
-    // Enrich clients with counts
-    const enrichedClients = clients.map(client => ({
-      ...client,
-      employee_count: employeeCountMap[client.id] || 0
-    }));
-
-    res.json({
-      success: true,
-      data: enrichedClients,
-      pagination: {
-        total: count,
-        limit: parseInt(limit),
-        offset: parseInt(offset)
-      }
-    });
-  } catch (error) {
-    console.error('[PLATFORM] Error fetching clients:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-/**
- * GET /api/platform/clients/:id
- * Get detailed information about a specific client
- */
-router.get('/clients/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const clientId = parseInt(id, 10);
-    
-    if (isNaN(clientId)) {
-      return res.status(400).json({ error: 'Invalid client ID' });
-    }
-
-    // Fetch client details
-    const { data: client, error: clientError } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('id', clientId)
-      .single();
-
-    if (clientError || !client) {
-      return res.status(404).json({ error: 'Client not found' });
-    }
-
-    // First get customer IDs for this client (needed for email counts)
-    const { data: clientCustomers } = await supabase
-      .from('customers')
-      .select('id')
-      .eq('client_id', clientId);
-    
-    const customerIds = clientCustomers?.map(c => c.id) || [];
-
-    // Fetch related data in parallel
-    const [
-      { data: employees, error: empError },
-      { count: customerCount }
-    ] = await Promise.all([
-      supabase
-        .from('employees')
-        .select('id, name, avatar_url, created_at, user_id, disabled')
-        .eq('client_id', clientId)
-        .order('name'),
-      supabase
-        .from('customers')
-        .select('id', { count: 'exact', head: true })
-        .eq('client_id', clientId)
-    ]);
-    
-    if (empError) {
-      console.error('[PLATFORM] Error fetching employees:', empError);
-    }
-
-    // Get emails sent and received counts in parallel for better performance
-    let emailsSentCount = 0;
-    let emailsReceivedCount = 0;
-    
-    if (customerIds.length > 0) {
-      const [sentResult, receivedResult] = await Promise.all([
-        supabase
-          .from('sent-mail')
-          .select('id', { count: 'exact', head: true })
-          .in('customer_id', customerIds),
-        supabase
-          .from('incoming-mails')
-          .select('id', { count: 'exact', head: true })
-          .in('customer_id', customerIds)
-      ]);
-      
-      emailsSentCount = sentResult.count || 0;
-      emailsReceivedCount = receivedResult.count || 0;
-    }
-
-    // Get employee emails via RPC (since emails are in auth.users)
-    let employeesWithEmails = employees || [];
-    console.log('[PLATFORM] Employees found for client', clientId, ':', employees?.length || 0);
-    
-    if (employees && employees.length > 0) {
-      const empIds = employees.map(e => e.id);
-      console.log('[PLATFORM] Fetching emails for employee IDs:', empIds);
-      
-      const { data: emailRows, error: emailError } = await supabase.rpc('get_employee_emails', { emp_ids: empIds });
-      
-      if (emailError) {
-        console.error('[PLATFORM] Failed to get employee emails:', emailError);
-        // Continue with employees without emails
-      } else if (emailRows) {
-        console.log('[PLATFORM] Email rows returned:', emailRows.length);
-        const emailMap = new Map(emailRows.map(row => [row.employee_id, row.email]));
-        employeesWithEmails = employees.map(emp => ({
-          ...emp,
-          email: emailMap.get(emp.id) || null
-        }));
-      }
-    }
-
-    // Get revenue from Stripe
-    const employeeCount = employees?.length || 0;
-    let monthlyRevenue = 0;
-    let totalRevenue = 0;
-    
-    // Get MRR from active subscription
-    if (client.stripe_subscription_id) {
-      const mrrResult = await stripeService.getSubscriptionMRR(client.stripe_subscription_id);
-      if (mrrResult.success) {
-        monthlyRevenue = mrrResult.mrr / 100; // Convert from cents to EUR
-      }
-    }
-    
-    // Get total revenue from Stripe invoices
-    if (client.stripe_customer_id) {
-      const revenueResult = await stripeService.getCustomerTotalRevenue(client.stripe_customer_id);
-      if (revenueResult.success) {
-        totalRevenue = revenueResult.totalRevenue / 100; // Convert from cents to EUR
-      }
-    }
-
-    res.json({
-      success: true,
-      data: {
-        ...client,
-        employees: employeesWithEmails,
-        stats: {
-          employee_count: employeeCount,
-          customer_count: customerCount || 0,
-          emails_sent: emailsSentCount || 0,
-          emails_received: emailsReceivedCount,
-          monthly_revenue: monthlyRevenue,
-          total_revenue: totalRevenue
-        }
-      }
-    });
-  } catch (error) {
-    console.error('[PLATFORM] Error fetching client details:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-/**
- * PATCH /api/platform/clients/:id
- * Update client settings
- */
-router.patch('/clients/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const clientId = parseInt(id, 10);
-    
-    if (isNaN(clientId)) {
-      return res.status(400).json({ error: 'Invalid client ID' });
-    }
-    
-    const updates = req.body;
-
-    // Whitelist allowed fields
-    const allowedFields = [
-      'name',
-      'website',
-      'subscription_tier',
-      'address_street',
-      'address_city',
-      'address_zip',
-      'address_country',
-      'vat'
-    ];
-
-    const filteredUpdates = {};
-    for (const key of allowedFields) {
-      if (updates[key] !== undefined) {
-        filteredUpdates[key] = updates[key];
-      }
-    }
-
-    if (Object.keys(filteredUpdates).length === 0) {
-      return res.status(400).json({ error: 'No valid fields to update' });
-    }
-
-    // Get current client data for change tracking and Stripe update
-    const { data: oldClient } = await supabase
-      .from('clients')
-      .select('name, subscription_tier, stripe_customer_id, address_street, address_city, address_zip, address_country')
-      .eq('id', clientId)
-      .single();
-
-    const { data: client, error } = await supabase
-      .from('clients')
-      .update(filteredUpdates)
-      .eq('id', clientId)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('[PLATFORM] Failed to update client:', error);
-      return res.status(500).json({ error: 'Failed to update client' });
-    }
-
-    // Sync changes to Stripe customer profile
-    if (oldClient?.stripe_customer_id) {
-      try {
-        const stripeUpdates = {};
-        
-        if (filteredUpdates.name) {
-          stripeUpdates.name = filteredUpdates.name;
-        }
-        
-        // Build address object for Stripe
-        const addressFields = ['address_street', 'address_city', 'address_zip', 'address_country'];
-        if (addressFields.some(field => filteredUpdates[field] !== undefined)) {
-          stripeUpdates.address = {
-            line1: filteredUpdates.address_street ?? oldClient.address_street ?? '',
-            city: filteredUpdates.address_city ?? oldClient.address_city ?? '',
-            postal_code: filteredUpdates.address_zip ?? oldClient.address_zip ?? '',
-            country: filteredUpdates.address_country ?? oldClient.address_country ?? ''
-          };
-        }
-
-        if (Object.keys(stripeUpdates).length > 0) {
-          console.log('[PLATFORM] Syncing client updates to Stripe:', stripeUpdates);
-          await stripeService.updateStripeCustomer(oldClient.stripe_customer_id, stripeUpdates);
-        }
-      } catch (stripeErr) {
-        console.warn('[PLATFORM] Failed to sync to Stripe:', stripeErr.message);
-        // Don't fail the request if Stripe sync fails
-      }
-    }
-
-    // Build detailed log info
-    const logDetails = {
-      client_name: client.name,
-      updated_fields: Object.keys(filteredUpdates)
-    };
-    
-    // Track specific tier changes
-    if (filteredUpdates.subscription_tier && oldClient?.subscription_tier !== filteredUpdates.subscription_tier) {
-      logDetails.field = 'subscription_tier';
-      logDetails.old_value = oldClient?.subscription_tier;
-      logDetails.new_value = filteredUpdates.subscription_tier;
-    }
-
-    // Log the action
-    await logPlatformAction(
-      req.platformAdmin.id,
-      'update_client',
-      'client',
-      clientId.toString(),
-      logDetails,
-      req
-    );
-
-    res.json({ success: true, data: client });
-  } catch (error) {
-    console.error('[PLATFORM] Error updating client:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// ============================================================================
-// EMPLOYEE MANAGEMENT (within client context)
-// ============================================================================
-
-/**
- * PATCH /api/platform/clients/:clientId/employees/:employeeId
- * Update an employee (name, disabled status)
- */
-router.patch('/clients/:clientId/employees/:employeeId', async (req, res) => {
-  try {
-    const clientId = parseInt(req.params.clientId, 10);
-    const employeeId = parseInt(req.params.employeeId, 10);
-    
-    if (isNaN(clientId) || isNaN(employeeId)) {
-      return res.status(400).json({ error: 'Invalid client or employee ID' });
-    }
-    
-    const { name, disabled } = req.body;
-    
-    // Build update object
-    const updates = {};
-    if (name !== undefined) updates.name = name;
-    if (disabled !== undefined) updates.disabled = disabled;
-    
-    if (Object.keys(updates).length === 0) {
-      return res.status(400).json({ error: 'No valid fields to update' });
-    }
-    
-    // Verify employee belongs to client and get current data
-    const { data: employee, error: checkError } = await supabase
-      .from('employees')
-      .select('id, client_id, name, disabled, user_id')
-      .eq('id', employeeId)
-      .eq('client_id', clientId)
-      .single();
-    
-    if (checkError || !employee) {
-      return res.status(404).json({ error: 'Employee not found in this client' });
-    }
-    
-    // Get client data for audit log and subscription update
-    const { data: clientData } = await supabase
-      .from('clients')
-      .select('name, stripe_subscription_id, subscription_tier')
-      .eq('id', clientId)
-      .single();
-    
-    // Update employee
-    const { data: updated, error } = await supabase
-      .from('employees')
-      .update(updates)
-      .eq('id', employeeId)
-      .select()
-      .single();
-    
-    if (error) {
-      console.error('[PLATFORM] Failed to update employee:', error);
-      return res.status(500).json({ error: 'Failed to update employee' });
-    }
-
-    // Handle disabled status change - update Stripe billing
-    if (disabled !== undefined && disabled !== employee.disabled) {
-      // Ban/unban user in Supabase Auth
-      try {
-        if (disabled) {
-          await supabase.auth.admin.updateUserById(employee.user_id, { ban_duration: '876000h' });
-        } else {
-          await supabase.auth.admin.updateUserById(employee.user_id, { ban_duration: 'none' });
-        }
-      } catch (authErr) {
-        console.warn('[PLATFORM] Auth ban/unban warning:', authErr.message);
-      }
-
-      // Update Stripe subscription quantity
-      if (clientData?.subscription_tier === 'paid' && clientData?.stripe_subscription_id) {
-        try {
-          const { count: activeCount } = await supabase
-            .from('employees')
-            .select('*', { count: 'exact', head: true })
-            .eq('client_id', clientId)
-            .or('disabled.is.null,disabled.eq.false');
-
-          const newQuantity = Math.max(activeCount || 1, 1);
-          console.log('[PLATFORM] Updating subscription quantity to:', newQuantity);
-
-          await stripeService.updateSubscriptionQuantity(clientData.stripe_subscription_id, newQuantity);
-        } catch (stripeErr) {
-          console.warn('[PLATFORM] Stripe quantity update warning:', stripeErr.message);
-        }
-      }
-    }
-    
-    // Build detailed log info
-    const logDetails = {
-      client_id: clientId,
-      client_name: clientData?.name || 'Unknown',
-      employee_name: employee.name || updated.name || 'Unknown'
-    };
-    
-    // Track specific changes
-    if (name !== undefined && name !== employee.name) {
-      logDetails.field = 'name';
-      logDetails.old_value = employee.name;
-      logDetails.new_value = name;
-    }
-    if (disabled !== undefined && disabled !== employee.disabled) {
-      logDetails.field = 'status';
-      logDetails.old_value = employee.disabled ? 'disabled' : 'enabled';
-      logDetails.new_value = disabled ? 'disabled' : 'enabled';
-    }
-    
-    // Log the action
-    await logPlatformAction(
-      req.platformAdmin.id,
-      disabled !== undefined ? (disabled ? 'disable_employee' : 'enable_employee') : 'update_employee',
-      'employee',
-      employeeId.toString(),
-      logDetails,
-      req
-    );
-    
-    res.json({ success: true, data: updated });
-  } catch (error) {
-    console.error('[PLATFORM] Error updating employee:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-/**
- * DELETE /api/platform/clients/:clientId/employees/:employeeId
- * Remove an employee from a client
- */
-router.delete('/clients/:clientId/employees/:employeeId', async (req, res) => {
-  try {
-    const clientId = parseInt(req.params.clientId, 10);
-    const employeeId = parseInt(req.params.employeeId, 10);
-    
-    if (isNaN(clientId) || isNaN(employeeId)) {
-      return res.status(400).json({ error: 'Invalid client or employee ID' });
-    }
-    
-    // Verify employee belongs to client and get user_id
-    const { data: employee, error: checkError } = await supabase
-      .from('employees')
-      .select('id, client_id, user_id, name')
-      .eq('id', employeeId)
-      .eq('client_id', clientId)
-      .single();
-    
-    if (checkError || !employee) {
-      return res.status(404).json({ error: 'Employee not found in this client' });
-    }
-    
-    // Get client data for audit log and subscription update
-    const { data: clientData } = await supabase
-      .from('clients')
-      .select('name, stripe_subscription_id, subscription_tier')
-      .eq('id', clientId)
-      .single();
-
-    // Delete role assignments first (foreign key constraint)
-    await supabase
-      .from('roles-employees')
-      .delete()
-      .eq('employee_id', employeeId);
-    
-    // Delete the employee record
-    const { error } = await supabase
-      .from('employees')
-      .delete()
-      .eq('id', employeeId);
-    
-    if (error) {
-      console.error('[PLATFORM] Failed to delete employee:', error);
-      return res.status(500).json({ error: 'Failed to delete employee' });
-    }
-
-    // Update Stripe subscription quantity
-    if (clientData?.subscription_tier === 'paid' && clientData?.stripe_subscription_id) {
-      try {
-        const { count: activeCount } = await supabase
-          .from('employees')
-          .select('*', { count: 'exact', head: true })
-          .eq('client_id', clientId)
-          .or('disabled.is.null,disabled.eq.false');
-
-        const newQuantity = Math.max(activeCount || 1, 1);
-        console.log('[PLATFORM] Updating subscription quantity after delete to:', newQuantity);
-
-        await stripeService.updateSubscriptionQuantity(clientData.stripe_subscription_id, newQuantity);
-      } catch (stripeErr) {
-        console.warn('[PLATFORM] Stripe quantity update warning:', stripeErr.message);
-      }
-    }
-    
-    // Note: This doesn't delete the auth.users record - just removes them from this client
-    // The user can still exist and be added to another client
-    
-    // Log the action
-    await logPlatformAction(
-      req.platformAdmin.id,
-      'delete_employee',
-      'employee',
-      employeeId.toString(),
-      { 
-        client_id: clientId, 
-        client_name: clientData?.name || 'Unknown',
-        employee_name: employee.name || 'Unknown'
-      },
-      req
-    );
-    
-    res.json({ success: true });
-  } catch (error) {
-    console.error('[PLATFORM] Error deleting employee:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// ============================================================================
-// PLATFORM ANALYTICS
-// ============================================================================
-
-/**
- * GET /api/platform/analytics
- * Get platform-wide analytics and KPIs
+ * Get Platform Analytics
  */
 router.get('/analytics', async (req, res) => {
   try {
-    const { from, to } = req.query;
-    
-    // Default to last 30 days
-    const endDate = to ? new Date(to) : new Date();
-    const startDate = from ? new Date(from) : new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-    // Fetch counts in parallel
-    const [
-      { count: totalClients },
-      { count: paidClients },
-      { count: totalEmployees },
-      { count: totalCustomers },
-      { count: emailsSent },
-      { count: emailsReceived },
-      { count: totalEmails },
-      { count: newClientsThisMonth },
-      { data: recentClients }
-    ] = await Promise.all([
-      supabase.from('clients').select('id', { count: 'exact', head: true }),
-      supabase.from('clients').select('id', { count: 'exact', head: true }).eq('subscription_tier', 'paid'),
-      supabase.from('employees').select('id', { count: 'exact', head: true }),
-      supabase.from('customers').select('id', { count: 'exact', head: true }),
-      supabase.from('sent-mail').select('id', { count: 'exact', head: true })
-        .gte('send_at', startDate.toISOString())
-        .lte('send_at', endDate.toISOString()),
-      supabase.from('incoming-mails').select('id', { count: 'exact', head: true })
-        .gte('timestamp', startDate.toISOString())
-        .lte('timestamp', endDate.toISOString()),
-      supabase.from('incoming-mails').select('id', { count: 'exact', head: true }),
-      supabase.from('clients').select('id', { count: 'exact', head: true })
-        .gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
-      supabase.from('clients').select('id, name, subscription_tier, created_at').order('created_at', { ascending: false }).limit(5)
-    ]);
-
-    // Get client growth over time (last 12 months)
-    const { data: clientGrowth } = await supabase
-      .from('clients')
-      .select('created_at')
-      .order('created_at', { ascending: true });
-
-    // Group by month
-    const monthlyGrowth = {};
-    clientGrowth?.forEach(client => {
-      const month = client.created_at.substring(0, 7); // YYYY-MM
-      monthlyGrowth[month] = (monthlyGrowth[month] || 0) + 1;
-    });
-
-    res.json({
-      success: true,
-      data: {
-        overview: {
-          totalClients: totalClients || 0,
-          paidClients: paidClients || 0,
-          freeClients: (totalClients || 0) - (paidClients || 0),
-          totalEmployees: totalEmployees || 0,
-          totalCustomers: totalCustomers || 0,
-          emailsSentPeriod: emailsSent || 0,
-          emailsReceivedPeriod: emailsReceived || 0,
-          totalEmails: totalEmails || 0,
-          newClientsThisMonth: newClientsThisMonth || 0
-        },
-        recentClients: recentClients || [],
-        growth: monthlyGrowth,
-        period: {
-          from: startDate.toISOString(),
-          to: endDate.toISOString()
-        }
-      }
-    });
-  } catch (error) {
-    console.error('[PLATFORM] Error fetching analytics:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    const data = await platformService.getAnalytics();
+    res.json({ success: true, data });
+  } catch (err) {
+    logger.error('[PLATFORM] Analytics error', { error: err.message });
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
-// ============================================================================
-// BILLING OVERVIEW
-// ============================================================================
-
 /**
- * GET /api/platform/billing
- * Get billing overview across all clients
+ * Get Billing Overview
  */
 router.get('/billing', async (req, res) => {
   try {
-    // Fetch all clients with Stripe info
-    const { data: clients, error } = await supabase
-      .from('clients')
-      .select(`
-        id,
-        name,
-        subscription_tier,
-        stripe_customer_id,
-        stripe_subscription_id,
-        created_at
-      `)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('[PLATFORM] Failed to fetch billing data:', error);
-      return res.status(500).json({ error: 'Failed to fetch billing data' });
-    }
-
-    // Get employee counts for each client
-    const clientIds = clients.map(c => c.id);
-    const { data: employeeCounts } = await supabase
-      .from('employees')
-      .select('client_id')
-      .in('client_id', clientIds);
-
-    // Count employees per client
-    const employeeCountMap = {};
-    employeeCounts?.forEach(e => {
-      employeeCountMap[e.client_id] = (employeeCountMap[e.client_id] || 0) + 1;
-    });
-
-    // Calculate total seats and paid seats
-    const totalSeats = Object.values(employeeCountMap).reduce((a, b) => a + b, 0);
-    
-    // Calculate paid seats (only from paid clients)
-    const paidClients = clients.filter(c => c.subscription_tier === 'paid');
-    const paidSeats = paidClients.reduce((sum, client) => {
-      return sum + (employeeCountMap[client.id] || 0);
-    }, 0);
-
-    // Get actual revenue metrics from Stripe
-    const stripeMetrics = await stripeService.getPlatformRevenueMetrics();
-    const mrr = stripeMetrics.success ? stripeMetrics.mrr / 100 : 0; // Convert cents to EUR
-    const totalRevenue = stripeMetrics.success ? stripeMetrics.totalRevenue / 100 : 0; // Convert cents to EUR
-
-    // Calculate summary stats
-    const summary = {
-      totalClients: clients.length,
-      paidClients: paidClients.length,
-      freeClients: clients.filter(c => c.subscription_tier === 'free').length,
-      withStripe: clients.filter(c => c.stripe_customer_id).length,
-      totalSeats: totalSeats,
-      paidSeats: paidSeats,
-      mrr: mrr,
-      totalRevenue: totalRevenue,
-      activeSubscriptions: stripeMetrics.activeSubscriptions || 0
-    };
-
-    res.json({
-      success: true,
-      data: {
-        summary,
-        clients: clients.map(c => ({
-          id: c.id,
-          name: c.name,
-          tier: c.subscription_tier,
-          has_stripe: !!c.stripe_customer_id,
-          has_subscription: !!c.stripe_subscription_id,
-          created_at: c.created_at,
-          employee_count: employeeCountMap[c.id] || 0
-        }))
-      }
-    });
-  } catch (error) {
-    console.error('[PLATFORM] Error fetching billing:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    const data = await platformService.getBillingOverview();
+    res.json({ success: true, data });
+  } catch (err) {
+    logger.error('[PLATFORM] Billing error', { error: err.message });
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
-// ============================================================================
-// PLATFORM ADMIN MANAGEMENT
-// ============================================================================
+/**
+ * Get All Clients
+ */
+router.get('/clients', async (req, res) => {
+  try {
+    const data = await platformService.getClients();
+    res.json({ success: true, data });
+  } catch (err) {
+    logger.error('[PLATFORM] Clients error', { error: err.message });
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 /**
- * GET /api/platform/admins
- * List all platform administrators
+ * Get Client Detail
+ */
+router.get('/clients/:id', validateId('id'), async (req, res) => {
+  try {
+    const data = await platformService.getClientDetail(req.sanitized.id);
+    res.json({ success: true, data });
+  } catch (err) {
+    logger.error('[PLATFORM] Client detail error', { error: err.message });
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/**
+ * Update Client
+ */
+router.patch('/clients/:id', validateId('id'), async (req, res) => {
+  try {
+    const data = await platformService.updateClient(req.sanitized.id, req.body);
+    res.json({ success: true, data });
+  } catch (err) {
+    logger.error('[PLATFORM] Client update error', { error: err.message });
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/**
+ * Delete Client
+ */
+router.delete('/clients/:id', validateId('id'), async (req, res) => {
+  try {
+    await platformService.deleteClient(req.sanitized.id);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('[PLATFORM] Client delete error', { error: err.message });
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/**
+ * Get Audit Log
+ */
+router.get('/audit-log', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const { data, error } = await supabase
+      .from('platform_audit_log')
+      .select('*, platform_admins(email)')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+    res.json({ success: true, data });
+  } catch (err) {
+    logger.error('[PLATFORM] Audit log error', { error: err.message });
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/**
+ * Get Notifications
+ */
+router.get('/notifications', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    
+    // Get notifications
+    const { data, error } = await supabase
+      .from('platform_notifications')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    // Get unread count
+    const { count, error: countError } = await supabase
+      .from('platform_notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('read', false);
+
+    res.json({ 
+      success: true, 
+      data,
+      unread_count: count || 0 
+    });
+  } catch (err) {
+    logger.error('[PLATFORM] Notifications error', { error: err.message });
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/**
+ * Mark Notification Read
+ */
+router.post('/notifications/:id/read', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { error } = await supabase
+      .from('platform_notifications')
+      .update({ read: true })
+      .eq('id', id);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('[PLATFORM] Notification read error', { error: err.message });
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/**
+ * Get Platform Admins
  */
 router.get('/admins', async (req, res) => {
   try {
-    const { data: admins, error } = await supabase
+    const { data, error } = await supabase
       .from('platform_admins')
-      .select('id, user_id, email, created_at, last_login, created_by')
+      .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('[PLATFORM] Failed to fetch admins:', error);
-      return res.status(500).json({ error: 'Failed to fetch platform admins' });
-    }
-
-    res.json({ success: true, data: admins });
-  } catch (error) {
-    console.error('[PLATFORM] Error fetching admins:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    if (error) throw error;
+    res.json({ success: true, data });
+  } catch (err) {
+    logger.error('[PLATFORM] Get admins error', { error: err.message });
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
 /**
- * POST /api/platform/admins
- * Add a new platform administrator
- * Can add existing users or invite new users by email
+ * Invite Platform Admin
  */
-router.post('/admins', async (req, res) => {
+router.post('/admins/invite', async (req, res) => {
   try {
     const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email required' });
 
-    if (!email) {
-      return res.status(400).json({ error: 'Email is required' });
-    }
-
-    // Normalize email
-    const normalizedEmail = email.toLowerCase().trim();
-
-    // First check if this email is already a platform admin
-    const { data: existingAdmin } = await supabase
-      .from('platform_admins')
-      .select('id')
-      .eq('email', normalizedEmail)
-      .single();
-
-    if (existingAdmin) {
-      return res.status(409).json({ error: 'This email is already a platform admin' });
-    }
-
-    // Try to find the user by email using Supabase Admin API
-    const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers({
-      perPage: 1000
-    });
-
-    let userId = null;
+    // Check if user exists in auth
+    const { data: { users }, error: searchError } = await supabase.auth.admin.listUsers();
+    const existingUser = users.find(u => u.email === email);
     
-    if (!authError && authUsers?.users) {
-      const foundUser = authUsers.users.find(u => u.email?.toLowerCase() === normalizedEmail);
-      if (foundUser) {
-        userId = foundUser.id;
-        console.log('[PLATFORM] Found existing user by email:', userId);
-      }
+    let userId;
+    
+    if (existingUser) {
+      userId = existingUser.id;
+    } else {
+      // Invite user
+      const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(email);
+      if (inviteError) throw inviteError;
+      userId = inviteData.user.id;
     }
 
-    // If no existing user found, create an invite for them
-    if (!userId) {
-      console.log('[PLATFORM] User not found, creating invite for:', normalizedEmail);
-      
-      // Create the user with an invite (they'll need to set password via email)
-      const { data: newUser, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(normalizedEmail, {
-        data: {
-          invited_as_platform_admin: true
-        }
-      });
-
-      if (inviteError) {
-        console.error('[PLATFORM] Failed to invite user:', inviteError);
-        return res.status(500).json({ 
-          error: 'Failed to invite user',
-          message: inviteError.message 
-        });
-      }
-
-      userId = newUser.user.id;
-      console.log('[PLATFORM] Invited new user, ID:', userId);
-    }
-
-    // Create platform admin record
-    const { data: newAdmin, error: createError } = await supabase
+    // Add to platform_admins table
+    const { data, error } = await supabase
       .from('platform_admins')
       .insert({
         user_id: userId,
-        email: normalizedEmail,
+        email: email,
         created_by: req.platformAdmin.id
       })
       .select()
       .single();
 
-    if (createError) {
-      console.error('[PLATFORM] Failed to create admin:', createError);
-      return res.status(500).json({ error: 'Failed to create platform admin' });
-    }
+    if (error) throw error;
 
-    // Log the action
-    await logPlatformAction(
-      req.platformAdmin.id,
-      'add_platform_admin',
-      'platform_admin',
-      newAdmin.id,
-      { email: normalizedEmail },
-      req
-    );
-
-    res.status(201).json({ success: true, data: newAdmin });
-  } catch (error) {
-    console.error('[PLATFORM] Error creating admin:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-/**
- * DELETE /api/platform/admins/:id
- * Remove a platform administrator
- */
-router.delete('/admins/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // Prevent self-deletion
-    if (id === req.platformAdmin.id) {
-      return res.status(400).json({ error: 'Cannot remove yourself as platform admin' });
-    }
-
-    // Get admin info for logging
-    const { data: admin } = await supabase
-      .from('platform_admins')
-      .select('email')
-      .eq('id', id)
-      .single();
-
-    if (!admin) {
-      return res.status(404).json({ error: 'Platform admin not found' });
-    }
-
-    // Delete the admin
-    const { error } = await supabase
-      .from('platform_admins')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      console.error('[PLATFORM] Failed to delete admin:', error);
-      return res.status(500).json({ error: 'Failed to remove platform admin' });
-    }
-
-    // Log the action
-    await logPlatformAction(
-      req.platformAdmin.id,
-      'remove_platform_admin',
-      'platform_admin',
-      id,
-      { email: admin.email },
-      req
-    );
-
-    res.json({ success: true, message: 'Platform admin removed' });
-  } catch (error) {
-    console.error('[PLATFORM] Error deleting admin:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-/**
- * GET /api/platform/audit-log
- * Get platform audit log
- */
-router.get('/audit-log', async (req, res) => {
-  try {
-    const { limit = 100, offset = 0, action, target_type } = req.query;
-
-    let query = supabase
-      .from('platform_audit_log')
-      .select(`
-        id,
-        admin_id,
-        action,
-        target_type,
-        target_id,
-        details,
-        ip_address,
-        created_at,
-        platform_admins(email)
-      `, { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
-
-    if (action) {
-      query = query.eq('action', action);
-    }
-    if (target_type) {
-      query = query.eq('target_type', target_type);
-    }
-
-    const { data: logs, error, count } = await query;
-
-    if (error) {
-      console.error('[PLATFORM] Failed to fetch audit log:', error);
-      return res.status(500).json({ error: 'Failed to fetch audit log' });
-    }
-
-    res.json({
-      success: true,
-      data: logs,
-      pagination: {
-        total: count,
-        limit: parseInt(limit),
-        offset: parseInt(offset)
-      }
+    // Log audit
+    await supabase.from('platform_audit_log').insert({
+      admin_id: req.platformAdmin.id,
+      action: 'invite_admin',
+      target_type: 'platform_admin',
+      target_id: data.id,
+      details: { email }
     });
-  } catch (error) {
-    console.error('[PLATFORM] Error fetching audit log:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
 
-// ============================================================================
-// NOTIFICATIONS
-// ============================================================================
-
-/**
- * GET /api/platform/notifications
- * Get platform notifications (cancellations, payment failures, etc.)
- */
-router.get('/notifications', async (req, res) => {
-  try {
-    const { limit = 50, offset = 0, unread_only = 'false', type } = req.query;
-
-    let query = supabase
-      .from('platform_notifications')
-      .select(`
-        id,
-        type,
-        client_id,
-        title,
-        message,
-        metadata,
-        read,
-        created_at,
-        clients(id, name)
-      `, { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
-
-    if (unread_only === 'true') {
-      query = query.eq('read', false);
-    }
-    if (type) {
-      query = query.eq('type', type);
-    }
-
-    const { data: notifications, error, count } = await query;
-
-    if (error) {
-      console.error('[PLATFORM] Failed to fetch notifications:', error);
-      return res.status(500).json({ error: 'Failed to fetch notifications' });
-    }
-
-    // Get unread count
-    const { count: unreadCount } = await supabase
-      .from('platform_notifications')
-      .select('id', { count: 'exact', head: true })
-      .eq('read', false);
-
-    res.json({
-      success: true,
-      data: notifications,
-      unread_count: unreadCount || 0,
-      pagination: {
-        total: count,
-        limit: parseInt(limit),
-        offset: parseInt(offset)
-      }
-    });
-  } catch (error) {
-    console.error('[PLATFORM] Error fetching notifications:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-/**
- * PUT /api/platform/notifications/:id/read
- * Mark a notification as read
- */
-router.put('/notifications/:id/read', async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const { error } = await supabase
-      .from('platform_notifications')
-      .update({ read: true })
-      .eq('id', id);
-
-    if (error) {
-      console.error('[PLATFORM] Failed to mark notification as read:', error);
-      return res.status(500).json({ error: 'Failed to update notification' });
-    }
-
-    res.json({ success: true });
-  } catch (error) {
-    console.error('[PLATFORM] Error updating notification:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-/**
- * PUT /api/platform/notifications/mark-all-read
- * Mark all notifications as read
- */
-router.put('/notifications/mark-all-read', async (req, res) => {
-  try {
-    const { error } = await supabase
-      .from('platform_notifications')
-      .update({ read: true })
-      .eq('read', false);
-
-    if (error) {
-      console.error('[PLATFORM] Failed to mark all notifications as read:', error);
-      return res.status(500).json({ error: 'Failed to update notifications' });
-    }
-
-    res.json({ success: true });
-  } catch (error) {
-    console.error('[PLATFORM] Error updating notifications:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-/**
- * GET /api/platform/notifications/unread-count
- * Get count of unread notifications (for badge)
- */
-router.get('/notifications/unread-count', async (req, res) => {
-  try {
-    const { count } = await supabase
-      .from('platform_notifications')
-      .select('id', { count: 'exact', head: true })
-      .eq('read', false);
-
-    res.json({
-      success: true,
-      count: count || 0
-    });
-  } catch (error) {
-    console.error('[PLATFORM] Error fetching unread count:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.json({ success: true, data });
+  } catch (err) {
+    logger.error('[PLATFORM] Invite admin error', { error: err.message });
+    res.status(500).json({ error: 'Server error' });
   }
 });
 

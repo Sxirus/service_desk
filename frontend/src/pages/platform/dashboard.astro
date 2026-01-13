@@ -58,6 +58,8 @@ if (!session) {
   return Astro.redirect("/");
 }
 
+import { getApiUrl } from "../../lib/api-config";
+
 // Fetch platform statistics from backend API
 let stats = {
   totalClients: 0,
@@ -70,7 +72,7 @@ let stats = {
 };
 
 try {
-  const response = await fetch("http://localhost:3000/api/platform/analytics", {
+  const response = await fetch(getApiUrl("/api/platform/analytics"), {
     headers: {
       "Authorization": `Bearer ${session.access_token}`,
       "Content-Type": "application/json"

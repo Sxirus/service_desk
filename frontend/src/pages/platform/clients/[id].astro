@@ -9,6 +9,7 @@ import { createClient } from "../../../lib/supabase.ts";
 import { getPlatformOnlyContext, getCompletePageContext } from "../../../lib/auth-helpers.ts";
 import PlatformShell from "@/components/platform/PlatformShell";
 import ClientDetail from "@/components/platform/ClientDetail";
+import { getApiUrl } from "../../../lib/api-config";
 
 const { id } = Astro.params;
 
@@ -53,7 +54,7 @@ if (!session) {
 // Fetch client details from backend API
 let clientData: any = null;
 try {
-  const response = await fetch(`http://localhost:3000/api/platform/clients/${id}`, {
+  const response = await fetch(getApiUrl(`/api/platform/clients/${id}`), {
     headers: {
       "Authorization": `Bearer ${session.access_token}`,
       "Content-Type": "application/json"

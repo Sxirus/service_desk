@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 import { useTranslation } from 'react-i18next';
+import { getApiUrl } from "@/lib/api-config";
 
 interface StripePaymentFormProps {
   priceId: string;
@@ -70,7 +71,7 @@ function CheckoutForm({
         }
 
         // Call backend to complete subscription
-        const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
+        const apiUrl = getApiUrl('/api');
         const completeResponse = await fetch(`${apiUrl}/client/complete-subscription`, {
           method: 'POST',
           headers: {
@@ -206,7 +207,7 @@ export default function StripePaymentForm({ priceId, quantity, onSuccess, onBack
         }
 
         // PUBLIC_API_URL already includes /api, so we just add the specific endpoint
-        const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
+        const apiUrl = getApiUrl('/api');
         const response = await fetch(`${apiUrl}/client/create-checkout-session`, {
           method: 'POST',
           headers: {
