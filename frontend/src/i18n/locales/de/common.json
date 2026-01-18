@@ -3,6 +3,7 @@
   "serviceDesk": "Service Desk",
   "yourAssignedTickets": "Ihre zugewiesenen Tickets",
   "loading": "Wird geladen...",
+  "working": "Wird verarbeitet...",
   "save": "Speichern",
   "cancel": "Abbrechen",
   "delete": "Löschen",
@@ -134,6 +135,7 @@
   "tryAgain": "Erneut versuchen",
   "learnMore": "Mehr erfahren",
   "getStarted": "Loslegen",
+  "continue": "Weiter",
   "continueText": "Fortfahren",
   "finish": "Fertig",
   "skip": "Überspringen",
@@ -309,5 +311,6 @@
     "analytics": {
       "pageTitle": "Analysen - Service Desk"
     }
-  }
+  },
+  "or": "oder"
 }

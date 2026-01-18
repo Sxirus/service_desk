@@ -212,6 +212,23 @@ router.post('/complete-subscription', authenticate, async (req, res) => {
     const sessionResult = await clientService.retrieveCheckoutSession(sessionId);
     if (!sessionResult.success) throw new Error(sessionResult.error);
 
+    // Security Check: Verify that the session belongs to this client
+    const { data: clientVerification } = await supabase
+      .from('clients')
+      .select('stripe_customer_id')
+      .eq('id', req.user.client_id)
+      .single();
+
+    if (!clientVerification || clientVerification.stripe_customer_id !== sessionResult.session.customer) {
+      logger.warn('[CLIENT] IDOR attempt on complete-subscription', { 
+        clientId: req.user.client_id, 
+        sessionId,
+        sessionCustomer: sessionResult.session.customer,
+        clientCustomer: clientVerification?.stripe_customer_id 
+      });
+      return res.status(403).json({ success: false, error: 'Access denied: Session does not belong to your account' });
+    }
+
     const { subscriptionId, status } = sessionResult;
     if (status !== 'complete') return res.status(400).json({ success: false, error: 'Payment not complete' });
 

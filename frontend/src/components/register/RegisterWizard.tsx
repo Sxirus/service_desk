@@ -43,11 +43,17 @@ import { getApiUrl } from "@/lib/api-config";
 import StripePaymentForm from "./StripePaymentForm";
 
 type UserLite = { id: string; email: string };
+type ServerSessionData = {
+  step: number;
+  data: Record<string, any>;
+} | null;
+
 type Props = {
   initialStep?: number;
   regNonce: string;
   siteKey: string; // Cloudflare Turnstile Site Key
   currentUser: UserLite | null;
+  serverSessionData?: ServerSessionData;
 };
 
 const TOTAL_STEPS = 6;
@@ -302,8 +308,25 @@ function OneQuestionLayout({
 /* =========================
    Component
    ========================= */
-export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, currentUser }: Props) {
+export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, currentUser, serverSessionData }: Props) {
   const { t } = useTranslation(['auth', 'common', 'validation']);
+
+  // Helper to merge server data with localStorage fallback
+  const getMergedData = (key: string, serverKey: string, defaults: any) => {
+    // 1. Try localStorage first (most recent client interactions)
+    if (typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem(`reg:${regNonce}:${key}`);
+        if (raw) return JSON.parse(raw);
+      } catch {}
+    }
+    // 2. Try server session data
+    if (serverSessionData?.data && serverSessionData.data[serverKey]) {
+      return { ...defaults, ...serverSessionData.data[serverKey] };
+    }
+    // 3. Defaults
+    return defaults;
+  };
 
   // Create translated schemas
   const accountSchema = React.useMemo(() => createAccountSchema(t), [t]);
@@ -312,7 +335,24 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
   const teamMemberSchema = React.useMemo(() => createTeamMemberSchema(t), [t]);
 
   /* ---- Step control ---- */
-  const [step, setStep] = useState<number>(initialStep);
+  // Determine start step:
+  // 1. If user has server progress, use that (max with 2 if logged in)
+  // 2. If user is logged in, at least Step 2
+  // 3. Else initialStep (1)
+  const determineStartStep = () => {
+    let s = initialStep;
+    if (currentUser) s = Math.max(s, 2);
+    if (serverSessionData?.step && serverSessionData.step > s) {
+      // If server says we are at step X, we typically want to resume X (or X+1 if completed?)
+      // Usually "last_step" means completed step, so we go to last_step + 1.
+      // But if status is "in_progress", maybe just last_step.
+      // Let's assume last_step is the one they were ON.
+      s = Math.max(s, serverSessionData.step);
+    }
+    return Math.min(s, TOTAL_STEPS + 1); // Cap at completion
+  };
+
+  const [step, setStep] = useState<number>(determineStartStep);
 
   // Check for payment success on mount
   React.useEffect(() => {
@@ -373,22 +413,12 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
 
   const accountForm = useForm<AccountFormData>({
     resolver: zodResolver(accountSchema),
-    defaultValues: (() => {
-      if (typeof window !== "undefined") {
-        const raw = localStorage.getItem(accStorageKey);
-        if (raw) {
-          try {
-            return JSON.parse(raw) as AccountFormData;
-          } catch {}
-        }
-      }
-      return {
-        firstName: "",
-        lastName: "",
-        email: currentUser?.email ?? "",
-        password: "",
-      };
-    })(),
+    defaultValues: getMergedData('account', 'account', {
+      firstName: "",
+      lastName: "",
+      email: currentUser?.email ?? "",
+      password: "",
+    }),
     mode: "onBlur",
   });
 
@@ -454,25 +484,15 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
 
   const companyForm = useForm<CompanyFormData>({
     resolver: zodResolver(companySchema),
-    defaultValues: (() => {
-      if (typeof window !== "undefined") {
-        const raw = localStorage.getItem(compStorageKey);
-        if (raw) {
-          try {
-            return JSON.parse(raw) as CompanyFormData;
-          } catch {}
-        }
-      }
-      return {
-        name: "",
-        address_street: "",
-        address_zip: "",
-        address_city: "",
-        address_country: "",
-        website: "",
-        vat: "",
-      };
-    })(),
+    defaultValues: getMergedData('company', 'company', {
+      name: "",
+      address_street: "",
+      address_zip: "",
+      address_city: "",
+      address_country: "",
+      website: "",
+      vat: "",
+    }),
     mode: "onBlur",
   });
 
@@ -561,7 +581,16 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
         vat: companyForm.getValues("vat") || null,
       });
 
-      if (!res?.data?.success) throw new Error(res?.data?.message || t('auth:wizard.errors.companyCreationFailed'));
+      if (!res?.data?.success) {
+        // Handle "already belongs to company" case
+        if (res?.data?.message?.includes("already belong")) {
+           // Auto-advance to next step if user is stuck in "created but partial" state
+           setStep(3); 
+           return;
+        }
+        throw new Error(res?.data?.message || t('auth:wizard.errors.companyCreationFailed'));
+      }
+      
       try {
         localStorage.removeItem(compStorageKey);
       } catch {}
@@ -787,22 +816,35 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
     setSubmittingTeam(true);
     try {
       const { actions } = await import("astro:actions");
-      const results = [];
       
-      for (const member of teamMembers) {
+      // Parallelize invites
+      const invitePromises = teamMembers.map(member => {
         const formData = new FormData();
         formData.append('email', member.email);
         formData.append('name', member.name);
         formData.append('role_id', member.role_id.toString());
-        
-        const result = await actions.createEmployee(formData);
-        results.push({ member, result });
-      }
+        return actions.createEmployee(formData).then(res => ({ member, result: res }));
+      });
 
-      // Check if any failed
-      const failed = results.filter(r => !r.result?.data?.success);
-      if (failed.length > 0) {
-        const failedEmails = failed.map(f => f.member.email).join(", ");
+      const results = await Promise.allSettled(invitePromises);
+      
+      const failed = results
+        .filter((r): r is PromiseFulfilledResult<{ member: TeamMemberData, result: any }> => 
+          r.status === 'fulfilled' && !r.value.result?.data?.success
+        )
+        .map(r => r.value);
+        
+      const rejected = results
+        .filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+
+      if (failed.length > 0 || rejected.length > 0) {
+        const failedEmails = [
+          ...failed.map(f => f.member.email),
+          ...rejected.map(() => "Unknown")
+        ].join(", ");
+        
+        // Show warning but proceed if at least some succeeded? 
+        // For now, simple alert.
         alert(t('auth:wizard.errors.invitesFailed', { emails: failedEmails }));
       }
 
@@ -1042,7 +1084,8 @@ export default function RegisterWizard({ initialStep = 1, regNonce, siteKey, cur
               icon={<Building2 className="h-5 w-5" />}
               title={t('auth:wizard.company.name.title')}
               description={t('auth:wizard.company.name.description')}
-              onBack={() => setStep(1)}
+              onBack={currentUser ? undefined : () => setStep(1)} // Disable back if user pre-authenticated
+              showBack={!currentUser}
               onSubmit={nextCompany}
               onNextLabel={t('common:continue')}
               backLabel={t('common:back')}

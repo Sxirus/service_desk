@@ -1227,6 +1227,24 @@ const saveRegistrationProgress = async (
     });
     console.log("[actions.saveRegistrationProgress] Admin client created");
 
+    // Security check: Verify nonce ownership before upsert
+    // Fetch existing session for this nonce
+    const { data: existingSession } = await admin
+      .from("registration_sessions")
+      .select("user_id")
+      .eq("reg_nonce", reg_nonce)
+      .maybeSingle();
+
+    // If session exists and user_id doesn't match the current authenticated user, abort
+    if (existingSession && existingSession.user_id !== user.id) {
+      console.error("[actions.saveRegistrationProgress] Security violation: IDOR attempt on reg_nonce", {
+        nonce: reg_nonce,
+        owner: existingSession.user_id,
+        requester: user.id
+      });
+      return { success: false, message: "Invalid session" };
+    }
+
     // Upsert registration session
     const { error } = await admin
       .from("registration_sessions")
@@ -1397,126 +1415,23 @@ const registerCreateCompany = async (
       
       return { success: true, client_id: clientData.id };
     }
-    console.log("[actions.registerCreateCompany] RPC failed, falling back to manual process");
-    // fallthrough if RPC failed
+    
+    // If RPC fails, return error immediately - do NOT attempt fallback
+    console.error("[actions.registerCreateCompany] RPC failed:", rpc.error);
+    return { 
+      success: false, 
+      message: "Failed to create company. Please try again or contact support." 
+    };
+
   } catch (e: any) {
-    console.log("[actions.registerCreateCompany] RPC exception, falling back:", e?.message);
-    // continue to fallback
+    console.error("[actions.registerCreateCompany] RPC exception:", e?.message);
+    return { success: false, message: "Unexpected error during registration" };
   }
-
-  // 2) Fallback: perform inserts with service role (no true transaction)
-  const admin = createAdmin(import.meta.env.SUPABASE_URL!, import.meta.env.SUPABASE_KEY!, {
-    auth: { persistSession: false },
-  });
-  console.log("[actions.registerCreateCompany] Admin client created for fallback");
-
-  // Guard: if the user already belongs to a client, block
-  const { data: existingEmp } = await admin
-    .from("employees")
-    .select("id, client_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (existingEmp?.client_id) {
-    console.error("[actions.registerCreateCompany] User already belongs to client:", existingEmp.client_id);
-    return { success: false, message: "You already belong to a company." };
-  }
-  console.log("[actions.registerCreateCompany] User doesn't belong to any company yet");
-
-  // Create client
-  const { data: clientRow, error: clientErr } = await admin
-    .from("clients")
-    .insert({
-      name,
-      address_street,
-      address_zip,
-      address_city,
-      address_country,
-      website: website ?? null,
-      vat: vat ?? null,
-    })
-    .select("id, name")
-    .single();
-
-  if (clientErr || !clientRow) {
-    console.error("[actions.registerCreateCompany] Client creation failed:", clientErr?.message);
-    return { success: false, message: clientErr?.message || "Failed to create company" };
-  }
-  console.log("[actions.registerCreateCompany] Client created:", clientRow);
-
-  // Ensure employee
-  const displayName =
-    ((user.user_metadata as any)?.first_name || "") +
-    (user.user_metadata?.last_name ? " " + (user.user_metadata as any).last_name : "");
-
-  let employeeId: number | null = null;
-  // try existing
-  const { data: alreadyEmp } = await admin
-    .from("employees")
-    .select("id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (alreadyEmp?.id) {
-    employeeId = alreadyEmp.id;
-    console.log("[actions.registerCreateCompany] Existing employee found:", employeeId);
-    // also ensure client_id is set
-    await admin.from("employees").update({ client_id: clientRow.id }).eq("id", employeeId);
-    console.log("[actions.registerCreateCompany] Employee client_id updated");
-  } else {
-    const { data: empRow, error: empErr } = await admin
-      .from("employees")
-      .insert({ user_id: user.id, client_id: clientRow.id, name: displayName || user.email })
-      .select("id")
-      .single();
-    if (empErr || !empRow) {
-      console.error("[actions.registerCreateCompany] Employee creation failed:", empErr?.message);
-      return { success: false, message: empErr?.message || "Failed to create employee" };
-    }
-    employeeId = empRow.id;
-    console.log("[actions.registerCreateCompany] New employee created:", employeeId);
-  }
-
-  // Assign admin role (role_id = 1)
-  // Statt upsert verwende insert mit expliziter Duplikat-Behandlung
-  const { data: existingRole } = await admin
-    .from("roles-employees")
-    .select("*")
-    .eq("employee_id", employeeId!)
-    .eq("role_id", ADMIN_ROLE_ID)
-    .maybeSingle();
-
-  if (!existingRole) {
-    const { error: roleErr } = await admin
-      .from("roles-employees")
-      .insert({ employee_id: employeeId!, role_id: ADMIN_ROLE_ID });
-      
-    if (roleErr) {
-      console.error("[actions.registerCreateCompany] Role assignment failed:", roleErr);
-      return { success: false, message: "Failed to assign admin role" };
-    }
-  }
-
-  // Update registration session
-  await upsertRegSession(reg_nonce, user.id, 2, {
-    company: { id: clientRow.id, name: clientRow.name },
-  });
-  console.log("[actions.registerCreateCompany] Registration session updated via fallback path");
-
-  // Create Stripe customer
-  await createStripeCustomerForClient(user, clientRow.id, {
-    email: user.email,
-    name: clientRow.name,
-    address_street,
-    address_zip,
-    address_city,
-    address_country,
-    vat: vat ?? undefined,
-  });
-
-  console.log("[actions.registerCreateCompany] ok");
-  return { success: true, client_id: clientRow.id };
 };
 
+/* 
+ * HELPER: Upsert Registration Session
+ */
 async function upsertRegSession(reg_nonce: string, user_id: string, last_step: number, extra: Record<string, any>) {
   console.log("[upsertRegSession] start", { reg_nonce, user_id, last_step });
   try {
