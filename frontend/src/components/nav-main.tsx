@@ -1,4 +1,6 @@
 import { ChevronRight, type LucideIcon } from "lucide-react"
+import * as React from "react"
+import { useTranslation } from 'react-i18next'
 
 import {
   Collapsible,
@@ -15,6 +17,57 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
+import { apiClient } from "@/utils/api"
+
+// Hook für lazy loading der Email-Counts
+function useEmailCounts() {
+  const [counts, setCounts] = React.useState<{ dashboard: number; inboxes: Record<string, number> } | null>(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    const fetchCounts = async () => {
+      try {
+        const result = await apiClient.get('/inboxes/getCounts');
+        console.log('[NavMain] Fetched counts:', result);
+        if (result.success) {
+          setCounts(result.data);
+        }
+      } catch (error) {
+        // Silently fail - counts are optional UI enhancement
+        console.error('[NavMain] Failed to fetch email counts:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Small delay to ensure auth is ready
+    const timer = setTimeout(fetchCounts, 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return { counts, loading };
+}
+
+// Komponente für die Count-Anzeige
+function EmailCount({ count, loading }: { count: number | undefined; loading: boolean }) {
+  if (loading) {
+    return (
+      <span className="ml-auto text-xs text-muted-foreground/50 tabular-nums">
+        ...
+      </span>
+    );
+  }
+
+  if (count === undefined) {
+    return null;
+  }
+
+  return (
+    <span className="ml-auto text-xs text-muted-foreground/60 tabular-nums">
+      {count}
+    </span>
+  );
+}
 
 export function NavMain({
   items,
@@ -27,12 +80,31 @@ export function NavMain({
     items?: {
       title: string
       url: string
+      inboxId?: number
     }[]
   }[]
 }) {
+  const { t } = useTranslation('common');
+  const { counts, loading } = useEmailCounts();
+
+  // Funktion um den Count für ein Item zu bekommen
+  const getCountForItem = (subItem: { title: string; url: string; inboxId?: number }) => {
+    if (!counts) return undefined;
+    
+    if (subItem.url === '/dashboard') {
+      return counts.dashboard ?? 0;
+    }
+    
+    if (subItem.inboxId) {
+      return counts.inboxes[subItem.inboxId] ?? 0;
+    }
+    
+    return undefined;
+  };
+
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>Platform</SidebarGroupLabel>
+      <SidebarGroupLabel>{t('sidebar.platform')}</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => (
           <Collapsible
@@ -54,8 +126,12 @@ export function NavMain({
                   {item.items?.map((subItem) => (
                     <SidebarMenuSubItem key={subItem.title}>
                       <SidebarMenuSubButton asChild>
-                        <a href={subItem.url}>
+                        <a href={subItem.url} className="flex w-full items-center justify-between">
                           <span>{subItem.title}</span>
+                          <EmailCount 
+                            count={getCountForItem(subItem)} 
+                            loading={loading && (subItem.url === '/dashboard' || !!subItem.inboxId)} 
+                          />
                         </a>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>

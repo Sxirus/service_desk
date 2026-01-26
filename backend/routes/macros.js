@@ -38,14 +38,14 @@ router.get('/getMacros',
 
       if (error) {
         console.error('[MACROS] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[MACROS] Fetched', data.length, 'macros');
       res.json({success: true, data});
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -75,7 +75,7 @@ router.get('/getMacro',
 
       if (error) {
         console.error('[MACROS] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       if (!data) {
@@ -97,7 +97,7 @@ router.get('/getMacro',
       res.json({success: true, data});
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -127,20 +127,37 @@ router.post('/createMacro',
 
       console.log('[MACROS] Creating macro for client:', client_id);
 
+      // Validate groupId belongs to client if provided
+      if (groupId) {
+        const parsedGroupId = parseInt(groupId, 10);
+        if (isNaN(parsedGroupId)) {
+          return res.status(400).json({ error: 'Invalid group ID format' });
+        }
+        const { data: group, error: groupError } = await supabase
+          .from('macro_groups')
+          .select('client_id')
+          .eq('id', parsedGroupId)
+          .single();
+
+        if (groupError || !group || group.client_id !== client_id) {
+          return res.status(403).json({ error: 'Access denied to this macro group' });
+        }
+      }
+
       const { data, error } = await supabase
         .from('macros')
         .insert([{
           client_id: client_id,
           title: title,
           text: text,
-          group_id: groupId
+          group_id: groupId || null
         }])
         .select()
         .single();
 
       if (error) {
         console.error('[MACROS] Create macro failed:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       if (attachments.length > 0) {
@@ -154,42 +171,60 @@ router.post('/createMacro',
       res.json({ success: true, data: data });
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
 
 //create a new group
 router.post('/createGroup', 
-  authenticate, 
+  authenticate,
+  sanitizeText('name', { required: true, maxLength: 100 }),
   async (req, res) => {
     try {
-      const name = req.body.name;
+      const name = req.sanitized.name;
       const groupId = req.body.groupId;
       const client_id = req.user.client_id;
 
       console.log('[MACROS] Creating new group for client:', client_id);
+
+      // Validate parent groupId belongs to client if provided
+      if (groupId) {
+        const parsedGroupId = parseInt(groupId, 10);
+        if (isNaN(parsedGroupId)) {
+          return res.status(400).json({ error: 'Invalid group ID format' });
+        }
+        const { data: parentGroup, error: parentError } = await supabase
+          .from('macro_groups')
+          .select('client_id')
+          .eq('id', parsedGroupId)
+          .single();
+
+        if (parentError || !parentGroup || parentGroup.client_id !== client_id) {
+          return res.status(403).json({ error: 'Access denied to parent group' });
+        }
+      }
 
       const { data, error } = await supabase
         .from('macro_groups')
         .insert([{
           client_id: client_id,
           name: name,
-          group_id: groupId
+          group_id: groupId || null
         }])
         .select()
         .single()
 
       if (error) {
         console.error('[MACROS] Create group failed', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[MACROS] Group created successfully:', data.id);
       res.json({ success: true, data: data });
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -211,11 +246,9 @@ router.post('/updateMacro',
   async (req, res) => {
     try {
       const macroId = req.sanitized.macroId;
-      const deletedAttachments = JSON.parse(req.body.deletedAttachments);
-      const oldAttachments = JSON.parse(req.body.oldAttachments);
-      const attachments = req.files || [];
+      const client_id = req.user.client_id;
 
-      console.log('[MACROS] Updating macro:', macroId);
+      console.log('[MACROS] Updating macro:', macroId, 'for client:', client_id);
 
       console.log(deletedAttachments, oldAttachments, attachments);
 
@@ -228,17 +261,22 @@ router.post('/updateMacro',
         return res.status(400).json({ error: 'No fields to update' });
       }
 
-      // Perform update
+      // Perform update - include client_id check for security
       const { data, error } = await supabase
         .from('macros')
         .update(updates)
         .eq('id', macroId)
+        .eq('client_id', client_id)
         .select()
         .single();
 
       if (error) {
         console.error('[MACROS] Update failed:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      if (!data) {
+        return res.status(404).json({ error: 'Macro not found or access denied' });
       }
       result = { success: true, data: data };
 
@@ -251,7 +289,7 @@ router.post('/updateMacro',
       res.json(result);
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -269,8 +307,9 @@ router.delete('/deleteMacro',
   async (req, res) => {
     try {
       const macroId = req.sanitized.macroId;
+      const client_id = req.user.client_id;
 
-      console.log('[MACROS] Deleting macro:', macroId);
+      console.log('[MACROS] Deleting macro:', macroId, 'for client:', client_id);
 
       //deleting attachments from database
       const { data: oldAttachments, error: oldAttachmentsError } = await supabase
@@ -296,18 +335,25 @@ router.delete('/deleteMacro',
       const { error } = await supabase
         .from('macros')
         .delete()
-        .eq('id', macroId);
+        .eq('id', macroId)
+        .eq('client_id', client_id)
+        .select()
+        .single();
 
       if (error) {
         console.error('[MACROS] Delete failed:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      if (!data) {
+        return res.status(404).json({ error: 'Macro not found or access denied' });
       }
 
       console.log('[MACROS] Macro deleted successfully');
       res.json({ success: true });
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -317,23 +363,33 @@ router.delete('/deleteMacroGroup',
   async (req, res) => {
     try {
       const groupId = req.body.groupId;
+      const client_id = req.user.client_id;
 
-      console.log('[MACROS] Deleting group', groupId);
+      console.log('[MACROS] Deleting group', groupId, 'for client:', client_id);
 
-      const { error } = await supabase
+      // Delete group - include client_id check for security
+      const { data, error } = await supabase
         .from('macro_groups')
         .delete()
-        .eq('id', groupId);
+        .eq('id', groupId)
+        .eq('client_id', client_id)
+        .select()
+        .single();
 
       if (error) {
         console.error('[MACROS] Delete failed:', error.message);
+        return res.status(500).json({ success: false, error: 'Database error' });
+      }
+
+      if (!data) {
+        return res.status(404).json({ success: false, error: 'Group not found or access denied' });
       }
 
       console.log('[MACROS] Group deleted successfully');
-      res.json({success: true});
+      res.json({ success: true });
     } catch (err) {
       console.error('[MACROS] Failed to delete macro group', err.message);
-      res.status(500).json({ success: false, error: 'Severfehler'});
+      res.status(500).json({ success: false, error: 'Server error' });
     }
   }
 );

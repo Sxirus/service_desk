@@ -28,6 +28,11 @@ interface BaseEmail {
 }
 
 /**
+ * Ticket status lifecycle states
+ */
+export type TicketStatus = 'new' | 'open' | 'waiting' | 'resolved';
+
+/**
  * Incoming email from customer
  */
 export interface IncomingEmail extends BaseEmail {
@@ -35,8 +40,8 @@ export interface IncomingEmail extends BaseEmail {
   subject: string;
   html_content?: string;
   email_address: string;
-  read: boolean;
-  processing_status: string;
+  status: TicketStatus;
+  read?: boolean; // Deprecated, kept for backwards compatibility
   received_by?: string;
   to_email_address?: string;
 }
@@ -47,6 +52,8 @@ export interface IncomingEmail extends BaseEmail {
 export interface SentEmail extends BaseEmail {
   type: 'sent';
   employee_id: string;
+  agent_name?: string;
+  agent_avatar_url?: string | null;
 }
 
 /**
@@ -62,6 +69,7 @@ export interface Customer {
   name: string;
   client_id: string;
   employee_id: string | null;
+  group_id?: number | null;
 }
 
 /**
@@ -144,6 +152,13 @@ export interface BrowserTokens {
 }
 
 /**
+ * Props for new message separator component
+ */
+export interface NewMessageSeparatorProps {
+  newMessageCount: number;
+}
+
+/**
  * Props for email thread component
  */
 export interface EmailThreadProps {
@@ -160,6 +175,9 @@ export interface ReplyAreaProps {
   customerId: string;
   signature: string;
   threadEmailAddress: string | null;
+  agentName?: string;
+  agentAvatarUrl?: string | null;
+  composeMode?: boolean;
   onEmailSent?: () => void;
 }
 

@@ -1,0 +1,66 @@
+{
+  "required": "Dieses Feld ist erforderlich",
+  "email": {
+    "invalid": "Bitte geben Sie eine gültige E-Mail-Adresse ein",
+    "required": "E-Mail ist erforderlich"
+  },
+  "password": {
+    "required": "Passwort ist erforderlich",
+    "minLength": "Passwort muss mindestens {{min}} Zeichen lang sein",
+    "maxLength": "Passwort darf höchstens {{max}} Zeichen lang sein",
+    "weak": "Passwort ist zu schwach",
+    "uppercase": "Passwort muss mindestens einen Großbuchstaben enthalten",
+    "lowercase": "Passwort muss mindestens einen Kleinbuchstaben enthalten",
+    "number": "Passwort muss mindestens eine Zahl enthalten",
+    "special": "Passwort muss mindestens ein Sonderzeichen enthalten",
+    "mismatch": "Passwörter stimmen nicht überein"
+  },
+  "name": {
+    "required": "Name ist erforderlich",
+    "minLength": "Name muss mindestens {{min}} Zeichen lang sein",
+    "maxLength": "Name darf höchstens {{max}} Zeichen lang sein"
+  },
+  "phone": {
+    "invalid": "Bitte geben Sie eine gültige Telefonnummer ein"
+  },
+  "url": {
+    "invalid": "Bitte geben Sie eine gültige URL ein"
+  },
+  "number": {
+    "invalid": "Bitte geben Sie eine gültige Zahl ein",
+    "min": "Wert muss mindestens {{min}} sein",
+    "max": "Wert darf höchstens {{max}} sein",
+    "positive": "Wert muss eine positive Zahl sein",
+    "integer": "Wert muss eine ganze Zahl sein"
+  },
+  "date": {
+    "invalid": "Bitte geben Sie ein gültiges Datum ein",
+    "past": "Datum muss in der Vergangenheit liegen",
+    "future": "Datum muss in der Zukunft liegen",
+    "before": "Datum muss vor {{date}} liegen",
+    "after": "Datum muss nach {{date}} liegen"
+  },
+  "file": {
+    "required": "Bitte wählen Sie eine Datei aus",
+    "size": "Dateigröße muss kleiner als {{size}} sein",
+    "type": "Dateityp wird nicht unterstützt",
+    "maxFiles": "Maximal {{max}} Dateien erlaubt"
+  },
+  "select": {
+    "required": "Bitte wählen Sie eine Option aus"
+  },
+  "checkbox": {
+    "required": "Dieses Kontrollkästchen ist erforderlich"
+  },
+  "textarea": {
+    "minLength": "Text muss mindestens {{min}} Zeichen lang sein",
+    "maxLength": "Text darf höchstens {{max}} Zeichen lang sein"
+  },
+  "array": {
+    "minItems": "Mindestens {{min}} Elemente erforderlich",
+    "maxItems": "Maximal {{max}} Elemente erlaubt"
+  },
+  "captcha": {
+    "required": "Bitte das CAPTCHA ausfüllen"
+  }
+}

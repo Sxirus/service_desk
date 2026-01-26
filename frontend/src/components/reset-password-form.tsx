@@ -2,6 +2,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,7 @@ declare global {
 type Props = React.ComponentPropsWithoutRef<"form"> & { siteKey: string };
 
 export function ResetPasswordForm({ className, siteKey, ...props }: Props) {
+  const { t } = useTranslation('auth');
   const formRef = React.useRef<HTMLFormElement | null>(null);
   const captchaRef = React.useRef<HTMLDivElement | null>(null);
   const widgetIdRef = React.useRef<string | null>(null);
@@ -71,7 +73,7 @@ export function ResetPasswordForm({ className, siteKey, ...props }: Props) {
     try {
       if (!captchaToken) {
         setLoading(false);
-        return setError("Please complete the CAPTCHA.");
+        return setError(t('login.captchaRequired'));
       }
 
       const formData = new FormData(formRef.current!);
@@ -81,20 +83,20 @@ export function ResetPasswordForm({ className, siteKey, ...props }: Props) {
 
       if (!result?.data?.success) {
         if (result?.data?.message?.includes("captcha protection")) {
-          setError("Verification failed. Please try again.");
+          setError(t('errors.invalidCredentials'));
           window.turnstile?.reset?.(widgetIdRef.current || undefined);
           setCaptchaToken("");
         } else {
-          setError("Reset failed. Please check your email and try again.");
+          setError(t('errors.invalidCredentials'));
         }
         setLoading(false);
         return;
       }
 
-      setSuccess("If the email exists, a reset link has been sent.");
+      setSuccess(t('resetPassword.checkEmail'));
       setLoading(false);
     } catch {
-      setError("Something went wrong. Please try again later.");
+      setError(t('errors.invalidCredentials'));
       window.turnstile?.reset?.(widgetIdRef.current || undefined);
       setCaptchaToken("");
       setLoading(false);
@@ -109,9 +111,9 @@ export function ResetPasswordForm({ className, siteKey, ...props }: Props) {
       {...props}
     >
       <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-2xl font-bold">Reset Password</h1>
+        <h1 className="text-2xl font-bold">{t('resetPassword.title')}</h1>
         <p className="text-balance text-sm text-muted-foreground">
-          Please enter your email. We will send you a link to reset your password.
+          {t('resetPassword.subtitle')}
         </p>
       </div>
 
@@ -121,12 +123,12 @@ export function ResetPasswordForm({ className, siteKey, ...props }: Props) {
 
         <div className="grid gap-2">
           <div className="flex items-center">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">{t('resetPassword.emailLabel')}</Label>
             <a href="/" className="ml-auto text-sm underline-offset-4 hover:underline">
-              Back to login?
+              {t('resetPassword.backToLogin')}
             </a>
           </div>
-          <Input id="email" name="email" type="email" placeholder="youremail@example.com" required />
+          <Input id="email" name="email" type="email" placeholder={t('resetPassword.emailPlaceholder')} required />
         </div>
 
         {/* Captcha-Container */}
@@ -136,7 +138,7 @@ export function ResetPasswordForm({ className, siteKey, ...props }: Props) {
         {success ? <p className="text-sm text-green-600">{success}</p> : null}
 
         <Button type="submit" className="w-full cursor-pointer" disabled={loading}>
-          {loading ? "Sending E-Mail..." : "Reset Password"}
+          {loading ? t('resetPassword.submitting') : t('resetPassword.submitButton')}
         </Button>
       </div>
     </form>

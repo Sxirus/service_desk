@@ -9,6 +9,7 @@
  */
 
 import { createBrowserClient } from '@supabase/ssr';
+import { getApiUrl } from '../lib/api-config';
 
 /**
  * Create a client-side Supabase client
@@ -32,7 +33,7 @@ async function getSession() {
  * API Client for making authenticated requests to your backend
  */
 export const apiClient = {
-  baseURL: import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api',
+  baseURL: getApiUrl('/api'),
 
   /**
    * Make an authenticated API request
@@ -121,6 +122,19 @@ export const apiClient = {
   },
 
   /**
+   * PATCH request
+   * @param endpoint - The API endpoint
+   * @param data - Request body data
+   * @returns Response JSON
+   */
+  async patch(endpoint: string, data?: any) {
+    return this.request(endpoint, {
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  },
+
+  /**
    * DELETE request
    * @param endpoint - The API endpoint
    * @returns Response JSON
@@ -173,10 +187,9 @@ export async function serverApiCall(
   accessToken: string,
   options: RequestInit = {}
 ) {
-  const baseURL = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
   const url = endpoint.startsWith('http') 
     ? endpoint 
-    : `${baseURL}${endpoint}`;
+    : getApiUrl(`/api${endpoint}`);
 
   const response = await fetch(url, {
     ...options,

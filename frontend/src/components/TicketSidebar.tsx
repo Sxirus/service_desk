@@ -17,12 +17,15 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { MacroSearch } from './macroSearch.jsx';
 import { Assign } from './zuweisung.jsx';
 import { ShopifyOrders } from './ShopifyOrders';
 import { CustomerInfo } from './CustomerInfo';
 import type { TicketSidebarProps } from '@/types/ticket.types';
 import type { ShopifyClientData } from '@/types/shopify.types';
+import { apiClient } from '@/utils/api';
+import { toast } from 'sonner';
 
 /**
  * Intersection Observer hook for lazy loading
@@ -109,11 +112,73 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
   assignedEmployeeName,
   macroContext
 }) => {
+  const { t } = useTranslation('dashboard');
   const shopifyRef = useRef<HTMLDivElement>(null);
   const isShopifyVisible = useIntersectionObserver(shopifyRef, {
     threshold: 0.1,
     rootMargin: '100px'
   });
+
+  const [groups, setGroups] = useState<Array<{id: number; name: string; description: string | null}>>([]);
+  const [assignedName, setAssignedName] = useState<string | null>(null);
+  const [combinedAssignments, setCombinedAssignments] = useState<Array<{title: string; text: string; type: 'employee' | 'group'}>>([]);
+
+  // Load groups on mount
+  useEffect(() => {
+    const loadGroups = async () => {
+      try {
+        const response = await apiClient.get('/groups/getGroups');
+        if (response.success) {
+          setGroups(response.data || []);
+        }
+      } catch (error) {
+        console.error('[TicketSidebar] Failed to load groups:', error);
+      }
+    };
+    
+    loadGroups();
+  }, []);
+
+  // Combine employees and groups into single list, determine assigned name
+  useEffect(() => {
+    // Create combined list with type indicators
+    const employeeItems = employees.map(emp => ({
+      title: `👤 ${emp.title}`,
+      text: `employee:${emp.text}`,
+      type: 'employee' as const
+    }));
+
+    const groupItems = groups.map(group => ({
+      title: `👥 ${group.name}`,
+      text: `group:${group.id}`,
+      type: 'group' as const
+    }));
+
+    setCombinedAssignments([...groupItems, ...employeeItems]);
+
+    // Determine what is currently assigned
+    // Priority: group_id > employee_id
+    if (customer.group_id) {
+      // Only update if we have groups loaded
+      if (groups.length > 0) {
+        const assignedGroup = groups.find(g => g.id === customer.group_id);
+        if (assignedGroup) {
+          setAssignedName(`👥 ${assignedGroup.name}`);
+          console.log('[TicketSidebar] Assigned group found:', assignedGroup.name);
+        } else {
+          console.warn('[TicketSidebar] Group ID', customer.group_id, 'not found in groups list');
+        }
+      } else {
+        console.log('[TicketSidebar] Groups not yet loaded, waiting...');
+      }
+    } else if (assignedEmployeeName) {
+      setAssignedName(`👤 ${assignedEmployeeName}`);
+      console.log('[TicketSidebar] Assigned employee found:', assignedEmployeeName);
+    } else {
+      setAssignedName(null);
+      console.log('[TicketSidebar] No assignment found');
+    }
+  }, [employees, groups, customer.group_id, assignedEmployeeName]);
 
   /**
    * Adapt types for legacy components that expect numeric IDs
@@ -134,33 +199,103 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
   };
 
   /**
-   * Handle employee assignment event from child component
+   * Handle assignment event from child component (employee or group)
    */
   useEffect(() => {
     const handleAssignment = async (e: Event) => {
       const customEvent = e as CustomEvent;
-      const employeeId = customEvent?.detail?.text;
+      const assignmentValue = customEvent?.detail?.text;
 
-      if (employeeId === undefined || employeeId === null) {
-        console.log('[TicketSidebar] Missing employeeId in assignment event');
+      if (assignmentValue === undefined || assignmentValue === null) {
+        console.log('[TicketSidebar] Missing assignment value in event');
         return;
       }
 
-      console.log('[TicketSidebar] Employee assignment:', employeeId);
+      // Parse the assignment value to determine type
+      const [type, id] = assignmentValue.split(':');
       
-      // Event handled by Assign component's internal logic
-      // This listener is for any additional sidebar-level logic if needed
+      if (type === 'employee') {
+        console.log('[TicketSidebar] Assigning employee:', id, 'to customer:', customer.id);
+        
+        try {
+          const response = await apiClient.post('/client/assignEmployee', {
+            employee_id: id,
+            customer_id: customer.id
+          });
+          
+          if (response.success) {
+            console.log('[TicketSidebar] Employee assigned successfully');
+            // Update local state
+            const assignedEmp = employees.find(e => e.text === id);
+            if (assignedEmp) {
+              setAssignedName(`👤 ${assignedEmp.title}`);
+            }
+            toast.success(assignedEmp ? t('tickets.assignedToEmployee', { name: assignedEmp.title }) : t('tickets.employeeAssignedSuccess'));
+          } else {
+            console.error('[TicketSidebar] Employee assignment failed:', response.error);
+            toast.error(t('tickets.failedToAssignEmployee'));
+          }
+        } catch (error) {
+          console.error('[TicketSidebar] Failed to assign employee:', error);
+          toast.error(t('tickets.failedToAssignEmployee'));
+        }
+      } else if (type === 'group') {
+        console.log('[TicketSidebar] Assigning group:', id, 'to customer:', customer.id);
+        
+        try {
+          const response = await apiClient.post('/client/assignGroup', {
+            group_id: id,
+            customer_id: customer.id
+          });
+          
+          if (response.success) {
+            console.log('[TicketSidebar] Group assigned successfully');
+            // Update local state
+            const assignedGroup = groups.find(g => g.id === parseInt(id));
+            if (assignedGroup) {
+              setAssignedName(`👥 ${assignedGroup.name}`);
+            }
+            toast.success(assignedGroup ? t('tickets.assignedToGroup', { name: assignedGroup.name }) : t('tickets.groupAssignedSuccess'));
+          } else {
+            console.error('[TicketSidebar] Group assignment failed:', response.error);
+            toast.error(t('tickets.failedToAssignGroup'));
+          }
+        } catch (error) {
+          console.error('[TicketSidebar] Failed to assign group:', error);
+          toast.error(t('tickets.failedToAssignGroup'));
+        }
+      } else if (type === 'unassign') {
+        console.log('[TicketSidebar] Unassigning customer:', customer.id);
+        
+        try {
+          const response = await apiClient.post('/client/unassign', {
+            customer_id: customer.id
+          });
+          
+          if (response.success) {
+            console.log('[TicketSidebar] Unassigned successfully');
+            setAssignedName(null);
+            toast.success(t('tickets.assignmentRemoved'));
+          } else {
+            console.error('[TicketSidebar] Unassign failed:', response.error);
+            toast.error(t('tickets.failedToRemoveAssignment'));
+          }
+        } catch (error) {
+          console.error('[TicketSidebar] Failed to unassign:', error);
+          toast.error(t('tickets.failedToRemoveAssignment'));
+        }
+      }
     };
 
     window.addEventListener('Zuweisung', handleAssignment);
     return () => window.removeEventListener('Zuweisung', handleAssignment);
-  }, []);
+  }, [customer.id, groups, employees]);
 
   return (
     <aside 
-      className="w-80 shrink-0 border-l bg-muted/30 flex flex-col overflow-hidden"
+      className="w-[22rem] shrink-0 border-l bg-muted/30 flex flex-col overflow-hidden"
       role="complementary"
-      aria-label="Ticket information sidebar"
+      aria-label={t('tickets.ticketInfoSidebar')}
     >
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         
@@ -180,13 +315,13 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
                   clientData={legacyClientData}
                 />
               ) : (
-                <SidebarCard title="Shopify Orders" id="shopify-orders">
+                <SidebarCard title={t('tickets.shopifyOrders')} id="shopify-orders">
                   <div 
                     className="text-sm text-muted-foreground py-4 text-center"
                     role="status"
                     aria-live="polite"
                   >
-                    Loading orders...
+                    {t('tickets.loadingOrders')}
                   </div>
                 </SidebarCard>
               )
@@ -194,25 +329,25 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
         </div>
 
         {/* Quick Responses / Macros */}
-        <SidebarCard title="Quick Responses" id="quick-responses">
+        <SidebarCard title={t('tickets.quickResponses')} id="quick-responses">
           <MacroSearch
             items={macros}
             groups={macroGroups}
-            placeholder="Search macros..."
+            placeholder={t('tickets.searchMacros')}
             eventName="MacroChoosen"
             customerID={customer.id}
             ctx={macroContext}
           />
         </SidebarCard>
 
-        {/* Employee Assignment */}
-        <SidebarCard title="Assign Employee" id="assign-employee">
+        {/* Assignment (Employee or Group) */}
+        <SidebarCard title={t('tickets.assignTo')} id="assign-to">
           <Assign
-            items={employees}
-            placeholder="Search employee..."
+            items={combinedAssignments}
+            placeholder={t('tickets.searchEmployeeOrGroup')}
             eventName="Zuweisung"
             customerId={customer.id}
-            assigned={assignedEmployeeName}
+            assigned={assignedName}
           />
         </SidebarCard>
       </div>

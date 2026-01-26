@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -30,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import { IconPlus } from "@tabler/icons-react";
 import { actions } from "astro:actions";
+import { SimplePrivateAvatar } from "@/components/ui/private-avatar";
 
 interface Role {
   id: number;
@@ -41,6 +43,8 @@ export interface User {
   name: string;
   email: string;
   role: string;
+  avatar_url?: string | null;
+  disabled?: boolean;
 }
 
 interface UserDialogProps {
@@ -56,19 +60,29 @@ interface DeleteUserDialogProps {
   user: User;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
+  mode?: 'delete' | 'disable' | 'enable';
 }
 
 // Delete Dialog Component
-export function DeleteUserDialog({ user, isOpen, onOpenChange }: DeleteUserDialogProps) {
+export function DeleteUserDialog({ user, isOpen, onOpenChange, mode = 'delete' }: DeleteUserDialogProps) {
+  const { t } = useTranslation('manage');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleDelete = async () => {
+  const handleAction = async () => {
     setIsLoading(true);
     
     try {
       const formData = new FormData();
       formData.append('id', user.id);
-      const result = await actions.deleteEmployee(formData);
+      
+      let result;
+      if (mode === 'delete') {
+        result = await actions.deleteEmployee(formData);
+      } else if (mode === 'disable') {
+        result = await actions.disableEmployee(formData);
+      } else {
+        result = await actions.enableEmployee(formData);
+      }
       
       // Close dialog and reload page
       onOpenChange(false);
@@ -78,31 +92,52 @@ export function DeleteUserDialog({ user, isOpen, onOpenChange }: DeleteUserDialo
       location.href = url.toString();
       
     } catch (err) {
-      console.error('Error deleting user:', err);
-      alert("Error deleting user");
+      console.error('Error:', err);
+      alert(t(`users.${mode}Error`));
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const getTitle = () => {
+    if (mode === 'delete') return t('users.deleteUser');
+    if (mode === 'disable') return t('users.disableUser');
+    return t('users.enableUser');
+  };
+
+  const getDescription = () => {
+    if (mode === 'delete') {
+      return t('users.deleteConfirmation', { name: user.name, email: user.email });
+    }
+    if (mode === 'disable') {
+      return t('users.disableConfirmation', { name: user.name, email: user.email });
+    }
+    return t('users.enableConfirmation', { name: user.name, email: user.email });
+  };
+
+  const getButtonText = () => {
+    if (mode === 'delete') return isLoading ? t('users.deleting') : t('common.delete');
+    if (mode === 'disable') return isLoading ? t('users.disabling') : t('users.disable');
+    return isLoading ? t('users.enabling') : t('users.enable');
   };
 
   return (
     <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete User</AlertDialogTitle>
+          <AlertDialogTitle>{getTitle()}</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to delete the user "{user.name}" ({user.email})? 
-            This action cannot be undone.
+            {getDescription()}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isLoading}>{t('common.cancel')}</AlertDialogCancel>
           <AlertDialogAction 
-            onClick={handleDelete} 
+            onClick={handleAction} 
             disabled={isLoading}
-            className="bg-red-600 hover:bg-red-700"
+            className={mode === 'delete' ? 'bg-red-600 hover:bg-red-700' : ''}
           >
-            {isLoading ? "Deleting..." : "Delete"}
+            {getButtonText()}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -112,6 +147,7 @@ export function DeleteUserDialog({ user, isOpen, onOpenChange }: DeleteUserDialo
 
 // Main User Dialog (Create/Edit)
 export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenChange }: UserDialogProps) {
+  const { t } = useTranslation('manage');
   const [dialogOpen, setDialogOpen] = useState(isOpen);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -155,7 +191,7 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
     e.preventDefault();
     
     if (!formData.email || !formData.name || !formData.role_id) {
-      alert('Please fill in all fields.');
+      alert(t('users.fillAllFields'));
       return;
     }
 
@@ -171,14 +207,14 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
         formDataObj.append('id', user.id);
         const result = await actions.updateEmployee(formDataObj);
         if (!result?.data?.success) {
-            alert(result?.data?.message ?? "Error updating user");
+            alert(result?.data?.message ?? t('users.updateError'));
             return;
         }
 
       } else {
         const result = await actions.createEmployee(formDataObj);
         if (!result?.data?.success) {
-          alert(result?.data?.message ?? "Error creating user");
+          alert(result?.data?.message ?? t('users.createError'));
           return;
         }
       }
@@ -193,7 +229,7 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
       
     } catch (err) {
       console.error(err);
-      alert("Unexpected error");
+      alert(t('common.unexpectedError'));
       
       const url = new URL(location.href);
       url.search = "";
@@ -222,23 +258,35 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
       <form onSubmit={handleSubmit}>
         <DialogHeader>
           <DialogTitle>
-            {mode === 'create' ? 'Create New User' : 'Edit User'}
+            {mode === 'create' ? t('users.addTeamMember') : t('users.editTeamMember')}
           </DialogTitle>
           <DialogDescription>
             {mode === 'create' 
-              ? 'Enter the details for the new user. All fields are required.'
-              : 'Edit user details. All fields are required.'
+              ? t('users.addMemberDescription')
+              : t('users.editMemberDescription')
             }
           </DialogDescription>
         </DialogHeader>
         
         <div className="grid gap-4 py-4">
+          {/* Avatar display for edit mode */}
+          {mode === 'edit' && user && (
+            <div className="flex justify-center pb-2">
+              <SimplePrivateAvatar
+                src={user.avatar_url}
+                name={user.name}
+                className="h-16 w-16"
+                fallbackClassName="text-xl bg-primary/10 text-primary"
+              />
+            </div>
+          )}
+          
           <div className="grid gap-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">{t('users.email')}</Label>
             <Input
               id="email"
               type="email"
-              placeholder="example@company.com"
+              placeholder={t('users.emailPlaceholder')}
               value={formData.email}
               onChange={(e) => handleInputChange('email', e.target.value)}
               required
@@ -247,11 +295,11 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
           </div>
           
           <div className="grid gap-2">
-            <Label htmlFor="name">Name</Label>
+            <Label htmlFor="name">{t('users.name')}</Label>
             <Input
               id="name"
               type="text"
-              placeholder="John Doe"
+              placeholder={t('users.namePlaceholder')}
               value={formData.name}
               onChange={(e) => handleInputChange('name', e.target.value)}
               required
@@ -260,7 +308,7 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
           </div>
           
           <div className="grid gap-2">
-            <Label htmlFor="role">Role</Label>
+            <Label htmlFor="role">{t('users.role')}</Label>
             <Select 
               value={formData.role_id} 
               onValueChange={(value) => handleInputChange('role_id', value)}
@@ -268,7 +316,7 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
               disabled={isLoading}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select role" />
+                <SelectValue placeholder={t('users.selectRole')} />
               </SelectTrigger>
               <SelectContent>
                 {roles.map((role) => (
@@ -288,15 +336,15 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
             onClick={() => setDialogOpen(false)}
             disabled={isLoading}
           >
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button 
             type="submit" 
             disabled={isLoading}
           >
             {isLoading 
-              ? (mode === 'create' ? "Creating..." : "Saving...") 
-              : (mode === 'create' ? "Create User" : "Save Changes")
+              ? (mode === 'create' ? t('users.creating') : t('users.saving')) 
+              : (mode === 'create' ? t('users.createUser') : t('common.saveChanges'))
             }
           </Button>
         </DialogFooter>
@@ -332,14 +380,15 @@ export function UserDialog({ roles, user, mode, trigger, isOpen = false, onOpenC
 
 // Create User Dialog (for compatibility with existing implementation)
 export default function CreateUserDialog({ roles }: { roles: Role[] }) {
+  const { t } = useTranslation('manage');
   return (
     <UserDialog 
       roles={roles} 
       mode="create"
       trigger={
-        <Button variant="outline" size="sm">
-          <IconPlus className="w-4 h-4 mr-2" />
-          Create User
+        <Button size="sm" className="gap-2">
+          <IconPlus className="w-4 h-4" />
+          {t('users.addMember')}
         </Button>
       }
     />

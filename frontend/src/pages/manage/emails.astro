@@ -1,0 +1,70 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import EmailAccountsPanel from "../../components/EmailAccountsPanel";
+import AdminShell from "../../components/AdminShell";
+import { createClient } from "../../lib/supabase";
+import { getCompletePageContext } from "../../lib/auth-helpers";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const { t } = getTranslations(lang, 'manage');
+const tCommon = getTranslations(lang, 'common');
+
+// Initialize Supabase client
+const supabase = createClient({
+  request: Astro.request,
+  cookies: Astro.cookies
+});
+
+// Get authentication context
+const pageContext = await getCompletePageContext(supabase, Astro.cookies);
+
+if (!pageContext) {
+  return Astro.redirect("/");
+}
+
+const { authContext, sidebarData } = pageContext;
+
+// Verify admin role
+if (!authContext.isAdmin) {
+  return Astro.redirect("/dashboard");
+}
+
+// Fetch primary email ID from client
+let primaryEmailId: number | null = null;
+try {
+    const { data: client } = await supabase
+        .from('clients')
+        .select('primary_email_id')
+        .eq('id', authContext.employee.client_id)
+        .single();
+    
+    primaryEmailId = client?.primary_email_id ?? null;
+} catch (e) {
+    console.error('[emails-page] Error fetching primary email id:', e);
+}
+---
+
+<BaseLayout title={t('emailAccounts.title')}>
+  <AdminShell
+    client:load
+    user={sidebarData.user}
+    firstTeam={sidebarData.team ?? undefined}
+    crumbParentLabel={tCommon.t('sidebar.administration')}
+    crumbParentHref="/manage"
+    crumbCurrent={t('emailAccounts.title')}
+    isAdmin={authContext.isAdmin}
+    isPlatformAdmin={pageContext.isPlatformAdmin}
+    currentPath="/manage/emails"
+    employeeId={sidebarData.employeeId}
+    clientId={sidebarData.clientId}
+    subscriptionTier={sidebarData.subscriptionTier}
+  >
+    <EmailAccountsPanel 
+        client:load 
+        clientId={authContext.employee.client_id} 
+        primaryEmailId={primaryEmailId} 
+    />
+  </AdminShell>
+</BaseLayout>

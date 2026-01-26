@@ -2,19 +2,15 @@
 
 import * as React from "react"
 import {
-  AudioWaveform,
-  BookOpen,
   Bot,
-  Command,
-  Frame,
   GalleryVerticalEnd,
-  Map,
-  PieChart,
   Settings2,
-  SquareTerminal,
   Users,
   Home,
+  Inbox,
+  Shield,
 } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 import { NavMain } from "@/components/nav-main"
 import { NavProjects } from "@/components/nav-projects"
@@ -39,26 +35,47 @@ type FirstTeamOverride = {
   plan?: string | null
 }
 
+type InboxType = {
+  id: number
+  name: string
+  description?: string | null
+}
+
 type Props = React.ComponentProps<typeof Sidebar> & {
   userOverride?: UserOverride
   firstTeamOverride?: FirstTeamOverride
   isAdmin?: boolean
+  isPlatformAdmin?: boolean
   currentPath?: string
+  accessibleInboxes?: InboxType[]
+  employeeId?: number
+  clientId?: number
+  subscriptionTier?: string
 }
 
 export function AppSidebar({ 
   userOverride, 
   firstTeamOverride, 
   isAdmin = false,
+  isPlatformAdmin = false,
   currentPath = "/",
+  accessibleInboxes = [],
+  employeeId = 0,
+  clientId = 0,
+  subscriptionTier = "free",
   ...props 
 }: Props) {
+  const { t } = useTranslation('common');
+  
   // Userdaten befüllen
+  const userName = userOverride?.name && userOverride.name.trim() 
+    ? userOverride.name 
+    : "User"
   const user = {
-    name: userOverride?.name ?? "User",
+    name: userName,
     email: userOverride?.email ?? "user@example.com",
     avatar: userOverride?.avatar ?? "",
-    initials: getInitials(userOverride?.name ?? "User"),
+    initials: getInitials(userName),
   }
 
   function getInitials(name: string) {
@@ -71,46 +88,101 @@ export function AppSidebar({
 
   // Navigation Items basierend auf Rolle und aktueller Seite
   const getNavItems = () => {
+    // Build inbox items array with Dashboard and accessible inboxes
+    const inboxItems = [
+      { title: t('sidebar.yourAssignedTickets'), url: "/dashboard" },
+      ...accessibleInboxes.map(inbox => ({
+        title: inbox.name,
+        url: `/inboxes/${inbox.id}`,
+        inboxId: inbox.id
+      }))
+    ];
+
     const baseItems = [
       {
-        title: "Service Desk",
+        title: t('sidebar.inbox'),
         url: "/",
         icon: Home,
-        isActive: currentPath === "/" || currentPath === "/dashboard" || currentPath == '/mail_list',
-        items: [
-          { title: "Dashboard", url: "/dashboard" },
-          { title: 'All Mails', url: '/mail_list' },
-        ],
+        isActive: currentPath === "/" || currentPath === "/dashboard" || currentPath.startsWith("/inboxes") || currentPath.startsWith("/tickets"),
+        items: inboxItems,
       },
     ];
 
     // Administration nur für Admins
     if (isAdmin) {
       baseItems.push({
-        title: "Administration",
+        title: t('sidebar.administration'),
         url: "/manage",
         icon: Bot,
         isActive: currentPath.startsWith("/manage"),
         items: [
           {
-            title: "General Settings",
+            title: t('sidebar.generalSettings'),
             url: "/manage/settings"
           },
           { 
-            title: "Users", 
+            title: t('sidebar.usersGroups'), 
             url: "/manage/users",
           },
           { 
-            title: "Company", 
+            title: t('sidebar.billingData'), 
             url: "/manage/client",
           },
           { 
-            title: "Shopify Integration", 
+            title: t('sidebar.integrations'), 
             url: "/manage/shopify",
           },
           {
-            title: "Macro Editor",
+            title: t('sidebar.macros'),
             url: "/manage/macro"
+          },
+          {
+            title: t('sidebar.analytics'),
+            url: "/manage/analytics"
+          },
+          {
+            title: t('sidebar.inboxes'),
+            url: "/manage/inboxes"
+          },
+          {
+            title: t('sidebar.emailAccounts'),
+            url: "/manage/emails"
+          },
+          {
+            title: t('sidebar.subscription'),
+            url: "/manage/subscription"
+          }
+        ],
+      });
+    }
+
+    // Platform Management for platform admins
+    if (isPlatformAdmin) {
+      baseItems.push({
+        title: t('sidebar.platform'),
+        url: "/platform",
+        icon: Shield,
+        isActive: currentPath.startsWith("/platform"),
+        items: [
+          {
+            title: t('sidebar.dashboard'),
+            url: "/platform/dashboard"
+          },
+          {
+            title: t('sidebar.clients'),
+            url: "/platform/clients"
+          },
+          {
+            title: t('sidebar.billing'),
+            url: "/platform/billing"
+          },
+          {
+            title: t('sidebar.analytics'),
+            url: "/platform/analytics"
+          },
+          {
+            title: t('sidebar.platformAdmins'),
+            url: "/platform/admins"
           }
         ],
       });
@@ -137,7 +209,13 @@ export function AppSidebar({
         <NavMain items={getNavItems()} />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={user} />
+        <NavUser 
+          user={user} 
+          employeeId={employeeId}
+          clientId={clientId}
+          subscriptionTier={subscriptionTier}
+          isPlatformAdmin={isPlatformAdmin}
+        />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

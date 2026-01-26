@@ -1,9 +1,20 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { createClient } from "../lib/supabase.ts";
+import { checkPlatformAdmin } from "../lib/auth-helpers.ts";
+import { NewEmailPopover } from "@/components/NewEmailPopover";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+import { getApiUrl } from "../lib/api-config";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const { t } = getTranslations(lang, 'common');
+const { t: tDash } = getTranslations(lang, 'dashboard');
 
 // Sidebar Shell
 import AdminShell from "@/components/AdminShell";
+import LimitBanner from "@/components/LimitBanner";
+import { TicketsDataTableWithPresence } from "@/components/datatable/TicketsDataTableWithPresence";
 
 // Create Supabase client with server-side rendering support
 const supabase = createClient({
@@ -46,35 +57,54 @@ const client_id = me.client_id;
 
 // SERVER-SIDE API CALL with auth token
 // Note: Remove client_id from query - it comes from the auth token now
-const result_customers = await fetch(`http://localhost:3000/api/customers/getAssignedCustomers?employee_id=${me.id}`, {
-  headers: {
-    'Authorization': `Bearer ${session.access_token}`,
-    'Content-Type': 'application/json'
-  }
-});
+let customersJSON: any[] = [];
+let mails: any[] = [];
 
-const customersJSON = await result_customers.json();
-const customersData = customersJSON.data;
-const len = customersData.length;
-var customers: number[] = [];
-for (let i = 0; i < len; i++) {
-  var customer_id = customersData[i].id;
-  customers.push(customer_id);
+try {
+  const result_customers = await fetch(getApiUrl(`/api/customers/getAssignedCustomers?employee_id=${me.id}`), {
+    headers: {
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json'
+    }
+  });
+  
+  if (!result_customers.ok) {
+    console.error("[dashboard] Failed to fetch customers:", result_customers.status, await result_customers.text());
+  } else {
+    const customersResponse = await result_customers.json();
+    customersJSON = customersResponse.data || [];
+  }
+} catch (err) {
+  console.error("[dashboard] Error fetching customers:", err);
 }
 
-console.log(customers);
-const qs = customers.map(id => `ids=${encodeURIComponent(id)}`).join("&");
-console.log(qs);
+const customers: number[] = customersJSON.map((c: any) => c.id);
 
-// SERVER-SIDE API CALL with auth token
-const mailresult = await fetch(`http://localhost:3000/api/emails/getMailsbyCustomerIds?${qs}`, {
-  headers: {
-    'Authorization': `Bearer ${session.access_token}`,
-    'Content-Type': 'application/json'
+if (customers.length > 0) {
+  try {
+    const qs = customers.map(id => `ids=${encodeURIComponent(id)}`).join("&");
+    
+    const mailresult = await fetch(getApiUrl(`/api/emails/getMailsbyCustomerIds?${qs}`), {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!mailresult.ok) {
+      console.error("[dashboard] Failed to fetch mails:", mailresult.status, await mailresult.text());
+    } else {
+      const mailResponse = await mailresult.json();
+      mails = (mailResponse.data || []).map((mail: any) => ({
+        ...mail,
+        customer_name: mail.customers?.name || 'Unknown',
+        status: mail.status || 'new' // Fallback for backwards compatibility
+      }));
+    }
+  } catch (err) {
+    console.error("[dashboard] Error fetching mails:", err);
   }
-});
-const mailsJSON = await mailresult.json();
-const mails = mailsJSON.data
+}
 
 // Admin Rolle prüfen. Rolle 1 = admin
 const { data: myRoles, error: rolesErr } = await supabase
@@ -88,160 +118,117 @@ if (rolesErr) {
 
 const isAdmin = !!myRoles?.some((r) => r.role_id === 1);
 
+// Fetch employee's groups
+const { data: employeeGroupsJunction, error: groupsErr } = await supabase
+  .from('employee_group_members')
+  .select('group_id')
+  .eq('employee_id', me.id);
+
+if (groupsErr) {
+  console.error("[dashboard] groups lookup:", groupsErr.message);
+}
+
+let groupNames = '-';
+if (employeeGroupsJunction && employeeGroupsJunction.length > 0) {
+  const groupIds = employeeGroupsJunction.map(g => g.group_id);
+  const { data: groups } = await supabase
+    .from('employee_groups')
+    .select('name')
+    .in('id', groupIds);
+  groupNames = groups?.map(g => g.name).join(', ') || '-';
+}
+
 // Mitarbeiter-Info für Sidebar
 const { data: employees, error: empsErr } = await supabase
   .from("employees")
-  .select("id, name")
+  .select("id, name, avatar_url")
   .eq("client_id", me.client_id)
   .order("name");
 
 if (empsErr) console.error("[dashboard] employees list:", empsErr.message);
 
 // Sidebar Infos
-const meName = employees?.find((e) => e.id === me?.id)?.name ?? user?.email ?? "Nutzer";
+const myEmployee = employees?.find((e) => e.id === me?.id);
+const meName = myEmployee?.name && myEmployee.name.trim() 
+  ? myEmployee.name 
+  : user?.email ?? t('user');
 const sidebarUser = {
   name: meName,
   email: user?.email ?? null,
-  avatarUrl: null,
+  avatarUrl: myEmployee?.avatar_url ?? null,
 };
 
 // Team Eintrag
 let firstTeam = null as null | { name: string; plan?: string | null };
+let subscriptionTier = 'Free Version';
 try {
-  const { data: clientRow } = await supabase
+  const { data: clientRow, error: clientErr } = await supabase
     .from("clients")
-    .select("id, name")
+    .select("id, name, subscription_tier")
     .eq("id", me.client_id)
     .single();
+  
+  console.log("[dashboard] Client query result:", { clientRow, clientErr });
+  
   if (clientRow?.name) {
-    firstTeam = { name: clientRow.name, plan: "Enterprise" };
+    firstTeam = { name: clientRow.name, plan: "" };
   }
-} catch {}
+  if (clientRow?.subscription_tier) {
+    subscriptionTier = clientRow.subscription_tier;
+  }
+  
+  console.log("[dashboard] subscriptionTier set to:", subscriptionTier);
+} catch (err) {
+  console.error("[dashboard] Client fetch error:", err);
+}
+
+// Current user info for presence tracking
+const currentUserForPresence = {
+  id: String(me.id),
+  name: sidebarUser.name || 'Support Agent',
+  avatar_url: sidebarUser.avatarUrl || null
+};
+
+// Check if user is a platform admin
+const platformAdminContext = await checkPlatformAdmin(supabase, user.id);
+const isPlatformAdmin = platformAdminContext !== null;
 ---
 
-<BaseLayout title="Service Desk">
+<BaseLayout title={t('pages.dashboard.pageTitle')}>
   <AdminShell client:load
     user={sidebarUser}
     firstTeam={firstTeam ?? undefined}
-    crumbParentLabel="Service Desk"
+    crumbParentLabel={t('serviceDesk')}
     crumbParentHref="/"
-    crumbCurrent="Dashboard"
+    crumbCurrent={t('yourAssignedTickets')}
     isAdmin={isAdmin}
+    isPlatformAdmin={isPlatformAdmin}
     currentPath="/dashboard"
+    employeeId={me.id}
+    clientId={me.client_id}
+    subscriptionTier={subscriptionTier}
   >
     <div class="space-y-6">
-      <!-- Header Section -->
-      <div class="flex justify-between items-center">
-        <h1 class="text-3xl font-bold">Dashboard</h1>
-      </div>
+      <!-- Limit Banner -->
+      <LimitBanner client:load tier={subscriptionTier} />
 
-      <!-- User Info Card -->
-      <div class="bg-white p-6 rounded-lg shadow-sm border">
-        <h2 class="text-xl font-semibold mb-4">Willkommen, {meName}!</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+      <!-- My Tickets Section -->
+      <div class="bg-white mt-4 rounded-lg shadow-sm border p-6">
+        <div class="mb-4 flex items-start justify-between gap-4">
           <div>
-            <span class="font-medium">User ID:</span> {user.id}
+            <h2 class="text-xl font-semibold">{t('pages.dashboard.assignedTickets')}</h2>
+            <p class="text-sm text-gray-600 mt-1">{t('pages.dashboard.ticketsAssigned', { count: mails.length })}</p>
           </div>
-          <div>
-            <span class="font-medium">E-Mail:</span> {user.email}
-          </div>
-          <div>
-            <span class="font-medium">Rolle:</span> {isAdmin ? "Administrator" : "Benutzer"}
-          </div>
-          <div>
-            <span class="font-medium">Team:</span> {firstTeam?.name ?? "Nicht zugeordnet"}
-          </div>
-        </div>
-      </div>
-
-      <!-- Quick Actions Section (optional) -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="bg-white p-6 rounded-lg shadow-sm border">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <svg class="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <div class="ml-4">
-              <dt class="text-sm font-medium text-gray-500 truncate">Gesamte E-Mails</dt>
-              <dd class="text-2xl font-semibold text-gray-900">{mails.length}</dd>
-            </div>
-          </div>
-        </div>
-
-        <div class="bg-white p-6 rounded-lg shadow-sm border">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <svg class="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div class="ml-4">
-              <dt class="text-sm font-medium text-gray-500 truncate">Status</dt>
-              <dd class="text-2xl font-semibold text-gray-900">Aktiv</dd>
-            </div>
-          </div>
-        </div>
-
-        <div class="bg-white p-6 rounded-lg shadow-sm border">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <svg class="h-8 w-8 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </div>
-            <div class="ml-4">
-              <dt class="text-sm font-medium text-gray-500 truncate">Rolle</dt>
-              <dd class="text-lg font-semibold text-gray-900">{isAdmin ? "Admin" : "User"}</dd>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Recent Emails Section -->
-      <div class="bg-white rounded-lg shadow-sm border">
-        <div class="px-6 py-4 border-b">
-          <h2 class="text-xl font-semibold">Aktuelle E-Mails</h2>
-          <p class="text-sm text-gray-600 mt-1">Die 10 neuesten E-Mails</p>
+          <NewEmailPopover client:load from="dashboard" />
         </div>
         
-        <div class="p-6">
-          {mails.length > 0 ? (
-            <ul class="space-y-3">
-              {mails.map((mail: any) => (
-                <li class="group">
-                  <a 
-                    href={`/tickets/${mail.customer_id}`}
-                    class="flex items-center p-4 border border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors group-hover:shadow-sm"
-                  >
-                    <div class="flex-1">
-                      <div class="font-medium text-gray-900 truncate">
-                        {mail.subject}
-                      </div>
-                      <div class="text-sm text-gray-500 mt-1">
-                        Kunde ID: {mail.customer_id}
-                      </div>
-                    </div>
-                    <div class="ml-4">
-                      <svg class="w-5 h-5 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                      </svg>
-                    </div>
-                  </a>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div class="text-center py-12">
-              <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              <h3 class="mt-4 text-lg font-medium text-gray-900">Keine E-Mails vorhanden</h3>
-              <p class="mt-2 text-gray-500">Es sind momentan keine E-Mails verfügbar.</p>
-            </div>
-          )}
-        </div>
+        <TicketsDataTableWithPresence 
+          client:load
+          data={mails}
+          showAssignedColumn={false}
+          tableId="dashboard"
+          currentUser={currentUserForPresence}
+        />
       </div>
     </div>
   </AdminShell>

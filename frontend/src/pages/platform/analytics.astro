@@ -1,0 +1,141 @@
+---
+/**
+ * Platform Analytics Page
+ * View platform-wide analytics and growth metrics
+ */
+
+import Layout from "../../layouts/BaseLayout.astro";
+import { createClient } from "../../lib/supabase.ts";
+import { getPlatformOnlyContext, getCompletePageContext } from "../../lib/auth-helpers.ts";
+import PlatformShell from "@/components/platform/PlatformShell";
+import PlatformAnalytics from "@/components/platform/PlatformAnalytics";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const { t } = getTranslations(lang, 'platform');
+const tCommon = getTranslations(lang, 'common');
+
+// Initialize Supabase client
+const supabase = createClient({
+  request: Astro.request,
+  cookies: Astro.cookies,
+});
+
+console.log("[platform-analytics] Page accessed");
+
+// Check authentication
+let user: { id: string; email: string } | null = null;
+let hasClientLink = false;
+let clientName: string | undefined;
+
+const pageContext = await getCompletePageContext(supabase, Astro.cookies);
+if (pageContext && pageContext.isPlatformAdmin) {
+  user = pageContext.authContext.user;
+  hasClientLink = true;
+  clientName = pageContext.sidebarData.team?.name;
+} else {
+  const platformContext = await getPlatformOnlyContext(supabase, Astro.cookies);
+  if (platformContext) {
+    user = platformContext.user;
+    hasClientLink = false;
+  }
+}
+
+if (!user) {
+  console.error("[platform-analytics] Not a platform admin, redirecting");
+  return Astro.redirect("/");
+}
+
+// Get session for API calls
+const { data: { session } } = await supabase.auth.getSession();
+if (!session) {
+  console.error("[platform-analytics] No session, redirecting");
+  return Astro.redirect("/");
+}
+
+// Default analytics structure
+let analytics = {
+  overview: {
+    totalClients: 0,
+    paidClients: 0,
+    freeClients: 0,
+    totalEmployees: 0,
+    totalCustomers: 0,
+  },
+  activity: {
+    emailsSentThisMonth: 0,
+    emailsSentLastMonth: 0,
+    newClientsThisMonth: 0,
+    newClientsLastMonth: 0,
+  },
+  growth: {} as Record<string, number>,
+  recentActivity: [] as any[],
+};
+
+import { getApiUrl } from "../../lib/api-config";
+
+try {
+  // Fetch analytics from backend API
+  const analyticsResponse = await fetch(getApiUrl("/api/platform/analytics"), {
+    headers: {
+      "Authorization": `Bearer ${session.access_token}`,
+      "Content-Type": "application/json"
+    }
+  });
+
+  if (analyticsResponse.ok) {
+    const result = await analyticsResponse.json();
+    const data = result.data || {};
+    analytics.overview = {
+      totalClients: data.overview?.totalClients || 0,
+      paidClients: data.overview?.paidClients || 0,
+      freeClients: data.overview?.freeClients || 0,
+      totalEmployees: data.overview?.totalEmployees || 0,
+      totalCustomers: data.overview?.totalCustomers || 0,
+    };
+    analytics.activity = {
+      emailsSentThisMonth: data.overview?.emailsSentPeriod || 0,
+      emailsSentLastMonth: 0, // Would need additional API call for last month
+      newClientsThisMonth: data.overview?.newClientsThisMonth || 0,
+      newClientsLastMonth: 0,
+    };
+    analytics.growth = data.growth || {};
+  }
+
+  // Fetch audit log
+  const auditResponse = await fetch(getApiUrl("/api/platform/audit-log?limit=10"), {
+    headers: {
+      "Authorization": `Bearer ${session.access_token}`,
+      "Content-Type": "application/json"
+    }
+  });
+
+  if (auditResponse.ok) {
+    const auditResult = await auditResponse.json();
+    analytics.recentActivity = auditResult.data || [];
+  }
+
+  console.log("[platform-analytics] Analytics loaded");
+} catch (error) {
+  console.error("[platform-analytics] Failed to fetch analytics:", error);
+}
+---
+
+<Layout title={t('pages.analytics.pageTitle')}>
+  <PlatformShell
+    client:load
+    user={{ email: user.email }}
+    crumbParentLabel={tCommon.t('sidebar.platform')}
+    crumbParentHref="/platform"
+    crumbCurrent={tCommon.t('sidebar.analytics')}
+    currentPath="/platform/analytics"
+    hasClientLink={hasClientLink}
+    clientName={clientName}
+  >
+    <PlatformAnalytics 
+      client:load
+      analytics={analytics}
+    />
+  </PlatformShell>
+</Layout>

@@ -1,16 +1,18 @@
 import { interpreter } from "@/utils/macroInterpreter";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useTranslation } from 'react-i18next';
 
 export function MacroSearch({
   items,     // Macros: { id, client_id, title, text, group_id|null }
   groups,    // Groups: { id, client_id, name, group_id|null (parent) }
-  placeholder = "Suchen…",
+  placeholder,
   maxSuggestions = 3,
   minChars = 1,
   eventName = "appendToAstroInput",
   customerID,
   ctx
 }) {
+  const { t } = useTranslation('manage');
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
   const [open, setOpen] = useState(false);
@@ -19,6 +21,8 @@ export function MacroSearch({
   const listboxId = useMemo(() => `listbox-${customerID}`, [customerID]);
   const inputRef = useRef(null);
   const listRef = useRef(null);
+
+  const effectivePlaceholder = placeholder || t('macros.search.placeholder');
 
   // ---- utils ----
   const norm = (s) => (s || "").toString().trim().toLowerCase();
@@ -108,14 +112,14 @@ export function MacroSearch({
   const makeBackEntry = useCallback(() => {
     if (currentGroupId == null) return [];
     const parentId = groupById.get(currentGroupId)?.group_id ?? null;
-    const parentName = parentId == null ? "Alle (Root)" : (groupById.get(parentId)?.name || "Zurück");
+    const parentName = parentId == null ? t('macros.search.allRoot') : (groupById.get(parentId)?.name || t('macros.search.back'));
     return [{
       type: 'back',
       id: `back-${currentGroupId}`,
       title: `⬅︎ ${parentName}`,
       payload: { parentId }
     }];
-  }, [currentGroupId, groupById]);
+  }, [currentGroupId, groupById, t]);
 
   // Debounce für Suche
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -238,8 +242,8 @@ export function MacroSearch({
         <input
           ref={inputRef}
           type="search"
-          className="w-full bg-white rounded-2xl border border-gray-300 px-4 py-2 outline-none focus:ring-4 focus:ring-gray-200 shadow-sm"
-          placeholder={placeholder}
+          className="w-full bg-white cursor-pointer rounded-2xl border border-gray-300 px-4 py-2 outline-none focus:ring-4 focus:ring-gray-200 shadow-sm"
+          placeholder={effectivePlaceholder}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
@@ -284,13 +288,13 @@ export function MacroSearch({
               </li>
             ))}
             {suggestions.length === 0 && (
-              <li className="px-4 py-2 text-sm text-gray-500">Keine Treffer</li>
+              <li className="px-4 py-2 text-sm text-gray-500">{t('macros.search.noResults')}</li>
             )}
           </ul>
         )}
       </div>
       <p className="mt-2 text-xs text-gray-500">
-        Tippen zum Suchen. Ohne Eingabe: Gruppen & Makros browsen. ↑/↓ navigieren, Enter wählen.
+        {t('macros.search.helpText')}
       </p>
     </div>
   );

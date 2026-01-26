@@ -3,6 +3,12 @@ import { getCompletePageContext } from "@/lib/auth-helpers";
 import { createClient } from "../../lib/supabase.ts";
 import Layout from "../../layouts/BaseLayout.astro";
 import AdminShell from "@/components/AdminShell";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const { t } = getTranslations(lang, 'manage');
+const tCommon = getTranslations(lang, 'common');
 
 // Initialize Supabase client with request context
 const supabase = createClient({
@@ -64,39 +70,45 @@ const initialMacroArray = macroArray.filter(item => item.group_id == null);
 var first = true
 
 ---
-<Layout title="Macro Editor">
+<Layout title={t('pages.macro.pageTitle')}>
     <AdminShell 
     client:load
     user={sidebarData.user}
     firstTeam={sidebarData.team ?? undefined}
-    crumbParentLabel="Administration"
+    crumbParentLabel={tCommon.t('sidebar.administration')}
     crumbParentHref="/manage/settings"
-    crumbCurrent="General Settings"
+    crumbCurrent={t('pages.macro.pageTitle')}
     isAdmin={authContext.isAdmin}
+    isPlatformAdmin={pageContext.isPlatformAdmin}
     currentPath="/manage/settings"
+    employeeId={sidebarData.employeeId}
+    clientId={sidebarData.clientId}
+    subscriptionTier={sidebarData.subscriptionTier}
   >
     <!-- Page Header -->
     <div class="space-y-6">
-      <div>
-        <h1 class="text-3xl font-bold tracking-tight">Macro Editor</h1>
-        <p class="text-muted-foreground">
-          Edit and add macros
-        </p>
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div class="space-y-1 mt-2">
+          <h1 class="text-2xl font-semibold tracking-tight">{t('pages.macro.heading')}</h1>
+          <p class="text-sm text-muted-foreground">
+            {t('pages.macro.description')}
+          </p>
+        </div>
       </div>
 
       <div>
         <div class="relative inline-block mb-4">
-          <button id="addButton" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">+ Add New</button>
+          <button id="addButton" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">+ {t('macros.addNew')}</button>
 
           <!--Dropdown -->
           <div id="addDropdown" class="absolute left-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 hidden">
             <button id="addMacroBtn" class="w-full text-left px-4 py-3 hover:bg-gray-100 flex items-center gap-2 rounded-t-lg">
               <span>📄</span>
-              <span>Add Macro</span>
+              <span>{t('macros.addMacro')}</span>
             </button>
             <button id="addGroupBtn" class="w-full text-left px-4 py-3 hover:bg-gray-100 flex items-center gap-2 rounded-b-lg border-t border-gray-100">
               <span>📁</span>
-              <span>Add Group</span>
+              <span>{t('macros.addGroup')}</span>
             </button>
           </div>
         </div>
@@ -135,9 +147,39 @@ var first = true
     </div>
   </AdminShell>
 <script>
-  import { getAttachmentSignedUrl } from '@/utils/attachmentManager';
-  import { apiClient } from '../../utils/api.ts';
-  import { toast } from "sonner";
+  <script is:inline define:vars={{ 
+    translations: {
+      macroCreated: t('macros.macroCreated'),
+      macroCreatedDesc: t('macros.macroCreatedDesc'),
+      macroUpdated: t('macros.macroUpdated'),
+      macroUpdatedDesc: t('macros.macroUpdatedDesc'),
+      macroDeleted: t('macros.macroDeleted'),
+      groupCreated: t('macros.groupCreated'),
+      groupCreatedDesc: t('macros.groupCreatedDesc'),
+      groupDeleted: t('macros.groupDeleted'),
+      failedToSave: t('macros.failedToSave'),
+      tryAgain: t('macros.tryAgain'),
+      newMacro: t('macros.newMacro'),
+      newGroup: t('macros.newGroup'),
+      macroTitle: t('macros.macroTitle'),
+      macroText: t('macros.macroText'),
+      groupName: t('macros.groupName'),
+      saving: t('macros.saving'),
+      back: t('macros.back'),
+      variablesLabel: t('macros.variablesLabel'),
+      save: t('common.save'),
+      cancel: t('common.cancel')
+    }
+  }}>
+    window.__macroTranslations = translations;
+  </script>
+  <script>
+    import  { apiClient } from '../../utils/api.ts';
+    import { toast } from "sonner";
+    import { getAttachmentSignedUrl } from '@/utils/attachmentManager';
+
+    // Get translations from global scope
+    const i18n = (window as any).__macroTranslations || {};
 
     var filteredMacroArray: any[] = [];
     const macroArray = JSON.parse(document.getElementById('macro-section')?.dataset.macroArray || '[]') as any[];
@@ -350,8 +392,8 @@ var first = true
 
               console.log('[Macro Editor] Created macro successfully')
 
-              toast.success("Macro created", {
-                description: "The Macro has been saved.",
+              toast.success(i18n.macroCreated, {
+                description: i18n.macroCreatedDesc,
               });
 
               const data = response.data;
@@ -360,8 +402,8 @@ var first = true
             } catch (error) {
               console.error("[Macro Editor] Failed to save macro:", error);
               
-              toast.error("Failed to save", {
-                description: error instanceof Error ? error.message : "An unexpected error occurred.",
+              toast.error(i18n.failedToSave, {
+                description: error instanceof Error ? error.message : i18n.tryAgain,
               });
             } finally {
               clearStackAnGoToRoot();
@@ -542,7 +584,7 @@ var first = true
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              Saving...
+              ${i18n.saving}
             `;
 
             try {
@@ -556,8 +598,8 @@ var first = true
               }
               console.log('[Macro Editor] Created group successfully')
 
-              toast.success("Group created", {
-                description: "The Group has been saved.",
+              toast.success(i18n.groupCreated, {
+                description: i18n.groupCreatedDesc,
               });
 
               const data = response.data;
@@ -567,8 +609,8 @@ var first = true
             } catch (error) {
               console.error("[Macro Editor] Failed to save group:", error);
               
-              toast.error("Failed to save", {
-                description: error instanceof Error ? error.message : "An unexpected error occurred.",
+              toast.error(i18n.failedToSave, {
+                description: error instanceof Error ? error.message : i18n.tryAgain,
               });
             } finally {
               clearStackAnGoToRoot();
@@ -767,7 +809,7 @@ var first = true
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              Saving...
+              ${i18n.saving}
             `;
 
             try {
@@ -791,8 +833,8 @@ var first = true
 
               console.log('[Macro Editor] Updated macro successfully')
 
-              toast.success("Macro updated", {
-                description: "The Macro has been saved.",
+              toast.success(i18n.macroUpdated, {
+                description: i18n.macroUpdatedDesc,
               });
 
               const data = response.data;
@@ -806,8 +848,8 @@ var first = true
             } catch (error) {
               console.error("[Macro Editor] Failed to save macro:", error);
               
-              toast.error("Failed to save", {
-                description: error instanceof Error ? error.message : "An unexpected error occurred.",
+              toast.error(i18n.failedToSave, {
+                description: error instanceof Error ? error.message : i18n.tryAgain,
               });
             } finally {
               clearStackAnGoToRoot();
@@ -903,8 +945,8 @@ var first = true
           macroArray.splice(index, 1);
           console.log("[Macro Editor] Deleted group", groupId);
 
-          toast.success("Group deleted.", {
-            description: "Group deleted sucessfully."
+          toast.success(i18n.groupDeleted, {
+            description: i18n.groupCreatedDesc
           })
 
           //Change UI
@@ -934,8 +976,8 @@ var first = true
             macroArray.splice(index, 1);
             console.log("[Macro Editor] Deleted macro", macroId);
 
-            toast.success("Macro deleted", {
-              description: "Macro deleted sucessfully."
+            toast.success(i18n.macroDeleted, {
+              description: i18n.macroCreatedDesc
             });
 
             //change UI

@@ -10,7 +10,7 @@ const router = express.Router();
 const supabase = require("../config/supabase");
 const { authenticate } = require('../middleware/auth');
 const { authorizeCustomerAccess, authorizeEmployeeAccess } = require('../middleware/authorization');
-const { validateId } = require('../middleware/validation');
+const { validateId, validateEmail, sanitizeText } = require('../middleware/validation');
 
 /**
  * Get customer by ID
@@ -38,7 +38,7 @@ router.get('/getCustomerById',
 
       if (error) {
         console.error('[CUSTOMERS] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       if (!data) {
@@ -61,7 +61,7 @@ router.get('/getCustomerById',
       res.json({success: true, data: [data]}); // Return as array to match original API format
     } catch (err) {
       console.error('[CUSTOMERS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -117,14 +117,14 @@ router.get('/getAssignedCustomers',
 
       if (error) {
         console.error('[CUSTOMERS] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[CUSTOMERS] Fetched', data.length, 'assigned customers');
       res.json({success: true, data: data});
     } catch (err) {
       console.error('[CUSTOMERS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
     }
   }
 );
@@ -154,14 +154,118 @@ router.get('/getAllCustomers',
 
       if (error) {
         console.error('[CUSTOMERS] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        return res.status(500).json({ error: 'Database error' });
       }
 
       console.log('[CUSTOMERS] Fetched', data.length, 'customers');
       res.json({success: true, data});
     } catch (err) {
       console.error('[CUSTOMERS] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+/**
+ * Find-or-create customer by email
+ * POST /api/customers/upsertByEmail
+ * Body: { email, name }
+ *
+ * Authentication: Required
+ * Authorization: Customer is always scoped to authenticated user's client
+ */
+router.post(
+  '/upsertByEmail',
+  authenticate,
+  validateEmail('email'),
+  sanitizeText('name', { required: false, maxLength: 200 }),
+  async (req, res) => {
+    try {
+      const client_id = req.user.client_id;
+      const email = req.sanitized.email;
+      const name = req.sanitized.name || null;
+
+      // Email addresses are stored in "email-addresses".
+      const { data: emailRow, error: emailErr } = await supabase
+        .from('email-addresses')
+        .select('customer_id, email_address')
+        .eq('email_address', email)
+        .maybeSingle();
+
+      if (emailErr) {
+        console.error('[CUSTOMERS] Error finding email address:', emailErr);
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      if (emailRow?.customer_id) {
+        // Verify the customer belongs to the current client.
+        const { data: existingCustomer, error: customerErr } = await supabase
+          .from('customers')
+          .select('id, client_id, name')
+          .eq('id', emailRow.customer_id)
+          .maybeSingle();
+
+        if (customerErr) {
+          console.error('[CUSTOMERS] Error loading customer for email:', customerErr);
+          return res.status(500).json({ error: 'Database error' });
+        }
+
+        if (!existingCustomer) {
+          // Orphaned email row; treat as error.
+          return res.status(500).json({ error: 'Database error' });
+        }
+
+        if (existingCustomer.client_id !== client_id) {
+          return res.status(409).json({
+            error: 'Conflict',
+            message: 'This email address is already used by another customer',
+          });
+        }
+
+        // Optionally update the name if the existing record has no name.
+        if (name && (!existingCustomer.name || String(existingCustomer.name).trim() === '')) {
+          await supabase
+            .from('customers')
+            .update({ name })
+            .eq('id', existingCustomer.id);
+        }
+
+        return res.json({ success: true, customerId: existingCustomer.id, existed: true });
+      }
+
+      // Create a new customer record (unassigned) and a related email-addresses row.
+      const newName = name || email;
+      const { data: createdCustomer, error: createCustomerErr } = await supabase
+        .from('customers')
+        .insert({
+          client_id,
+          name: newName,
+          employee_id: null,
+        })
+        .select('id')
+        .single();
+
+      if (createCustomerErr) {
+        console.error('[CUSTOMERS] Error creating customer:', createCustomerErr);
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      const { error: createEmailErr } = await supabase
+        .from('email-addresses')
+        .insert({
+          customer_id: createdCustomer.id,
+          email_address: email,
+        });
+
+      if (createEmailErr) {
+        console.error('[CUSTOMERS] Error creating email address:', createEmailErr);
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      return res.json({ success: true, customerId: createdCustomer.id, existed: false });
+    } catch (err) {
+      console.error('[CUSTOMERS] Server error:', err.message);
+      return res.status(500).json({ error: 'Server error' });
     }
   }
 );

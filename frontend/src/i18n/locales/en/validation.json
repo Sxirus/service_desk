@@ -1,0 +1,66 @@
+{
+  "required": "This field is required",
+  "email": {
+    "invalid": "Please enter a valid email address",
+    "required": "Email is required"
+  },
+  "password": {
+    "required": "Password is required",
+    "minLength": "Password must be at least {{min}} characters",
+    "maxLength": "Password must be at most {{max}} characters",
+    "weak": "Password is too weak",
+    "uppercase": "Password must contain at least one uppercase letter",
+    "lowercase": "Password must contain at least one lowercase letter",
+    "number": "Password must contain at least one number",
+    "special": "Password must contain at least one special character",
+    "mismatch": "Passwords do not match"
+  },
+  "name": {
+    "required": "Name is required",
+    "minLength": "Name must be at least {{min}} characters",
+    "maxLength": "Name must be at most {{max}} characters"
+  },
+  "phone": {
+    "invalid": "Please enter a valid phone number"
+  },
+  "url": {
+    "invalid": "Please enter a valid URL"
+  },
+  "number": {
+    "invalid": "Please enter a valid number",
+    "min": "Value must be at least {{min}}",
+    "max": "Value must be at most {{max}}",
+    "positive": "Value must be a positive number",
+    "integer": "Value must be a whole number"
+  },
+  "date": {
+    "invalid": "Please enter a valid date",
+    "past": "Date must be in the past",
+    "future": "Date must be in the future",
+    "before": "Date must be before {{date}}",
+    "after": "Date must be after {{date}}"
+  },
+  "file": {
+    "required": "Please select a file",
+    "size": "File size must be less than {{size}}",
+    "type": "File type not supported",
+    "maxFiles": "Maximum {{max}} files allowed"
+  },
+  "select": {
+    "required": "Please select an option"
+  },
+  "checkbox": {
+    "required": "This checkbox is required"
+  },
+  "textarea": {
+    "minLength": "Text must be at least {{min}} characters",
+    "maxLength": "Text must be at most {{max}} characters"
+  },
+  "array": {
+    "minItems": "At least {{min}} items required",
+    "maxItems": "Maximum {{max}} items allowed"
+  },
+  "captcha": {
+    "required": "Please complete the CAPTCHA"
+  }
+}

@@ -1,100 +1,100 @@
-// --- workerManager.js ---
-// Worker Manager for email polling with time-cutoff strategy
-// Manages lifecycle of IMAP polling workers for all client email accounts
+/**
+ * Worker Manager
+ * Manages individual IMAP polling workers for each client email account.
+ * Restored to original approach for development.
+ */
 
 const supabase = require('../config/supabase');
+const encryption = require('../utils/encryption');
 const { startImapWorker, stopImapWorker, stopAllWorkers } = require('./imapWorker');
+const logger = require('../utils/logger');
 
 // Track active workers to manage their lifecycle
 const activeWorkers = new Map(); // Map: clientEmailId -> emailAddress
 
 /**
  * Initialize polling workers for all configured client email accounts
- * Uses time-cutoff strategy to only fetch emails since last processed email
  */
 async function initializeWorkers() {
-    console.log('Initializing time-cutoff polling workers (120s interval)...');
+    logger.info('Initializing polling workers (5min interval)...');
 
-    // Fetch all client email configurations with provider settings
-    const { data: clientEmails, error } = await supabase
-        .from('client-emails')
-        .select(`id, client_id, email_address, password, provider:email-provider (imap, imap_port)`);
+    try {
+        const { data: clientEmails, error } = await supabase
+            .from('client-emails')
+            .select(`id, client_id, email_address, password, provider:email-provider (imap, imap_port)`);
 
-    if (error) {
-        console.error('Failed to fetch client emails:', error);
-        return;
-    }
-
-    console.log(`Found ${clientEmails.length} client email configurations`);
-
-    // Start a worker for each configured email account
-    for (const entry of clientEmails) {
-        const { id, client_id, email_address, password, provider } = entry;
-
-        // Validate provider configuration
-        if (!provider || !provider.imap || !provider.imap_port) {
-            console.warn(`Skipping ${email_address} - missing IMAP provider configuration`);
-            continue;
+        if (error) {
+            logger.error('Failed to fetch client emails', { error: error.message });
+            return;
         }
 
-        // Stop existing worker if already running (restart scenario)
-        if (activeWorkers.has(id)) {
-            console.log(`Restarting worker for ${email_address}`);
-            stopImapWorker(email_address);
-        }
+        logger.info(`Found ${clientEmails.length} client email configurations`);
 
-        console.log(`Starting time-cutoff worker for ${email_address}`);
+        for (const entry of clientEmails) {
+            const { id, client_id, email_address, password, provider } = entry;
+
+            if (!provider || !provider.imap || !provider.imap_port) {
+                logger.warn(`Skipping ${email_address} - missing IMAP provider configuration`);
+                continue;
+            }
+
+            if (activeWorkers.has(id)) {
+                stopImapWorker(email_address);
+            }
+
+            try {
+                const decryptedPassword = encryption.decrypt(password);
+
+                await startImapWorker({
+                    id,
+                    email: email_address,
+                    password: decryptedPassword,
+                    imapHost: provider.imap,
+                    imapPort: provider.imap_port,
+                    clientId: client_id
+                });
+                
+                activeWorkers.set(id, email_address);
+            } catch (error) {
+                logger.error(`Failed to start worker for ${email_address}`, { error: error.message });
+            }
+        }
         
-        try {
-            await startImapWorker({
-                email: email_address,
-                password,
-                imapHost: provider.imap,
-                imapPort: provider.imap_port,
-                clientId: client_id
-            });
-            
-            // Track active worker
-            activeWorkers.set(id, email_address);
-            
-        } catch (error) {
-            console.error(`Failed to start worker for ${email_address}:`, error.message);
-        }
+        logger.info(`Successfully started ${activeWorkers.size} polling workers`);
+    } catch (err) {
+        logger.error('Worker initialization error', { error: err.message });
     }
-    
-    console.log(`Successfully started ${activeWorkers.size} time-cutoff polling workers`);
 }
 
-/**
- * Stop specific worker by client email ID
- */
+async function restartWorker(clientEmailId, email_address) {
+    logger.info(`Restarting worker for ${email_address}`);
+    stopWorkerById(clientEmailId);
+    // Note: In original logic, initializeWorkers would be called again or individual start.
+    // For simplicity, we just trigger initialization which handles restarts.
+    await initializeWorkers();
+}
+
 function stopWorkerById(clientEmailId) {
     if (activeWorkers.has(clientEmailId)) {
         const email = activeWorkers.get(clientEmailId);
         stopImapWorker(email);
         activeWorkers.delete(clientEmailId);
-        console.log(`Stopped worker for ${email}`);
     }
 }
 
-/**
- * Stop specific worker by email address
- */
-function stopWorkerByEmail(email) {
-    stopImapWorker(email);
-    // Find and remove from activeWorkers map
+function stopWorker(email_address) {
+    stopImapWorker(email_address);
     for (const [id, workerEmail] of activeWorkers.entries()) {
-        if (workerEmail === email) {
+        if (workerEmail === email_address) {
             activeWorkers.delete(id);
             break;
         }
     }
-    console.log(`Stopped worker for ${email}`);
 }
 
-module.exports = { 
-    initializeWorkers, 
-    stopAllWorkers, 
-    stopWorkerById,
-    stopWorkerByEmail 
+module.exports = {
+    initializeWorkers,
+    restartWorker,
+    stopWorker,
+    stopAllWorkers
 };

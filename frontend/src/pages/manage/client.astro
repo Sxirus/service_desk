@@ -14,6 +14,12 @@ import { createClient } from "../../lib/supabase.ts";
 import { getCompletePageContext } from "../../lib/auth-helpers.ts";
 import { ROLE_IDS } from "../../types/database.ts";
 import type { Client } from "../../types/database.ts";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const { t } = getTranslations(lang, 'manage');
+const tCommon = getTranslations(lang, 'common');
 
 // Components
 import CompanyManagementForm from "@/components/CompanyManagementForm";
@@ -104,33 +110,39 @@ console.log("[client-settings] Page setup complete, rendering");
 const initialFormData = {
   id: companyData?.id ?? authContext.employee.client_id,
   name: companyData?.name ?? "",
-  address: companyData?.address_street ?? "",
-  city: companyData?.address_city ?? "",
-  postalCode: companyData?.address_zip ?? "",
-  country: companyData?.address_country ?? "",
+  address_street: companyData?.address_street ?? "",
+  address_city: companyData?.address_city ?? "",
+  address_zip: companyData?.address_zip ?? "",
+  address_country: companyData?.address_country ?? "",
   vat: companyData?.vat ?? "",
   website: companyData?.website ?? ""
 };
 ---
 
-<Layout title="Company Settings">
+<Layout title={t('pages.client.pageTitle')}>
   <AdminShell 
     client:load
     user={sidebarData.user}
     firstTeam={sidebarData.team ?? undefined}
-    crumbParentLabel="Administration"
+    crumbParentLabel={tCommon.t('sidebar.administration')}
     crumbParentHref="/manage/settings"
-    crumbCurrent="Company"
+    crumbCurrent={t('pages.client.pageTitle')}
     isAdmin={authContext.isAdmin}
+    isPlatformAdmin={pageContext.isPlatformAdmin}
     currentPath="/manage/client"
+    employeeId={sidebarData.employeeId}
+    clientId={sidebarData.clientId}
+    subscriptionTier={sidebarData.subscriptionTier}
   >
     <div class="space-y-6">
       <!-- Page Header -->
-      <div>
-        <h1 class="text-3xl font-bold tracking-tight">Company Settings</h1>
-        <p class="text-muted-foreground">
-          Manage your company information and settings.
-        </p>
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div class="space-y-1 mt-2">
+          <h1 class="text-2xl font-semibold tracking-tight">{t('pages.client.heading')}</h1>
+          <p class="text-sm text-muted-foreground">
+            {t('pages.client.description')}
+          </p>
+        </div>
       </div>
 
       <!-- Company Management Form -->

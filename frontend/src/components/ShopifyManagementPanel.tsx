@@ -35,9 +35,12 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, CheckCircle2, XCircle, ExternalLink } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Loader2, CheckCircle2, XCircle, ExternalLink, Settings, ShoppingBag } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '@/utils/api';
+import { useTranslation } from 'react-i18next';
+import { TrackingConfiguration } from './TrackingConfiguration';
 
 /**
  * Props interface for the Shopify Management Panel
@@ -70,6 +73,7 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
   clientId,
   initialData,
 }) => {
+  const { t } = useTranslation('manage');
   console.log('[SHOPIFY_PANEL] Component mounted with data:', { clientId, initialData });
 
   // Connection state - tracks whether Shopify is currently connected
@@ -104,12 +108,14 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
    */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    
+    // Handle success
     if (params.get('shopify') === 'connected') {
       console.log('[SHOPIFY_PANEL] OAuth connection successful');
       
       // Show success notification
-      toast.success('Shopify store successfully connected!', {
-        description: 'Your integration is now active.'
+      toast.success(t('shopify.oauthConnectedTitle'), {
+        description: t('shopify.oauthConnectedDescription')
       });
       
       // Clean up URL by removing query parameter
@@ -119,6 +125,20 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
       setTimeout(() => {
         window.location.reload();
       }, 1000);
+    }
+
+    // Handle error
+    const status = params.get('status');
+    const message = params.get('message');
+    if (status === 'error') {
+      console.error('[SHOPIFY_PANEL] OAuth connection failed:', message);
+      
+      toast.error(t('shopify.connectionTestFailed'), {
+        description: message || t('shopify.unknownError')
+      });
+
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
 
@@ -149,7 +169,7 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
     
     // Check for empty input
     if (!name || name.trim() === '') {
-      setShopNameError('Store name is required');
+      setShopNameError(t('shopify.storeNameRequired'));
       return false;
     }
 
@@ -157,13 +177,13 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
     // Shopify store names can only contain alphanumeric characters and hyphens
     const validFormat = /^[a-z0-9-]+$/i;
     if (!validFormat.test(name)) {
-      setShopNameError('Store name can only contain letters, numbers, and hyphens');
+      setShopNameError(t('shopify.storeNameInvalidChars'));
       return false;
     }
 
     // Check if user accidentally included .myshopify.com
     if (name.includes('.')) {
-      setShopNameError('Enter only the store name (without .myshopify.com)');
+      setShopNameError(t('shopify.storeNameNoDomain'));
       return false;
     }
 
@@ -178,7 +198,7 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
    * 
    * @param e - Form submit event
    */
-  const handleConnectSubmit = (e: React.FormEvent) => {
+  const handleConnectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log('[SHOPIFY_PANEL] Connect form submitted');
 
@@ -194,19 +214,34 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
     setIsConnectDialogOpen(false);
 
     // Show loading notification
-    toast.loading('Redirecting to Shopify...', {
-      description: 'You will be asked to authorize the connection.'
+    toast.loading(t('shopify.redirecting'), {
+      description: t('shopify.redirectingDescription')
     });
 
-    // ✅ FIXED: Use relative path, let browser use current origin
-    // Build OAuth install URL with shop name and client ID
-    const targetUrl = `/api/shopify/install?shop=${encodeURIComponent(shopName.trim())}&clientId=${clientId}`;
-    console.log('[SHOPIFY_PANEL] Redirect URL:', targetUrl);
-    
-    // Small delay to allow toast to render before redirect
-    setTimeout(() => {
-      window.location.href = targetUrl;
-    }, 500);
+    try {
+      // ✅ FIXED: Use apiClient to initiate OAuth (handles auth headers)
+      const data = await apiClient.get(`/shopify/install?shop=${encodeURIComponent(shopName.trim())}`);
+
+      if (data.success && data.redirectUrl) {
+        console.log('[SHOPIFY_PANEL] Redirecting to Shopify:', data.redirectUrl);
+        // Redirect browser to the Shopify OAuth URL
+        if (typeof window !== 'undefined') {
+          window.location.href = data.redirectUrl;
+        }
+      } else {
+        console.error('[SHOPIFY_PANEL] Install failed:', data);
+        toast.dismiss();
+        toast.error(t('shopify.connectionTestFailed'), { // Generic error or add a new key
+          description: data.message || 'Failed to initiate connection'
+        });
+      }
+    } catch (err) {
+      console.error('[SHOPIFY_PANEL] Install error:', err);
+      toast.dismiss();
+      toast.error(t('shopify.unknownError'), {
+        description: err instanceof Error ? err.message : 'Network error'
+      });
+    }
   };
 
   /**
@@ -225,14 +260,14 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
     setTestResult(null);
 
     // Show loading toast that we'll update with results
-    const toastId = toast.loading('Testing connection to Shopify...');
+    const toastId = toast.loading(t('shopify.testingConnection'));
 
     try {
       console.log('[SHOPIFY_PANEL] Sending test request for client:', clientId);
       
       // ✅ FIXED: apiClient.get() returns JSON already, no need to call .json()
       // ✅ FIXED: Auth token automatically added by apiClient
-      const data = await apiClient.get('/shopify/testConnection');
+      const data = await apiClient.get('/shopify/test');
 
       console.log('[SHOPIFY_PANEL] Test response received:', data);
 
@@ -243,15 +278,15 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
         console.log('[SHOPIFY_PANEL] Connection test successful');
         
         // Update loading toast to success with data
-        toast.success('Connection successful!', {
+        toast.success(t('shopify.connectionSuccessful'), {
           id: toastId,
-          description: `Found ${data.productsCount || 0} products and ${data.ordersCount || 0} orders.`
+          description: t('shopify.connectionSuccessCount', { products: data.productsCount || 0, orders: data.ordersCount || 0 })
         });
       } else {
         console.error('[SHOPIFY_PANEL] Connection test failed:', data.error);
         
         // Update loading toast to error
-        toast.error('Connection test failed', {
+        toast.error(t('shopify.connectionTestFailed'), {
           id: toastId,
           description: data.error
         });
@@ -260,9 +295,9 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
       console.error('[SHOPIFY_PANEL] Exception during connection test:', err);
       
       // Handle network or other errors
-      toast.error('Connection test failed', {
+      toast.error(t('shopify.connectionTestFailed'), {
         id: toastId,
-        description: err instanceof Error ? err.message : 'Unknown error'
+        description: err instanceof Error ? err.message : t('shopify.unknownError')
       });
     } finally {
       setIsTesting(false);
@@ -292,7 +327,7 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
     setIsDisconnectDialogOpen(false);
 
     // Show loading toast
-    const toastId = toast.loading('Disconnecting Shopify store...');
+    const toastId = toast.loading(t('shopify.disconnecting'));
 
     try {
       console.log('[SHOPIFY_PANEL] Sending disconnect request for client:', clientId);
@@ -308,9 +343,9 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
         console.log('[SHOPIFY_PANEL] Successfully disconnected');
         
         // Update loading toast to success
-        toast.success('Shopify store disconnected', {
+        toast.success(t('shopify.disconnectSuccess'), {
           id: toastId,
-          description: 'Your store has been disconnected successfully.'
+          description: t('shopify.disconnectSuccessDescription')
         });
         
         // Update local state
@@ -328,18 +363,18 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
         console.error('[SHOPIFY_PANEL] Disconnect failed:', data);
         
         // Show error toast
-        toast.error('Failed to disconnect', {
+        toast.error(t('shopify.disconnectFailed'), {
           id: toastId,
-          description: data.error || 'An error occurred while disconnecting.'
+          description: data.error || t('shopify.disconnectFailedDescription')
         });
       }
     } catch (err) {
       console.error('[SHOPIFY_PANEL] Exception during disconnect:', err);
       
       // Handle network or other errors
-      toast.error('Failed to disconnect', {
+      toast.error(t('shopify.disconnectFailed'), {
         id: toastId,
-        description: err instanceof Error ? err.message : 'Unknown error'
+        description: err instanceof Error ? err.message : t('shopify.unknownError')
       });
     } finally {
       setIsDisconnecting(false);
@@ -348,137 +383,156 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* 
-        Connection Status Card
-        Main card showing current connection status and primary actions
-      */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Connection Status</CardTitle>
-              <CardDescription>
-                Manage your Shopify store connection
-              </CardDescription>
-            </div>
-            {/* Status badge - green for connected, gray for disconnected */}
-            {isConnected ? (
-              <Badge variant="default" className="bg-green-600">
-                <CheckCircle2 className="w-4 h-4 mr-1" />
-                Connected
-              </Badge>
-            ) : (
-              <Badge variant="secondary">
-                <XCircle className="w-4 h-4 mr-1" />
-                Not Connected
-              </Badge>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {isConnected && storeUrl ? (
-            <>
-              {/* Connected State - show store info and management actions */}
-              <div className="space-y-3">
-                {/* Display the connected store URL */}
+      <Tabs defaultValue="connection">
+        <TabsList className="grid w-full grid-cols-2 mb-4">
+          <TabsTrigger value="connection" className="flex items-center gap-2">
+            <ShoppingBag className="h-4 w-4" />
+            {t('shopify.connection', 'Connection')}
+          </TabsTrigger>
+          <TabsTrigger value="tracking" className="flex items-center gap-2">
+            <Settings className="h-4 w-4" />
+            {t('shopify.tracking', 'Tracking')}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="connection" className="space-y-6">
+          {/* 
+            Connection Status Card
+            Main card showing current connection status and primary actions
+          */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Store URL</p>
-                  <div className="flex items-center mt-1">
-                    <p className="text-sm font-mono">{storeUrl}</p>
-                    {/* External link to visit the store */}
-                    <a
-                      href={`https://${storeUrl}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="ml-2 text-blue-600 hover:text-blue-800"
+                  <CardTitle>{t('shopify.connectionStatus')}</CardTitle>
+                  <CardDescription>
+                    {t('shopify.manageConnection')}
+                  </CardDescription>
+                </div>
+                {/* Status badge - green for connected, gray for disconnected */}
+                {isConnected ? (
+                  <Badge variant="default" className="bg-green-600">
+                    <CheckCircle2 className="w-4 h-4 mr-1" />
+                    {t('shopify.connected')}
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary">
+                    <XCircle className="w-4 h-4 mr-1" />
+                    {t('shopify.notConnected')}
+                  </Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isConnected && storeUrl ? (
+                <>
+                  {/* Connected State - show store info and management actions */}
+                  <div className="space-y-3">
+                    {/* Display the connected store URL */}
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">{t('shopify.storeUrl')}</p>
+                      <div className="flex items-center mt-1">
+                        <p className="text-sm font-mono">{storeUrl}</p>
+                        {/* External link to visit the store */}
+                        <a
+                          href={`https://${storeUrl}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ml-2 text-blue-600 hover:text-blue-800"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action buttons for connected state */}
+                  <div className="flex gap-3 pt-2">
+                    {/* Test connection button - verifies API access */}
+                    <Button
+                      onClick={handleTestConnection}
+                      disabled={isTesting}
+                      variant="outline"
                     >
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
+                      {isTesting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      {t('shopify.testConnection')}
+                    </Button>
+                    {/* Disconnect button - opens confirmation dialog */}
+                    <Button
+                      onClick={handleOpenDisconnectDialog}
+                      disabled={isDisconnecting}
+                      variant="destructive"
+                    >
+                      {isDisconnecting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      {t('shopify.disconnect')}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Disconnected State - show connect button */}
+                  <p className="text-sm text-muted-foreground">
+                    {t('shopify.connectDescription')}
+                  </p>
+                  <Button onClick={handleOpenConnectDialog}>
+                    {t('shopify.connectShopifyStore')}
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 
+            Test Results Card
+            Only displayed after a successful connection test
+            Shows product and order counts from the Shopify store
+          */}
+          {testResult && testResult.success && (
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('shopify.testResultsTitle')}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Products count */}
+                  <div className="p-3 bg-muted rounded-lg">
+                    <p className="text-sm font-medium text-muted-foreground">{t('shopify.products')}</p>
+                    <p className="text-2xl font-bold">{testResult.productsCount ?? 0}</p>
+                  </div>
+                  {/* Orders count */}
+                  <div className="p-3 bg-muted rounded-lg">
+                    <p className="text-sm font-medium text-muted-foreground">{t('shopify.orders')}</p>
+                    <p className="text-2xl font-bold">{testResult.ordersCount ?? 0}</p>
                   </div>
                 </div>
-              </div>
-
-              {/* Action buttons for connected state */}
-              <div className="flex gap-3 pt-2">
-                {/* Test connection button - verifies API access */}
-                <Button
-                  onClick={handleTestConnection}
-                  disabled={isTesting}
-                  variant="outline"
-                >
-                  {isTesting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Test Connection
-                </Button>
-                {/* Disconnect button - opens confirmation dialog */}
-                <Button
-                  onClick={handleOpenDisconnectDialog}
-                  disabled={isDisconnecting}
-                  variant="destructive"
-                >
-                  {isDisconnecting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Disconnect
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
-              {/* Disconnected State - show connect button */}
-              <p className="text-sm text-muted-foreground">
-                Connect your Shopify store to enable order data in customer support tickets.
-              </p>
-              <Button onClick={handleOpenConnectDialog}>
-                Connect Shopify Store
-              </Button>
-            </>
+              </CardContent>
+            </Card>
           )}
-        </CardContent>
-      </Card>
 
-      {/* 
-        Test Results Card
-        Only displayed after a successful connection test
-        Shows product and order counts from the Shopify store
-      */}
-      {testResult && testResult.success && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Connection Test Results</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-4">
-              {/* Products count */}
-              <div className="p-3 bg-muted rounded-lg">
-                <p className="text-sm font-medium text-muted-foreground">Products</p>
-                <p className="text-2xl font-bold">{testResult.productsCount ?? 0}</p>
-              </div>
-              {/* Orders count */}
-              <div className="p-3 bg-muted rounded-lg">
-                <p className="text-sm font-medium text-muted-foreground">Orders</p>
-                <p className="text-2xl font-bold">{testResult.ordersCount ?? 0}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+          {/* 
+            Information Card
+            Explains how the integration works
+          */}
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('shopify.howItWorksTitle')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li>• {t('shopify.howItWorks.bullet1')}</li>
+                <li>• {t('shopify.howItWorks.bullet2')}</li>
+                <li>• {t('shopify.howItWorks.bullet3')}</li>
+                <li>• {t('shopify.howItWorks.bullet4')}</li>
+                <li>• {t('shopify.howItWorks.bullet5')}</li>
+              </ul>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      {/* 
-        Information Card
-        Explains how the integration works
-      */}
-      <Card>
-        <CardHeader>
-          <CardTitle>How it works</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-2 text-sm text-muted-foreground">
-            <li>• Click "Connect Shopify Store" to start the OAuth flow</li>
-            <li>• You'll be redirected to Shopify to authorize the connection</li>
-            <li>• Once connected, customer support agents can view order data in tickets</li>
-            <li>• Orders are matched to customers by email address</li>
-            <li>• You can disconnect at any time to revoke access</li>
-          </ul>
-        </CardContent>
-      </Card>
+        <TabsContent value="tracking">
+          <TrackingConfiguration />
+        </TabsContent>
+      </Tabs>
 
       {/* 
         Connect Shopify Dialog
@@ -488,19 +542,19 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
         <DialogContent className="sm:max-w-[425px]">
           <form onSubmit={handleConnectSubmit}>
             <DialogHeader>
-              <DialogTitle>Connect Shopify Store</DialogTitle>
+              <DialogTitle>{t('shopify.connectDialog.title')}</DialogTitle>
               <DialogDescription>
-                Enter your Shopify store name to connect your store.
+                {t('shopify.connectDialog.description')}
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="shopName">Store Name</Label>
+                <Label htmlFor="shopName">{t('shopify.storeNameLabel')}</Label>
                 {/* Input field with .myshopify.com suffix shown */}
                 <div className="flex items-center gap-2">
                   <Input
                     id="shopName"
-                    placeholder="my-store"
+                    placeholder={t('shopify.storeNamePlaceholder')}
                     value={shopName}
                     onChange={(e) => {
                       setShopName(e.target.value);
@@ -518,15 +572,14 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
                   <p className="text-sm text-red-500">{shopNameError}</p>
                 )}
                 <p className="text-sm text-muted-foreground">
-                  Enter only your store name, not the full URL
+                  {t('shopify.storeNameHelper')}
                 </p>
               </div>
               {/* Example helper box to clarify format */}
               <div className="rounded-lg bg-muted p-3 text-sm">
-                <p className="font-medium mb-1">Example:</p>
+                <p className="font-medium mb-1">{t('shopify.exampleTitle')}</p>
                 <p className="text-muted-foreground">
-                  If your store is <span className="font-mono">example-store.myshopify.com</span>,
-                  enter <span className="font-mono font-semibold">example-store</span>
+                  {t('shopify.exampleText', { example: 'example-store' })}
                 </p>
               </div>
             </div>
@@ -536,10 +589,10 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
                 variant="outline"
                 onClick={() => setIsConnectDialogOpen(false)}
               >
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button type="submit">
-                Continue to Shopify
+                {t('shopify.continueToShopify')}
               </Button>
             </DialogFooter>
           </form>
@@ -553,20 +606,18 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
       <AlertDialog open={isDisconnectDialogOpen} onOpenChange={setIsDisconnectDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure you want to disconnect?</AlertDialogTitle>
+            <AlertDialogTitle>{t('shopify.disconnectConfirmTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove access to Shopify data for all customer support tickets.
-              Customer service agents will no longer be able to view order information.
-              You can reconnect at any time.
+              {t('shopify.disconnectConfirmDescription')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDisconnectConfirm}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Disconnect
+              {t('shopify.disconnect')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

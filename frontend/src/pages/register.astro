@@ -1,0 +1,92 @@
+---
+import Layout from "../layouts/BaseLayout.astro";
+import { createClient } from "../lib/supabase.ts";
+import RegisterWizard from "@/components/register/RegisterWizard";
+import RegistrationBlocked from "@/components/register/RegistrationBlocked";
+import { LanguagePicker } from "@/components/LanguagePicker";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const { t } = getTranslations(lang, 'common');
+
+const supabase = createClient({ request: Astro.request, cookies: Astro.cookies });
+const { data: { user } } = await supabase.auth.getUser();
+
+// Check if user is already an employee (prevent duplicate workspace creation)
+let isAlreadyEmployee = false;
+let recoveredNonce: string | null = null;
+let serverSessionData: any = null;
+
+if (user) {
+  const { data: employee } = await supabase
+    .from('employees')
+    .select('id, client_id')
+    .eq('user_id', user.id)
+    .maybeSingle();
+    
+  if (employee) {
+    isAlreadyEmployee = true;
+  } else {
+    // User exists but has no workspace -> Check for existing registration session
+    // We use the service role client here to ensure we can read the session data securely
+    // if RLS policies are strict for incomplete users.
+    const { createClient: createAdmin } = await import("@supabase/supabase-js");
+    const admin = createAdmin(
+      import.meta.env.PUBLIC_SUPABASE_URL!,
+      import.meta.env.SUPABASE_KEY!,
+      { auth: { persistSession: false } }
+    );
+
+    const { data: session } = await admin
+      .from('registration_sessions')
+      .select('reg_nonce, partial_payload, last_step')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (session) {
+      recoveredNonce = session.reg_nonce;
+      serverSessionData = {
+        step: session.last_step,
+        data: session.partial_payload
+      };
+    }
+  }
+}
+
+// Priority: 1. DB Session (if auth), 2. Cookie, 3. New
+const cookieNonce = Astro.cookies.get('reg_nonce')?.value;
+const regNonce = recoveredNonce || cookieNonce || crypto.randomUUID();
+
+// Refresh/Set cookie (expires in 24h)
+Astro.cookies.set('reg_nonce', regNonce, { 
+  path: '/', 
+  secure: true, 
+  httpOnly: false, // Accessible to JS if needed, though we pass it via props
+  sameSite: 'lax',
+  maxAge: 60 * 60 * 24 
+});
+---
+
+<Layout title={t('pages.register.pageTitle')}>
+  <div class="min-h-svh w-full bg-background flex flex-col items-center justify-center p-4">
+    <div class="absolute top-4 right-4">
+      <LanguagePicker client:load variant="outline" size="sm" />
+    </div>
+    
+    {isAlreadyEmployee ? (
+      <RegistrationBlocked client:load />
+    ) : (
+      <RegisterWizard
+        client:only="react"
+        initialStep={1}
+        regNonce={regNonce}
+        siteKey={cfSiteKey}
+        currentUser={user ? { id: user.id, email: user.email ?? "" } : null}
+        serverSessionData={serverSessionData}
+      />
+    )}
+  </div>
+</Layout>

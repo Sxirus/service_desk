@@ -1,0 +1,119 @@
+---
+/**
+ * Platform Dashboard
+ * Main dashboard for platform administrators showing KPIs and overview
+ */
+
+import Layout from "../../layouts/BaseLayout.astro";
+import { createClient } from "../../lib/supabase.ts";
+import { getPlatformOnlyContext, getCompletePageContext } from "../../lib/auth-helpers.ts";
+import PlatformShell from "@/components/platform/PlatformShell";
+import PlatformDashboard from "@/components/platform/PlatformDashboard";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const { t } = getTranslations(lang, 'platform');
+const tCommon = getTranslations(lang, 'common');
+
+// Initialize Supabase client
+const supabase = createClient({
+  request: Astro.request,
+  cookies: Astro.cookies,
+});
+
+console.log("[platform-dashboard] Page accessed");
+
+// Check authentication - try platform-only first, then complete context
+let user: { id: string; email: string } | null = null;
+let hasClientLink = false;
+let clientName: string | undefined;
+
+// First try: user with client link who is also platform admin
+const pageContext = await getCompletePageContext(supabase, Astro.cookies);
+if (pageContext && pageContext.isPlatformAdmin) {
+  user = pageContext.authContext.user;
+  hasClientLink = true;
+  clientName = pageContext.sidebarData.team?.name;
+} else {
+  // Second try: platform admin without client link
+  const platformContext = await getPlatformOnlyContext(supabase, Astro.cookies);
+  if (platformContext) {
+    user = platformContext.user;
+    hasClientLink = false;
+  }
+}
+
+if (!user) {
+  console.error("[platform-dashboard] Not a platform admin, redirecting");
+  return Astro.redirect("/");
+}
+
+console.log("[platform-dashboard] Platform admin authenticated:", user.email);
+
+// Get session for API calls
+const { data: { session } } = await supabase.auth.getSession();
+if (!session) {
+  console.error("[platform-dashboard] No session, redirecting");
+  return Astro.redirect("/");
+}
+
+import { getApiUrl } from "../../lib/api-config";
+
+// Fetch platform statistics from backend API
+let stats = {
+  totalClients: 0,
+  paidClients: 0,
+  freeClients: 0,
+  totalEmployees: 0,
+  totalCustomers: 0,
+  totalEmails: 0,
+  recentClients: [] as any[]
+};
+
+try {
+  const response = await fetch(getApiUrl("/api/platform/analytics"), {
+    headers: {
+      "Authorization": `Bearer ${session.access_token}`,
+      "Content-Type": "application/json"
+    }
+  });
+
+  if (response.ok) {
+    const result = await response.json();
+    const overview = result.data?.overview || {};
+    stats = {
+      totalClients: overview.totalClients || 0,
+      paidClients: overview.paidClients || 0,
+      freeClients: overview.freeClients || 0,
+      totalEmployees: overview.totalEmployees || 0,
+      totalCustomers: overview.totalCustomers || 0,
+      totalEmails: overview.totalEmails || 0,
+      recentClients: result.data?.recentClients || []
+    };
+    console.log("[platform-dashboard] Stats loaded from API:", stats);
+  } else {
+    console.error("[platform-dashboard] API error:", response.status);
+  }
+} catch (error) {
+  console.error("[platform-dashboard] Failed to fetch stats:", error);
+}
+---
+
+<Layout title={t('pages.dashboard.pageTitle')}>
+  <PlatformShell
+    client:load
+    user={{ email: user.email }}
+    crumbParentLabel={tCommon.t('sidebar.platform')}
+    crumbParentHref="/platform/dashboard"
+    crumbCurrent={tCommon.t('sidebar.dashboard')}
+    currentPath="/platform/dashboard"
+    hasClientLink={hasClientLink}
+    clientName={clientName}
+  >
+    <PlatformDashboard 
+      client:load
+      stats={stats}
+    />
+  </PlatformShell>
+</Layout>

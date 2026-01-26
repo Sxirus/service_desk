@@ -20,12 +20,19 @@ import { createClient } from "../../lib/supabase.ts";
 import { getCompletePageContext } from "../../lib/auth-helpers.ts";
 import { ROLE_IDS } from "../../types/database.ts";
 import type { Role, Employee, RoleEmployee, EmployeeEmailRow } from "../../types/database.ts";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const { t } = getTranslations(lang, 'manage');
+const tCommon = getTranslations(lang, 'common');
 
 // Components
 import type { User } from "@/components/datatable/columns";
 import ClientUsersTable from "@/components/datatable/ClientUsersTable";
 import CreateUserDialog from "@/components/UserDialog";
 import AdminShell from "@/components/AdminShell";
+import { GroupManagementPanel } from "@/components/GroupManagementPanel";
 
 // Initialize Supabase client with request context
 const supabase = createClient({ 
@@ -80,7 +87,7 @@ const [
   { data: roleAssignments, error: assignmentsErr }
 ] = await Promise.all([
   supabase.from("roles").select("id, name").order("id"),
-  supabase.from("employees").select("id, name").eq("client_id", authContext.employee.client_id).order("name"),
+  supabase.from("employees").select("id, name, disabled, client_id, user_id, avatar_url").eq("client_id", authContext.employee.client_id).order("name"),
   supabase.from("roles-employees").select("employee_id, role_id")
 ]);
 
@@ -192,6 +199,8 @@ const tableData: User[] = ((employees as Employee[]) ?? []).map((employee) => {
     name: employee.name,
     email: emailMap.get(employee.id) ?? "",
     role: roleNames || "—", // Use em dash if no roles assigned
+    disabled: (employee as any).disabled || false,
+    avatar_url: (employee as any).avatar_url || null,
   } as User;
 });
 
@@ -199,45 +208,147 @@ console.log("[user-management] Table data prepared:", {
   rowCount: tableData.length
 });
 
+// Transform employees for group management
+const employeesForGroups = ((employees as Employee[]) ?? []).map(emp => ({
+  id: emp.id,
+  name: emp.name
+}));
+
+// Calculate stats for the page
+const totalUsers = tableData.length;
+const activeUsers = tableData.filter(u => !u.disabled).length;
+const disabledUsers = tableData.filter(u => u.disabled).length;
+const adminUsers = tableData.filter(u => u.role.toLowerCase().includes('admin')).length;
+
 console.log("[user-management] Page setup complete, rendering");
 ---
 
-<Layout title="User Management">
+<Layout title={t('pages.users.pageTitle')}>
   <AdminShell 
     client:load
     user={sidebarData.user}
     firstTeam={sidebarData.team ?? undefined}
-    crumbParentLabel="Administration"
+    crumbParentLabel={tCommon.t('sidebar.administration')}
     crumbParentHref="/manage/settings"
-    crumbCurrent="Users"
+    crumbCurrent={t('pages.users.pageTitle')}
     isAdmin={authContext.isAdmin}
+    isPlatformAdmin={pageContext.isPlatformAdmin}
     currentPath="/manage/users"
+    employeeId={sidebarData.employeeId}
+    clientId={sidebarData.clientId}
+    subscriptionTier={sidebarData.subscriptionTier}
   >
-    <div class="space-y-6">
+    <div class="space-y-8">
       <!-- Page Header -->
-      <div class="flex items-start justify-between">
-        <div>
-          <h1 class="text-3xl font-bold tracking-tight">User Management</h1>
-          <p class="text-muted-foreground">
-            Manage employee accounts and role assignments for your organization.
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div class="space-y-1 mt-2">
+          <h1 class="text-2xl font-semibold tracking-tight">{t('pages.users.heading')}</h1>
+          <p class="text-sm text-muted-foreground">
+            {t('pages.users.description')}
           </p>
         </div>
         
-        <!-- Create User Dialog Button -->
+        <!-- Create User Button -->
         <CreateUserDialog 
           client:only="react" 
           roles={roleRows ?? []} 
         />
       </div>
 
-      <!-- Users Table Card -->
-      <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
-        <div class="p-6">
-          <ClientUsersTable 
-            client:only="react" 
-            data={tableData} 
-            roles={roleRows ?? []} 
-          />
+      <!-- Stats Cards -->
+      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="rounded-xl border bg-card p-4 shadow-sm">
+          <div class="flex items-center gap-3">
+            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+            </div>
+            <div>
+              <p class="text-2xl font-bold">{totalUsers}</p>
+              <p class="text-xs text-muted-foreground">{t('pages.users.stats.totalMembers')}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border bg-card p-4 shadow-sm">
+          <div class="flex items-center gap-3">
+            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22,4 12,14.01 9,11.01"></polyline>
+              </svg>
+            </div>
+            <div>
+              <p class="text-2xl font-bold">{activeUsers}</p>
+              <p class="text-xs text-muted-foreground">{t('pages.users.stats.active')}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border bg-card p-4 shadow-sm">
+          <div class="flex items-center gap-3">
+            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                <path d="m9 12 2 2 4-4"></path>
+              </svg>
+            </div>
+            <div>
+              <p class="text-2xl font-bold">{adminUsers}</p>
+              <p class="text-xs text-muted-foreground">{t('pages.users.stats.administrators')}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border bg-card p-4 shadow-sm">
+          <div class="flex items-center gap-3">
+            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-500/10">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+              </svg>
+            </div>
+            <div>
+              <p class="text-2xl font-bold">{disabledUsers}</p>
+              <p class="text-xs text-muted-foreground">{t('pages.users.stats.disabled')}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Users Table -->
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-medium">{t('pages.users.allTeamMembers')}</h2>
+        </div>
+        <ClientUsersTable 
+          client:only="react" 
+          data={tableData} 
+          roles={roleRows ?? []} 
+        />
+      </div>
+
+      <!-- Employee Groups Section -->
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-medium">{t('pages.users.groups')}</h2>
+            <p class="text-sm text-muted-foreground">
+              {t('groups.description')}
+            </p>
+          </div>
+        </div>
+        <div class="rounded-xl border bg-card shadow-sm">
+          <div class="p-6">
+            <GroupManagementPanel
+              client:only="react"
+              employees={employeesForGroups}
+            />
+          </div>
         </div>
       </div>
     </div>

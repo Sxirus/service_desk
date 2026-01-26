@@ -1,3 +1,13 @@
+/**
+ * DataTable Component (Generic TanStack Table Wrapper)
+ * 
+ * A generic table component that wraps TanStack Table for column-based rendering.
+ * Used by ClientUsersTable for displaying employee/user data.
+ * 
+ * For simple static tables, consider using SimpleDataTable instead.
+ * For ticket-specific features (sorting, filtering, persistence), use TicketsDataTable.
+ */
+
 "use client"
  
 import {
@@ -6,6 +16,7 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table"
+import { useTranslation } from 'react-i18next'
  
 import {
   Table,
@@ -25,6 +36,8 @@ export function DataTable<TData, TValue>({
   columns,
   data,
 }: DataTableProps<TData, TValue>) {
+  const { t } = useTranslation('dashboard')
+  
   const table = useReactTable({
     data,
     columns,
@@ -32,7 +45,7 @@ export function DataTable<TData, TValue>({
   })
  
   return (
-    <div className="overflow-hidden rounded-md border">
+    <div className="bg-card text-card-foreground rounded-xl border py-2 px-2 shadow-sm w-full">
       <Table>
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
@@ -69,7 +82,7 @@ export function DataTable<TData, TValue>({
           ) : (
             <TableRow>
               <TableCell colSpan={columns.length} className="h-24 text-center">
-                No results.
+                {t('table.noResults')}
               </TableCell>
             </TableRow>
           )}

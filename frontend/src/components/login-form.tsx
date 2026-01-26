@@ -2,11 +2,13 @@
 "use client";
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { actions } from "astro:actions";
+import { LanguageSwitcher } from "@/i18n/LanguageSwitcher";
 
 declare global {
   interface Window {
@@ -21,6 +23,7 @@ declare global {
 type Props = React.ComponentPropsWithoutRef<"form"> & { siteKey: string };
 
 export function LoginForm({ className, siteKey, ...props }: Props) {
+  const { t } = useTranslation('auth');
   const formRef = React.useRef<HTMLFormElement | null>(null);
   const captchaRef = React.useRef<HTMLDivElement | null>(null);
   const widgetIdRef = React.useRef<string | null>(null);
@@ -68,8 +71,8 @@ export function LoginForm({ className, siteKey, ...props }: Props) {
     try {
       if (!captchaToken) {
         setLoading(false);
-        return setError("Bitte das CAPTCHA ausfüllen.");
-      }
+        return setError(t('login.captchaRequired'));
+      } 
 
       const formData = new FormData(formRef.current!);
       formData.append("captchaToken", captchaToken);
@@ -77,11 +80,11 @@ export function LoginForm({ className, siteKey, ...props }: Props) {
       const result = await actions.signIn(formData);
       if (!result?.data?.success) {
         if (result?.data?.message?.includes("captcha protection")) {
-          setError("Verifizierung fehlgeschlagen. Bitte erneut versuchen.");
+          setError(t('errors.invalidCredentials'));
           window.turnstile?.reset?.(widgetIdRef.current || undefined);
           setCaptchaToken("");
         } else {
-          setError("Login fehlgeschlagen. Bitte E-Mail und Passwort prüfen.");
+          setError(t('errors.invalidCredentials'));
           window.turnstile?.reset?.(widgetIdRef.current || undefined);
           setCaptchaToken("");
         }
@@ -91,7 +94,7 @@ export function LoginForm({ className, siteKey, ...props }: Props) {
 
       window.location.href = "/dashboard";
     } catch {
-      setError("Etwas ist schief gelaufen. Bitte später erneut versuchen.");
+      setError(t('errors.invalidCredentials'));
       window.turnstile?.reset?.(widgetIdRef.current || undefined);
       setCaptchaToken("");
       setLoading(false);
@@ -106,23 +109,26 @@ export function LoginForm({ className, siteKey, ...props }: Props) {
       {...props}
     >
       <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-2xl font-bold">Login to your account</h1>
+        <div className="absolute top-4 right-4">
+          <LanguageSwitcher />
+        </div>
+        <h1 className="text-2xl font-bold">{t('login.title')}</h1>
         <p className="text-balance text-sm text-muted-foreground">
-          Enter your email below to login to your account
+          {t('login.subtitle')}
         </p>
       </div>
 
       <div className="grid gap-6">
         <div className="grid gap-2">
-          <Label htmlFor="email">Email</Label>
-          <Input id="email" name="email" type="email" placeholder="youremail@example.com" required />
+          <Label htmlFor="email">{t('login.emailLabel')}</Label>
+          <Input id="email" name="email" type="email" placeholder={t('login.emailPlaceholder')} required />
         </div>
 
         <div className="grid gap-2">
           <div className="flex items-center">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">{t('login.passwordLabel')}</Label>
             <a href="/reset-password" className="ml-auto text-sm underline-offset-4 hover:underline">
-              Forgot your password?
+              {t('login.forgotPassword')}
             </a>
           </div>
           <Input id="password" name="password" type="password" required />
@@ -134,7 +140,7 @@ export function LoginForm({ className, siteKey, ...props }: Props) {
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
         <Button type="submit" className="w-full cursor-pointer" disabled={loading}>
-          {loading ? "Einloggen..." : "Login"}
+          {loading ? t('login.submitting') : t('login.submitButton')}
         </Button>
       </div>
     </form>

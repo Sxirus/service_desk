@@ -8,19 +8,80 @@
  * - File attachment support with preview
  * - Memory-safe file handling
  * - Accessible keyboard controls
+ * - Ticket status selection (defaults to resolved)
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { apiClient } from '@/utils/api';
 import { FileUploadManager } from '@/utils/attachmentManager';
 import type { ReplyAreaProps, FileUploadState } from '@/types/ticket.types';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { toast } from 'sonner';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const MIN_HEIGHT = 150;
 const MAX_HEIGHT = 600;
 const COLLAPSED_HEIGHT = 52;
 const DEFAULT_HEIGHT = 180;
+
+type PostSendBehavior = 'stay' | 'next' | 'back';
+type TicketStatus = 'new' | 'open' | 'waiting' | 'resolved';
+
+const AFTER_SEND_KEY = 'replyAfterSendBehavior';
+
+// Status configuration for display - labels are translation keys
+const STATUS_OPTIONS: { value: TicketStatus; labelKey: string; color: string }[] = [
+  { value: 'resolved', labelKey: 'tickets.statusResolved', color: 'bg-gray-400' },
+  { value: 'waiting', labelKey: 'tickets.statusWaiting', color: 'bg-blue-500' },
+  { value: 'open', labelKey: 'tickets.statusOpen', color: 'bg-orange-500' },
+  { value: 'new', labelKey: 'tickets.statusNew', color: 'bg-green-500' },
+];
+
+function getOriginFromLocation(): string | null {
+  try {
+    const url = new URL(window.location.href);
+    const from = url.searchParams.get('from');
+    return from;
+  } catch {
+    return null;
+  }
+}
+
+function getBackHref(fromTableId: string | null): string {
+  if (!fromTableId) return '/dashboard';
+  if (fromTableId === 'dashboard') return '/dashboard';
+  if (fromTableId.startsWith('inbox-')) {
+    const inboxId = fromTableId.slice('inbox-'.length);
+    if (inboxId) return `/inboxes/${inboxId}`;
+  }
+  return '/dashboard';
+}
+
+function getNextTicketHref(fromTableId: string, currentCustomerId: string): string | null {
+  try {
+    const raw = localStorage.getItem(`table_${fromTableId}_ticketOrder`);
+    if (!raw) return null;
+    const order = JSON.parse(raw) as string[];
+    if (!Array.isArray(order) || order.length === 0) return null;
+
+    const currentIndex = order.findIndex((id) => String(id) === String(currentCustomerId));
+    if (currentIndex < 0) return null;
+    const nextId = order[currentIndex + 1];
+    if (!nextId) return null;
+    const from = encodeURIComponent(fromTableId);
+    return `/tickets/${nextId}?from=${from}`;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * File attachment preview item component
@@ -36,6 +97,7 @@ const AttachmentPreviewItem: React.FC<AttachmentPreviewItemProps> = ({
   index, 
   onRemove 
 }) => {
+  const { t } = useTranslation('dashboard');
   return (
     <div 
       className="border rounded p-2 w-32 text-xs flex flex-col gap-1 bg-card"
@@ -58,10 +120,10 @@ const AttachmentPreviewItem: React.FC<AttachmentPreviewItemProps> = ({
           console.log('Remove clicked for index', index);
         }}
         className="self-end text-[10px] text-red-500 hover:text-red-700 font-bold"
-        aria-label={`Remove ${fileState.file.name}`}
+        aria-label={`${t('tickets.removeAttachment')} ${fileState.file.name}`}
         type="button"
       >
-        ✕ Remove
+        ✕ {t('tickets.remove')}
       </button>
     </div>
   );
@@ -76,8 +138,12 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
   customerId,
   signature,
   threadEmailAddress,
+  agentName,
+  agentAvatarUrl,
+  composeMode,
   onEmailSent
 }) => {
+  const { t } = useTranslation('dashboard');
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -91,6 +157,8 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<FileUploadState[]>([]);
+  const [postSendBehavior, setPostSendBehavior] = useState<PostSendBehavior>('back');
+  const [ticketStatus, setTicketStatus] = useState<TicketStatus>('resolved'); // Default to resolved
 
   // Refs for resize functionality
   const resizeStateRef = useRef({
@@ -104,14 +172,45 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
   useEffect(() => {
     const savedCollapsed = localStorage.getItem('replyAreaCollapsed') === 'true';
     const savedHeight = localStorage.getItem('replyAreaHeight');
+    const savedBehavior = localStorage.getItem(AFTER_SEND_KEY) as PostSendBehavior | null;
 
-    setIsCollapsed(savedCollapsed);
+    // In compose mode, always start expanded
+    if (composeMode) {
+      setIsCollapsed(false);
+    } else {
+      setIsCollapsed(savedCollapsed);
+    }
+
+    if (savedBehavior === 'stay' || savedBehavior === 'next' || savedBehavior === 'back') {
+      setPostSendBehavior(savedBehavior);
+    } else {
+      setPostSendBehavior('back');
+      localStorage.setItem(AFTER_SEND_KEY, 'back');
+    }
 
     if (savedHeight) {
       const height = parseInt(savedHeight);
       if (height >= MIN_HEIGHT && height <= MAX_HEIGHT) {
         setContainerHeight(height);
       }
+    }
+  }, [composeMode]);
+
+  const handleChangeBehavior = useCallback((value: string) => {
+    const next = (value as PostSendBehavior);
+    if (next !== 'stay' && next !== 'next' && next !== 'back') return;
+    setPostSendBehavior(next);
+    try {
+      localStorage.setItem(AFTER_SEND_KEY, next);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleChangeStatus = useCallback((value: string) => {
+    const validStatuses: TicketStatus[] = ['new', 'open', 'waiting', 'resolved'];
+    if (validStatuses.includes(value as TicketStatus)) {
+      setTicketStatus(value as TicketStatus);
     }
   }, []);
 
@@ -123,18 +222,26 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       const customEvent = e as CustomEvent;
       const text = customEvent?.detail?.text || '';
 
-      if (!text || !textareaRef.current) return;
+      if (!text) return;
 
-      // Append macro text to textarea
-      const currentValue = textareaRef.current.value;
-      const newValue = currentValue + (currentValue ? '\n\n' : '') + text;
-      
-      setReplyText(newValue);
-      textareaRef.current.value = newValue;
-      
-      // Focus and move cursor to end
-      textareaRef.current.focus();
-      textareaRef.current.setSelectionRange(newValue.length, newValue.length);
+      // If reply area is collapsed, expand it first so the textarea is mounted.
+      setIsCollapsed(false);
+      localStorage.setItem('replyAreaCollapsed', 'false');
+
+      // Append macro text to current reply text.
+      setReplyText((prev) => {
+        const currentValue = prev || '';
+        return currentValue + (currentValue ? '\n\n' : '') + text;
+      });
+
+      // Focus and move cursor to end (after render)
+      setTimeout(() => {
+        const el = textareaRef.current;
+        if (!el) return;
+        const newValue = el.value;
+        el.focus();
+        el.setSelectionRange(newValue.length, newValue.length);
+      }, 0);
     };
 
     window.addEventListener('MacroChoosen', handleMacroChosen);
@@ -282,23 +389,50 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       const body = replyText.trim();
       const files = uploadManagerRef.current.getFiles();
 
-      // Validate email address format
-      if (!emailAddress || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailAddress)) {
-        setError('Invalid recipient email address');
-        setIsSending(false);
-        return;
-      }
-
-      // Validate subject
-      if (!subject || subject.trim().length === 0) {
-        setError('Email subject is required');
-        setIsSending(false);
-        return;
-      }
-
-      // Validate body/attachments
+      // If no content and no attachments, just update the status without sending an email
       if (body === '' && files.length === 0) {
-        setError('Please enter a message or attach a file');
+        await apiClient.post(`/emails/updateStatus?customerId=${customerId}`, {
+          status: ticketStatus
+        });
+        
+        toast.success(t('tickets.statusUpdatedSuccess'));
+        setTicketStatus('resolved'); // Reset to default for next reply
+        
+        // Callback or redirect
+        if (onEmailSent) {
+          onEmailSent();
+        } else {
+          const fromTableId = getOriginFromLocation();
+          const effectiveBehavior: PostSendBehavior = composeMode ? 'stay' : postSendBehavior;
+
+          if (effectiveBehavior === 'next') {
+            const nextHref = fromTableId ? getNextTicketHref(fromTableId, String(customerId)) : null;
+            if (nextHref) {
+              window.location.href = nextHref;
+            }
+          } else if (effectiveBehavior === 'back') {
+            const backHref = getBackHref(fromTableId);
+            window.location.href = backHref;
+          } else {
+            // 'stay' - refresh page to update status badge
+            window.location.reload();
+          }
+        }
+        
+        setIsSending(false);
+        return;
+      }
+
+      // Validate email address format (only needed when sending email)
+      if (!emailAddress || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailAddress)) {
+        setError(t('tickets.invalidRecipientEmail'));
+        setIsSending(false);
+        return;
+      }
+
+      // Validate subject (only needed when sending email)
+      if (!subject || subject.trim().length === 0) {
+        setError(t('tickets.subjectRequired'));
         setIsSending(false);
         return;
       }
@@ -315,36 +449,86 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       formData.append('subject', subject);
       formData.append('text', fullBody);
       formData.append('threadEmailAddress', threadEmailAddress || '');
+      formData.append('ticketStatus', ticketStatus); // Include status to set after sending
 
       files.forEach(file => {
         formData.append('attachments', file);
       });
 
       // Send email
-      await apiClient.postFormData(`/emails/sendMail?customerId=${customerId}`, formData);
-
-      // Mark conversation as read
-      try {
-        await apiClient.post(`/emails/makeRead?customerId=${customerId}`);
-      } catch (readErr) {
-        console.warn('[ReplyArea] Failed to mark as read:', readErr);
-        // Non-critical error, continue
+      const response = await apiClient.postFormData(`/emails/sendMail?customerId=${customerId}`, formData);
+      
+      // Check if limit was reached
+      if (response && typeof response === 'object' && 'limitReached' in response) {
+        const limitType = response.limitType || 'emails';
+        if (limitType === 'users') {
+          setError(t('tickets.userLimitExceeded'));
+        } else {
+          setError(t('tickets.emailLimitReached'));
+        }
+        setIsSending(false);
+        return;
       }
+
+      // Status is now updated as part of sendMail endpoint
+      // No need for separate makeRead call
+
+      toast.success(t('tickets.emailSentSuccess'));
 
       // Clear state only on success
       uploadManagerRef.current.clear();
       setAttachments([]);
       setReplyText('');
+      setTicketStatus('resolved'); // Reset to default for next reply
       
       // Callback or redirect
       if (onEmailSent) {
         onEmailSent();
       } else {
-        window.location.href = '/dashboard';
+        const fromTableId = getOriginFromLocation();
+        const effectiveBehavior: PostSendBehavior = composeMode ? 'stay' : postSendBehavior;
+
+        if (effectiveBehavior === 'stay') {
+          // Optimistically add the sent message to the current thread.
+          try {
+            const optimisticSentEmail = {
+              id: `temp-sent-${Date.now()}`,
+              type: 'sent' as const,
+              send_at: new Date().toISOString(),
+              text_content: fullBody,
+              attachments: [],
+              has_attachments: false,
+              employee_id: 'me',
+              agent_name: agentName || 'Support Agent',
+              agent_avatar_url: agentAvatarUrl ?? null,
+            };
+            window.dispatchEvent(
+              new CustomEvent('TicketEmailSent', {
+                detail: { customerId: String(customerId), email: optimisticSentEmail },
+              })
+            );
+          } catch {
+            // ignore
+          }
+          // do nothing
+          setIsSending(false);
+          return;
+        }
+
+        if (effectiveBehavior === 'next' && fromTableId) {
+          const nextHref = getNextTicketHref(fromTableId, String(customerId));
+          if (nextHref) {
+            window.location.href = nextHref;
+            return;
+          }
+          // fall back to back if no next
+        }
+
+        window.location.href = getBackHref(fromTableId);
       }
     } catch (err) {
       console.error('[ReplyArea] Send failed:', err);
-      setError(err instanceof Error ? err.message : 'Failed to send email. Please try again.');
+      setError(err instanceof Error ? err.message : t('tickets.failedToSendEmail'));
       setIsSending(false);
       // Don't clear form on error so user doesn't lose their message
     }
@@ -358,16 +542,16 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       className="border-t bg-card flex flex-col"
       style={{ minHeight: `${COLLAPSED_HEIGHT}px`, height: `${effectiveHeight}px` }}
       role="region"
-      aria-label="Email reply area"
+      aria-label={t('tickets.emailReplyArea')}
     >
       {/* Resize Handle */}
       <div
         className="h-1.5 bg-border hover:bg-primary cursor-ns-resize transition-colors relative group shrink-0"
         onMouseDown={handleResizeStart}
-        title="Drag to resize"
+        title={t('tickets.dragToResize')}
         role="separator"
         aria-orientation="horizontal"
-        aria-label="Resize reply area"
+        aria-label={t('tickets.resizeReplyArea')}
         tabIndex={0}
         onKeyDown={(e) => {
           if (e.key === 'ArrowUp' && !isCollapsed) {
@@ -383,14 +567,14 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       {/* Header with Collapse Button */}
       <div className="flex items-center justify-between px-6 pt-3 pb-2 shrink-0">
         <label htmlFor="reply-textarea" className="text-sm font-medium leading-none">
-          Your Reply
+          {t('tickets.yourReply')}
         </label>
         <button
           type="button"
           onClick={handleToggleCollapse}
-          className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors"
-          title={isCollapsed ? 'Expand reply area' : 'Collapse reply area'}
-          aria-label={isCollapsed ? 'Expand reply area' : 'Collapse reply area'}
+          className="inline-flex cursor-pointer items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors"
+          title={isCollapsed ? t('tickets.expandReplyArea') : t('tickets.collapseReplyArea')}
+          aria-label={isCollapsed ? t('tickets.expandReplyArea') : t('tickets.collapseReplyArea')}
           aria-expanded={!isCollapsed}
         >
           <svg
@@ -428,9 +612,9 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
                 className="w-full h-full min-h-0 rounded-md border border-input bg-background px-3 py-2 pb-12 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-                placeholder="Type your reply..."
+                placeholder={t('tickets.typeYourReply')}
                 disabled={isSending}
-                aria-label="Reply message"
+                aria-label={t('tickets.replyMessage')}
               />
               
               {/* Floating Attachment Button */}
@@ -438,9 +622,9 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isSending}
-                className="absolute bottom-2 left-2 h-8 w-8 rounded-full bg-primary/70 hover:bg-primary text-primary-foreground flex items-center justify-center transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="Add attachments"
-                title="Attach files"
+                className="absolute cursor-pointer bottom-2 left-2 h-8 w-8 rounded-full bg-primary/70 hover:bg-primary text-primary-foreground flex items-center justify-center transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label={t('tickets.addAttachments')}
+                title={t('tickets.attachFiles')}
               >
                 <svg
                   className="h-4 w-4"
@@ -469,12 +653,49 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
               />
             </div>
 
-            <Button
-              onClick={handleSend}
-              disabled={isSending}
-              className="shrink-0"
-              aria-label="Send reply"
-            >
+            <div className="shrink-0 flex flex-col gap-2">
+              {!composeMode && (
+                <>
+                  {/* Status dropdown - above navigation */}
+                  <div className="w-44">
+                    <Select value={ticketStatus} onValueChange={handleChangeStatus}>
+                      <SelectTrigger aria-label={t('tickets.setStatus')}>
+                        <SelectValue placeholder={t('tickets.statusPlaceholder')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STATUS_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full ${option.color}`} />
+                              {t(option.labelKey)}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {/* After sending behavior dropdown */}
+                  <div className="w-44">
+                    <Select value={postSendBehavior} onValueChange={handleChangeBehavior}>
+                      <SelectTrigger aria-label={t('tickets.afterSendBehavior')}>
+                        <SelectValue placeholder={t('tickets.afterSendPlaceholder')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="stay">{t('tickets.afterSend.stayInTicket')}</SelectItem>
+                        <SelectItem value="next">{t('tickets.afterSend.goToNext')}</SelectItem>
+                        <SelectItem value="back">{t('tickets.afterSend.goToInbox')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+
+              <Button
+                onClick={handleSend}
+                disabled={isSending}
+                className="shrink-0 cursor-pointer"
+                aria-label={t('tickets.sendReply')}
+              >
               {isSending ? (
                 <>
                   <svg 
@@ -487,7 +708,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  Sending...
+                  {t('tickets.sending')}
                 </>
               ) : (
                 <>
@@ -506,10 +727,11 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                       d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
                     />
                   </svg>
-                  Send Reply
+                  {t('tickets.sendReply')}
                 </>
               )}
-            </Button>
+              </Button>
+            </div>
           </div>
 
           {/* File Upload Section - Attachments List */}
@@ -518,11 +740,11 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
               <div 
                 className="flex gap-3 flex-wrap"
                 role="list"
-                aria-label="Selected attachments"
+                aria-label={t('tickets.selectedAttachments')}
               >
                 {attachments.map((fileState, index) => (
                   <AttachmentPreviewItem
-                    key={index}
+                    key={fileState.objectURL}
                     fileState={fileState}
                     index={index}
                     onRemove={handleRemoveAttachment}

@@ -1,8 +1,15 @@
 ---
 import { Headset } from "lucide-react";
 import { LoginForm } from "@/components/login-form";
+import { LanguagePicker } from "@/components/LanguagePicker";
 import Layout from "../layouts/BaseLayout.astro";
 import { createClient } from "../lib/supabase.ts";
+import { checkPlatformAdmin } from "../lib/auth-helpers.ts";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const { t } = getTranslations(lang, 'common');
 
 // Supabase SSR Client
 const supabase = createClient({
@@ -13,25 +20,46 @@ const supabase = createClient({
 // Redirect wenn schon eingeloggt
 const { data } = await supabase.auth.getUser();
 if (data.user) {
-  return Astro.redirect("/dashboard");
+  // Check if user has an employee record (linked to a client)
+  const { data: employee } = await supabase
+    .from("employees")
+    .select("id")
+    .eq("user_id", data.user.id)
+    .single();
+
+  if (employee) {
+    // User is linked to a client, redirect to regular dashboard
+    return Astro.redirect("/dashboard");
+  } else {
+    // User has no client link - check if they're a platform admin
+    const platformAdmin = await checkPlatformAdmin(supabase, data.user.id);
+    if (platformAdmin) {
+      // Platform admin without client link, redirect to platform dashboard
+      return Astro.redirect("/platform/dashboard");
+    }
+    // User exists but has no employee record and is not a platform admin
+    // This shouldn't normally happen, but redirect to a safe page
+    return Astro.redirect("/dashboard");
+  }
 }
 
 // Turnstile Site Key
 const siteKey = import.meta.env.TURNSTILE_SITE_KEY as string;
 ---
 
-<Layout>
+<Layout title={t('pages.login.pageTitle')}>
   <div class="grid min-h-svh lg:grid-cols-2">
     <!-- Left Section -->
     <div class="flex flex-col gap-4 p-6 md:p-10">
       <!-- Logo / Branding -->
-      <div class="flex justify-center gap-2 md:justify-start">
+      <div class="flex justify-between items-center">
         <a href="/" class="flex items-center gap-2 font-medium">
           <div class="flex size-6 items-center justify-center rounded-md">
             <Headset className="size-4" />
           </div>
-          Service Desk.
+          {t('appName')}.
         </a>
+        <LanguagePicker client:load variant="outline" size="sm" />
       </div>
 
       <!-- Login Form -->

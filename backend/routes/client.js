@@ -1,60 +1,32 @@
 /**
  * Client Routes - SECURED
  * Handles client-related operations: employees, assignments
- * 
- * All routes now protected with authentication and authorization
+ * Refactored to use clientService
  */
 
 const express = require('express');
 const router = express.Router();
-const supabase = require("../config/supabase");
 const { authenticate } = require('../middleware/auth');
-const { authorizeCustomerAccess, authorizeEmployeeAccess } = require('../middleware/authorization');
 const { validateId } = require('../middleware/validation');
+const clientService = require('../services/clientService');
+const logger = require('../utils/logger');
+const supabase = require("../config/supabase"); // needed for direct queries in some edge cases if any
 
 /**
  * Get all employees for authenticated user's client
- * GET /api/client/getEmployees
- * 
- * Authentication: Required
- * Authorization: Automatically filtered by user's client_id
  */
-router.get('/getEmployees', 
-  authenticate,
-  async (req, res) => {
-    try {
-      // Use client_id from authenticated user (secure - can't be spoofed)
-      const client_id = req.user.client_id;
-      
-      console.log('[CLIENT] Fetching employees for client:', client_id);
-
-      const { data, error } = await supabase
-        .from("employees")
-        .select("id, name")
-        .eq("client_id", client_id)
-        .order("name");
-
-      if (error) {
-        console.error('[CLIENT] Supabase error:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
-      }
-
-      console.log('[CLIENT] Fetched', data.length, 'employees');
-      res.json({success: true, data});
-    } catch (err) {
-      console.error('[CLIENT] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
-    }
+router.get('/getEmployees', authenticate, async (req, res) => {
+  try {
+    const data = await clientService.getEmployees(req.user.client_id);
+    res.json({ success: true, data });
+  } catch (err) {
+    logger.error('[CLIENT] Error fetching employees', { error: err.message });
+    res.status(500).json({ error: 'Server error' });
   }
-);
+});
 
 /**
  * Assign employee to customer
- * POST /api/client/assignEmployee
- * Body: { employee_id, customer_id }
- * 
- * Authentication: Required
- * Authorization: Both employee and customer must belong to user's client
  */
 router.post('/assignEmployee',
   authenticate,
@@ -62,76 +34,335 @@ router.post('/assignEmployee',
   validateId('customer_id'),
   async (req, res) => {
     try {
-      const employee_id = req.sanitized.employee_id;
-      const customer_id = req.sanitized.customer_id;
-      const client_id = req.user.client_id;
-
-      console.log('[CLIENT] Assigning employee:', {
-        employee_id,
-        customer_id,
-        client_id
-      });
-
-      // Verify employee belongs to user's client
-      const { data: employee, error: employeeError } = await supabase
-        .from('employees')
-        .select('client_id')
-        .eq('id', employee_id)
-        .single();
-
-      if (employeeError || !employee) {
-        console.error('[CLIENT] Employee not found:', employee_id);
-        return res.status(404).json({ error: 'Employee not found' });
-      }
-
-      if (employee.client_id !== client_id) {
-        console.warn('[CLIENT] Unauthorized employee access attempt:', {
-          employee_id,
-          employee_client_id: employee.client_id,
-          user_client_id: client_id
-        });
-        return res.status(403).json({ error: 'Employee does not belong to your client' });
-      }
-
-      // Verify customer belongs to user's client
-      const { data: customer, error: customerError } = await supabase
-        .from('customers')
-        .select('client_id')
-        .eq('id', customer_id)
-        .single();
-
-      if (customerError || !customer) {
-        console.error('[CLIENT] Customer not found:', customer_id);
-        return res.status(404).json({ error: 'Customer not found' });
-      }
-
-      if (customer.client_id !== client_id) {
-        console.warn('[CLIENT] Unauthorized customer access attempt:', {
-          customer_id,
-          customer_client_id: customer.client_id,
-          user_client_id: client_id
-        });
-        return res.status(403).json({ error: 'Customer does not belong to your client' });
-      }
-
-      // Both verified - proceed with assignment
-      const { data, error } = await supabase
-        .from('customers')
-        .update({ employee_id: employee_id })
-        .eq('id', customer_id);
-
-      if (error) {
-        console.error('[CLIENT] Assignment update failed:', error.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
-      }
-
-      console.log('[CLIENT] Successfully assigned employee', employee_id, 'to customer', customer_id);
+      const data = await clientService.assignEmployee(
+        req.user.client_id, 
+        req.sanitized.employee_id, 
+        req.sanitized.customer_id
+      );
       res.json({ success: true, data });
     } catch (err) {
-      console.error('[CLIENT] Server error:', err.message);
-      res.status(500).json({ error: 'Serverfehler' });
+      logger.error('[CLIENT] Assign employee error', { error: err.message });
+      const status = err.status || 500;
+      res.status(status).json({ error: err.message || 'Server error' });
     }
   }
 );
+
+/**
+ * Assign group to customer
+ */
+router.post('/assignGroup',
+  authenticate,
+  validateId('group_id'),
+  validateId('customer_id'),
+  async (req, res) => {
+    try {
+      const data = await clientService.assignGroup(
+        req.user.client_id, 
+        req.sanitized.group_id, 
+        req.sanitized.customer_id
+      );
+      res.json({ success: true, data });
+    } catch (err) {
+      logger.error('[CLIENT] Assign group error', { error: err.message });
+      const status = err.status || 500;
+      res.status(status).json({ error: err.message || 'Server error' });
+    }
+  }
+);
+
+/**
+ * Unassign employee and group from customer
+ */
+router.post('/unassign',
+  authenticate,
+  validateId('customer_id'),
+  async (req, res) => {
+    try {
+      const data = await clientService.unassignCustomer(req.user.client_id, req.sanitized.customer_id);
+      res.json({ success: true, data });
+    } catch (err) {
+      logger.error('[CLIENT] Unassign error', { error: err.message });
+      const status = err.status || 500;
+      res.status(status).json({ error: err.message || 'Server error' });
+    }
+  }
+);
+
+/**
+ * Bulk assign employee or group to multiple customers
+ */
+router.post('/bulkAssign',
+  authenticate,
+  async (req, res) => {
+    try {
+      const { customerIds, employeeId, groupId } = req.body;
+      
+      // Basic validation
+      if (!Array.isArray(customerIds) || customerIds.length === 0) {
+        return res.status(400).json({ success: false, error: 'customerIds must be a non-empty array' });
+      }
+      if (!employeeId && !groupId) {
+        return res.status(400).json({ success: false, error: 'Provide either employeeId or groupId' });
+      }
+
+      const result = await clientService.bulkAssign(req.user.client_id, {
+        customerIds: customerIds.map(Number).filter(id => !isNaN(id)),
+        employeeId: employeeId ? Number(employeeId) : null,
+        groupId: groupId ? Number(groupId) : null
+      });
+
+      res.json({ success: true, ...result });
+    } catch (err) {
+      logger.error('[CLIENT] Bulk assign error', { error: err.message });
+      const status = err.status || 500;
+      res.status(status).json({ success: false, error: err.message || 'Server error' });
+    }
+  }
+);
+
+/**
+ * Create Stripe customer for a client
+ */
+router.post('/createStripeCustomer',
+  authenticate,
+  async (req, res) => {
+    try {
+      const { client_id } = req.body;
+      if (parseInt(client_id) !== req.user.client_id) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const result = await clientService.handleStripeCustomerCreation(req.user.client_id, req.body);
+      res.json({
+        success: true,
+        stripe_customer_id: result.stripe_customer_id,
+        customer: result.customer
+      });
+    } catch (err) {
+      logger.error('[CLIENT] Create Stripe Customer error', { error: err.message });
+      res.status(500).json({ error: 'Server error', message: err.message });
+    }
+  }
+);
+
+/**
+ * Create Stripe Checkout Session
+ */
+router.post('/create-checkout-session', authenticate, async (req, res) => {
+  try {
+    const { priceId, quantity } = req.body;
+    if (!priceId) return res.status(400).json({ success: false, error: 'priceId required' });
+
+    // Get client for stripe ID
+    const { data: clientData } = await supabase.from('clients').select('stripe_customer_id').eq('id', req.user.client_id).single();
+    if (!clientData?.stripe_customer_id) return res.status(400).json({ success: false, error: 'No Stripe Customer ID' });
+
+    const sessionResult = await clientService.createCheckoutSession({
+      customerId: clientData.stripe_customer_id,
+      priceId,
+      quantity: quantity || 1,
+      successUrl: `${process.env.FRONTEND_URL || 'http://localhost:4321'}/register?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: `${process.env.FRONTEND_URL || 'http://localhost:4321'}/register?payment=cancelled`,
+    });
+
+    if (!sessionResult.success) throw new Error(sessionResult.error);
+    res.json({ success: true, clientSecret: sessionResult.clientSecret, sessionId: sessionResult.sessionId });
+  } catch (err) {
+    logger.error('[CLIENT] Create checkout session error', { error: err.message });
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Upgrade Checkout Session
+ */
+router.post('/upgrade-checkout-session', authenticate, async (req, res) => {
+  try {
+    const { priceId, quantity } = req.body;
+    if (!priceId) return res.status(400).json({ success: false, error: 'priceId required' });
+
+    const { data: clientData } = await supabase.from('clients').select('stripe_customer_id').eq('id', req.user.client_id).single();
+    if (!clientData?.stripe_customer_id) return res.status(400).json({ success: false, error: 'No Stripe Customer ID' });
+
+    const sessionResult = await clientService.createCheckoutSession({
+      customerId: clientData.stripe_customer_id,
+      priceId,
+      quantity: quantity || 1,
+      successUrl: `${process.env.FRONTEND_URL || 'http://localhost:4321'}/manage/subscription?upgrade=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: `${process.env.FRONTEND_URL || 'http://localhost:4321'}/manage/subscription?upgrade=cancelled`,
+    });
+
+    if (!sessionResult.success) throw new Error(sessionResult.error);
+    res.json({ success: true, clientSecret: sessionResult.clientSecret, sessionId: sessionResult.sessionId });
+  } catch (err) {
+    logger.error('[CLIENT] Upgrade session error', { error: err.message });
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Complete Subscription
+ */
+router.post('/complete-subscription', authenticate, async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    if (!sessionId) return res.status(400).json({ success: false, error: 'sessionId required' });
+
+    const sessionResult = await clientService.retrieveCheckoutSession(sessionId);
+    if (!sessionResult.success) throw new Error(sessionResult.error);
+
+    // Security Check: Verify that the session belongs to this client
+    const { data: clientVerification } = await supabase
+      .from('clients')
+      .select('stripe_customer_id')
+      .eq('id', req.user.client_id)
+      .single();
+
+    if (!clientVerification || clientVerification.stripe_customer_id !== sessionResult.session.customer) {
+      logger.warn('[CLIENT] IDOR attempt on complete-subscription', { 
+        clientId: req.user.client_id, 
+        sessionId,
+        sessionCustomer: sessionResult.session.customer,
+        clientCustomer: clientVerification?.stripe_customer_id 
+      });
+      return res.status(403).json({ success: false, error: 'Access denied: Session does not belong to your account' });
+    }
+
+    const { subscriptionId, status } = sessionResult;
+    if (status !== 'complete') return res.status(400).json({ success: false, error: 'Payment not complete' });
+
+    await supabase.from('clients').update({ subscription_tier: 'paid', stripe_subscription_id: subscriptionId }).eq('id', req.user.client_id);
+    
+    res.json({ success: true, subscriptionId, tier: 'paid' });
+  } catch (err) {
+    logger.error('[CLIENT] Complete subscription error', { error: err.message });
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Get Subscription
+ */
+router.get('/subscription', authenticate, async (req, res) => {
+  try {
+    const { data: clientData } = await supabase.from('clients').select('stripe_subscription_id, subscription_tier').eq('id', req.user.client_id).single();
+    
+    if (!clientData?.stripe_subscription_id) {
+      return res.json({ success: true, tier: clientData?.subscription_tier || 'free', status: 'active', subscription: null });
+    }
+
+    const subResult = await clientService.getSubscription(clientData.stripe_subscription_id);
+    if (!subResult.success) throw new Error(subResult.error);
+
+    const sub = subResult.subscription;
+    const item = sub.items.data[0];
+
+    res.json({
+      success: true,
+      tier: clientData.subscription_tier,
+      status: sub.status,
+      subscription: {
+        id: sub.id,
+        status: sub.status,
+        currentPeriodEnd: item?.current_period_end,
+        currentPeriodStart: item?.current_period_start,
+        cancelAtPeriodEnd: sub.cancel_at_period_end,
+        canceledAt: sub.canceled_at,
+        quantity: item?.quantity || 1,
+        amount: item?.price?.unit_amount || 0,
+        currency: item?.price?.currency || 'eur',
+        interval: item?.price?.recurring?.interval || 'month',
+      }
+    });
+  } catch (err) {
+    logger.error('[CLIENT] Get subscription error', { error: err.message });
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+/**
+ * Create Billing Portal
+ */
+router.post('/billing-portal', authenticate, async (req, res) => {
+  try {
+    const { data: clientData } = await supabase.from('clients').select('stripe_customer_id').eq('id', req.user.client_id).single();
+    if (!clientData?.stripe_customer_id) return res.status(400).json({ success: false, error: 'No Stripe Customer' });
+
+    const portal = await clientService.createBillingPortalSession({
+      customerId: clientData.stripe_customer_id,
+      returnUrl: `${process.env.FRONTEND_URL || 'http://localhost:4321'}/manage/subscription`,
+    });
+
+    if (!portal.success) throw new Error(portal.error);
+    res.json({ success: true, url: portal.url });
+  } catch (err) {
+    logger.error('[CLIENT] Billing portal error', { error: err.message });
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Update Subscription Quantity
+ */
+router.post('/update-subscription-quantity', authenticate, async (req, res) => {
+  try {
+    const { quantity } = req.body;
+    if (!quantity || quantity < 1) return res.status(400).json({ success: false, error: 'Invalid quantity' });
+
+    const { data: clientData } = await supabase.from('clients').select('stripe_subscription_id, subscription_tier').eq('id', req.user.client_id).single();
+    
+    if (clientData.subscription_tier !== 'paid' || !clientData.stripe_subscription_id) {
+      return res.json({ success: true, message: 'Free tier - no update needed' });
+    }
+
+    const result = await clientService.updateSubscriptionQuantity(clientData.stripe_subscription_id, quantity);
+    if (!result.success) throw new Error(result.error);
+
+    res.json({ success: true, subscription: result.subscription });
+  } catch (err) {
+    logger.error('[CLIENT] Update quantity error', { error: err.message });
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Usage Stats
+ */
+router.get('/usage-stats', authenticate, async (req, res) => {
+  try {
+    const stats = await clientService.getClientUsageStats(req.user.client_id);
+    res.json({ success: true, ...stats });
+  } catch (err) {
+    logger.error('[CLIENT] Usage stats error', { error: err.message });
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+/**
+ * Sync Stripe Customer
+ */
+router.post('/sync-stripe-customer', authenticate, async (req, res) => {
+  try {
+    const { name, address } = req.body;
+    const { data: clientData } = await supabase.from('clients').select('stripe_customer_id').eq('id', req.user.client_id).single();
+    
+    if (!clientData?.stripe_customer_id) return res.json({ success: true, message: 'No Stripe ID to sync' });
+
+    const updates = {};
+    if (name) updates.name = name;
+    if (address) updates.address = address;
+
+    if (Object.keys(updates).length > 0) {
+      const result = await clientService.updateStripeCustomer(clientData.stripe_customer_id, updates);
+      if (!result.success) throw new Error(result.error);
+    }
+
+    res.json({ success: true, message: 'Synced' });
+  } catch (err) {
+    logger.error('[CLIENT] Sync stripe error', { error: err.message });
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 module.exports = router;

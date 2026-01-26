@@ -1,0 +1,98 @@
+---
+/**
+ * Platform Client Detail Page
+ * View and edit details for a specific client
+ */
+
+import Layout from "../../../layouts/BaseLayout.astro";
+import { createClient } from "../../../lib/supabase.ts";
+import { getPlatformOnlyContext, getCompletePageContext } from "../../../lib/auth-helpers.ts";
+import PlatformShell from "@/components/platform/PlatformShell";
+import ClientDetail from "@/components/platform/ClientDetail";
+import { getApiUrl } from "../../../lib/api-config";
+
+const { id } = Astro.params;
+
+// Initialize Supabase client
+const supabase = createClient({
+  request: Astro.request,
+  cookies: Astro.cookies,
+});
+
+console.log("[platform-client-detail] Page accessed for client:", id);
+
+// Check authentication
+let user: { id: string; email: string } | null = null;
+let hasClientLink = false;
+let clientName: string | undefined;
+
+const pageContext = await getCompletePageContext(supabase, Astro.cookies);
+if (pageContext && pageContext.isPlatformAdmin) {
+  user = pageContext.authContext.user;
+  hasClientLink = true;
+  clientName = pageContext.sidebarData.team?.name;
+} else {
+  const platformContext = await getPlatformOnlyContext(supabase, Astro.cookies);
+  if (platformContext) {
+    user = platformContext.user;
+    hasClientLink = false;
+  }
+}
+
+if (!user) {
+  console.error("[platform-client-detail] Not a platform admin, redirecting");
+  return Astro.redirect("/");
+}
+
+// Get session for API calls
+const { data: { session } } = await supabase.auth.getSession();
+if (!session) {
+  console.error("[platform-client-detail] No session, redirecting");
+  return Astro.redirect("/");
+}
+
+// Fetch client details from backend API
+let clientData: any = null;
+try {
+  const response = await fetch(getApiUrl(`/api/platform/clients/${id}`), {
+    headers: {
+      "Authorization": `Bearer ${session.access_token}`,
+      "Content-Type": "application/json"
+    }
+  });
+
+  if (response.ok) {
+    const result = await response.json();
+    clientData = result.data;
+    console.log("[platform-client-detail] Client loaded:", clientData?.name);
+  } else {
+    console.error("[platform-client-detail] API error:", response.status);
+    return Astro.redirect("/platform/clients");
+  }
+} catch (error) {
+  console.error("[platform-client-detail] Failed to fetch client:", error);
+  return Astro.redirect("/platform/clients");
+}
+
+if (!clientData) {
+  return Astro.redirect("/platform/clients");
+}
+---
+
+<Layout title={`${clientData.name} - Platform`}>
+  <PlatformShell
+    client:load
+    user={{ email: user.email }}
+    crumbParentLabel="Clients"
+    crumbParentHref="/platform/clients"
+    crumbCurrent={clientData.name}
+    currentPath={`/platform/clients/${id}`}
+    hasClientLink={hasClientLink}
+    clientName={clientName}
+  >
+    <ClientDetail 
+      client:load
+      clientData={clientData}
+    />
+  </PlatformShell>
+</Layout>

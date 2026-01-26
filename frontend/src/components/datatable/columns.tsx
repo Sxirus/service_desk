@@ -1,10 +1,12 @@
 "use client"
  
 import { type ColumnDef } from "@tanstack/react-table"
-import { MoreHorizontal } from "lucide-react"
+import { MoreHorizontal, Shield, ShieldCheck, UserX } from "lucide-react"
 import { useState } from "react"
+import { useTranslation } from 'react-i18next'
  
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,8 +15,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { SimplePrivateAvatar, getInitials } from "@/components/ui/private-avatar"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 import { UserDialog, DeleteUserDialog } from "@/components/UserDialog"
+import { ReassignTicketsDialog } from "@/components/ReassignTicketsDialog"
 
 // This type is used to define the shape of our data.
 export type User = {
@@ -22,6 +32,8 @@ export type User = {
   name: string
   role: string
   email: string
+  disabled?: boolean
+  avatar_url?: string | null
 }
 
 interface Role {
@@ -31,29 +43,44 @@ interface Role {
 
 // Actions Cell Component für bessere Trennung der Logik
 function UserActionsCell({ user, roles }: { user: User, roles: Role[] }) {
+  const { t } = useTranslation('manage')
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [disableDialogOpen, setDisableDialogOpen] = useState(false);
+  const [reassignDialogOpen, setReassignDialogOpen] = useState(false);
+  const [unassignDialogOpen, setUnassignDialogOpen] = useState(false);
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="h-8 w-8 p-0">
-            <span className="sr-only">Open Menu</span>
+            <span className="sr-only">{t('table.openMenu')}</span>
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+          <DropdownMenuLabel>{t('table.actions')}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setEditDialogOpen(true)}>
-            Edit User
+            {t('users.editUser')}
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setDisableDialogOpen(true)}>
+            {user.disabled ? t('users.enableUser') : t('users.disableUser')}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setReassignDialogOpen(true)}>
+            {t('users.reassignAllTickets')}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setUnassignDialogOpen(true)}>
+            {t('users.unassignAllTickets')}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem 
             onClick={() => setDeleteDialogOpen(true)}
             className="text-red-600 focus:text-red-600"
           >
-            Delete User
+            {t('users.deleteUser')}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -73,25 +100,111 @@ function UserActionsCell({ user, roles }: { user: User, roles: Role[] }) {
         isOpen={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
       />
+
+      {/* Disable Dialog */}
+      <DeleteUserDialog
+        user={user}
+        isOpen={disableDialogOpen}
+        onOpenChange={setDisableDialogOpen}
+        mode={user.disabled ? 'enable' : 'disable'}
+      />
+
+      {/* Reassign Tickets Dialog */}
+      <ReassignTicketsDialog
+        open={reassignDialogOpen}
+        onOpenChange={setReassignDialogOpen}
+        user={user}
+        mode="reassign"
+      />
+
+      {/* Unassign Tickets Dialog */}
+      <ReassignTicketsDialog
+        open={unassignDialogOpen}
+        onOpenChange={setUnassignDialogOpen}
+        user={user}
+        mode="unassign"
+      />
     </>
   );
 }
 
-export const createColumns = (roles: Role[]): ColumnDef<User>[] => [
+// Helper component to render localized "Disabled" badge
+function DisabledBadge() {
+  const { t } = useTranslation('manage')
+  return (
+    <Badge variant="secondary" className="text-xs gap-1 shrink-0">
+      <UserX className="h-3 w-3" />
+      {t('table.disabled')}
+    </Badge>
+  )
+}
+
+// Helper component for tooltip content
+function DisabledTooltipContent() {
+  const { t } = useTranslation('manage')
+  return <>{t('table.cannotLogin')}</>
+}
+
+export const createColumns = (roles: Role[], t: any): ColumnDef<User>[] => [
   {
     accessorKey: "name",
-    header: "Name",
-  },
-  {
-    accessorKey: "email",
-    header: "E-Mail",
+    header: t('users.name'),
+    cell: ({ row }) => {
+      const user = row.original;
+      return (
+        <div className="flex items-center gap-3 py-1">
+          <SimplePrivateAvatar
+            src={user.avatar_url}
+            name={user.name}
+            className="h-9 w-9 shrink-0"
+            fallbackClassName="text-sm bg-primary/10 text-primary"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="font-medium truncate">{user.name}</span>
+              {user.disabled && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span><DisabledBadge /></span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <DisabledTooltipContent />
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+          </div>
+        </div>
+      );
+    },
   },
   {
     accessorKey: "role",
-    header: "Role",
+    header: t('users.role'),
+    cell: ({ row }) => {
+      const role = row.original.role;
+      const isAdmin = role.toLowerCase().includes('admin');
+      
+      return (
+        <div className="flex items-center gap-2">
+          {isAdmin ? (
+            <ShieldCheck className="h-4 w-4 text-amber-500" />
+          ) : (
+            <Shield className="h-4 w-4 text-muted-foreground" />
+          )}
+          <span className={isAdmin ? "font-medium text-amber-700 dark:text-amber-400" : ""}>
+            {role || "—"}
+          </span>
+        </div>
+      );
+    },
   },
   {
     id: "actions",
+    header: () => <span className="sr-only">{t('table.actions')}</span>,
     cell: ({ row }) => {
       const user = row.original;
       return <UserActionsCell user={user} roles={roles} />;
@@ -100,6 +213,7 @@ export const createColumns = (roles: Role[]): ColumnDef<User>[] => [
 ];
 
 // Für Rückwärtskompatibilität - falls Sie die Rollen nicht zur Verfügung haben
+// Note: This fallback uses hardcoded strings for backward compatibility
 export const columns: ColumnDef<User>[] = [
   {
     accessorKey: "name",

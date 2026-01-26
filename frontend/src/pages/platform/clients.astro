@@ -1,0 +1,97 @@
+---
+/**
+ * Platform Clients Page
+ * List and manage all clients on the platform
+ */
+
+import Layout from "../../layouts/BaseLayout.astro";
+import { createClient } from "../../lib/supabase.ts";
+import { getPlatformOnlyContext, getCompletePageContext } from "../../lib/auth-helpers.ts";
+import PlatformShell from "@/components/platform/PlatformShell";
+import ClientsManagement from "@/components/platform/ClientsManagement";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const { t } = getTranslations(lang, 'platform');
+const tCommon = getTranslations(lang, 'common');
+
+// Initialize Supabase client
+const supabase = createClient({
+  request: Astro.request,
+  cookies: Astro.cookies,
+});
+
+console.log("[platform-clients] Page accessed");
+
+// Check authentication
+let user: { id: string; email: string } | null = null;
+let hasClientLink = false;
+let clientName: string | undefined;
+
+const pageContext = await getCompletePageContext(supabase, Astro.cookies);
+if (pageContext && pageContext.isPlatformAdmin) {
+  user = pageContext.authContext.user;
+  hasClientLink = true;
+  clientName = pageContext.sidebarData.team?.name;
+} else {
+  const platformContext = await getPlatformOnlyContext(supabase, Astro.cookies);
+  if (platformContext) {
+    user = platformContext.user;
+    hasClientLink = false;
+  }
+}
+
+if (!user) {
+  console.error("[platform-clients] Not a platform admin, redirecting");
+  return Astro.redirect("/");
+}
+
+// Get session for API calls
+const { data: { session } } = await supabase.auth.getSession();
+if (!session) {
+  console.error("[platform-clients] No session, redirecting");
+  return Astro.redirect("/");
+}
+
+import { getApiUrl } from "../../lib/api-config";
+
+// Fetch clients from backend API (uses service role, bypasses RLS)
+let enrichedClients: any[] = [];
+try {
+  const response = await fetch(getApiUrl("/api/platform/clients"), {
+    headers: {
+      "Authorization": `Bearer ${session.access_token}`,
+      "Content-Type": "application/json"
+    }
+  });
+
+  if (response.ok) {
+    const result = await response.json();
+    enrichedClients = result.data || [];
+    console.log("[platform-clients] Loaded", enrichedClients.length, "clients from API");
+  } else {
+    console.error("[platform-clients] API error:", response.status, await response.text());
+  }
+} catch (error) {
+  console.error("[platform-clients] Failed to fetch clients:", error);
+}
+---
+
+<Layout title={t('pages.clients.pageTitle')}>
+  <PlatformShell
+    client:load
+    user={{ email: user.email }}
+    crumbParentLabel={tCommon.t('sidebar.platform')}
+    crumbParentHref="/platform"
+    crumbCurrent={tCommon.t('sidebar.clients')}
+    currentPath="/platform/clients"
+    hasClientLink={hasClientLink}
+    clientName={clientName}
+  >
+    <ClientsManagement 
+      client:load
+      initialClients={enrichedClients}
+    />
+  </PlatformShell>
+</Layout>

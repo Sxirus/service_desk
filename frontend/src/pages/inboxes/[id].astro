@@ -1,0 +1,149 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import AdminShell from "../../components/AdminShell";
+import { createClient } from "../../lib/supabase";
+import { getCompletePageContext } from "../../lib/auth-helpers";
+import { TicketsDataTableWithPresence } from "@/components/datatable/TicketsDataTableWithPresence";
+import { NewEmailPopover } from "@/components/NewEmailPopover";
+import { getApiUrl } from "../../lib/api-config";
+
+// Initialize Supabase client
+const supabase = createClient({
+  request: Astro.request,
+  cookies: Astro.cookies
+});
+
+// Get authentication context
+const pageContext = await getCompletePageContext(supabase, Astro.cookies);
+
+if (!pageContext) {
+  return Astro.redirect("/");
+}
+
+const { authContext, sidebarData } = pageContext;
+
+// Get session for API calls
+const { data: { session } } = await supabase.auth.getSession();
+if (!session) {
+  return Astro.redirect("/");
+}
+
+const inboxId = Astro.params.id;
+
+if (!inboxId) {
+  return Astro.redirect("/inboxes");
+}
+
+// Fetch inbox details
+let inbox = null;
+let emails = [];
+let error = null;
+
+try {
+  const inboxResponse = await fetch(
+    getApiUrl(`/api/inboxes/getAccessibleInboxes`),
+    {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  if (inboxResponse.ok) {
+    const result = await inboxResponse.json();
+    inbox = result.data.find((i: any) => i.id === parseInt(inboxId));
+    
+    if (!inbox) {
+      error = "Inbox not found or access denied";
+    }
+  } else {
+    error = "Failed to load inbox";
+  }
+
+  // Fetch emails for this inbox
+  if (inbox) {
+    const emailsResponse = await fetch(
+      getApiUrl(`/api/inboxes/getInboxEmails?inbox_id=${inboxId}`),
+      {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (emailsResponse.ok) {
+      const emailsResult = await emailsResponse.json();
+      emails = emailsResult.data || [];
+    }
+  }
+} catch (err) {
+  console.error("Error loading inbox:", err);
+  error = "Failed to load inbox data";
+}
+
+// Current user info for presence tracking
+const currentUserForPresence = {
+  id: String(sidebarData.employeeId),
+  name: sidebarData.user.name || 'Support Agent',
+  avatar_url: sidebarData.user.avatarUrl || null
+};
+---
+
+<BaseLayout title={inbox ? inbox.name : "Inbox"}>
+  <AdminShell
+    client:load
+    user={sidebarData.user}
+    firstTeam={sidebarData.team ?? undefined}
+    crumbParentLabel="Inboxes"
+    crumbParentHref="/inboxes"
+    crumbCurrent={inbox ? inbox.name : "Inbox"}
+    isAdmin={authContext.isAdmin}
+    isPlatformAdmin={pageContext.isPlatformAdmin}
+    currentPath={`/inboxes/${inboxId}`}
+    employeeId={sidebarData.employeeId}
+    clientId={sidebarData.clientId}
+    subscriptionTier={sidebarData.subscriptionTier}
+  >
+    <div class="space-y-6">
+    {error ? (
+      <div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
+        {error}
+      </div>
+    ) : inbox ? (
+      <div class="bg-white mt-4 rounded-lg shadow-sm border p-6">
+        <div class="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h2 class="text-xl font-semibold">{inbox.name}</h2>
+            <p class="text-sm text-gray-600 mt-1">
+              {inbox.description ? `${inbox.description} • ` : ""}{emails.length} email{emails.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+          <NewEmailPopover client:load from={`inbox-${inboxId}`} />
+        </div>
+
+        <TicketsDataTableWithPresence 
+          client:load
+          data={emails.map((email: any) => ({
+            id: email.id,
+            subject: email.subject,
+            email_address: email.email_address,
+            customer_id: email.customer_id,
+            customer_name: email.customers?.name || 'Unknown',
+            assigned_to: email.customers?.employees?.name || email.customers?.employee_groups?.name || null,
+            assigned_type: email.customers?.employees?.name ? 'employee' : email.customers?.employee_groups?.name ? 'group' : null,
+            send_at: email.send_at,
+            status: email.status || 'new'
+          }))}
+          showAssignedColumn={true}
+          tableId={`inbox-${inboxId}`}
+          currentUser={currentUserForPresence}
+        />
+      </div>
+    ) : (
+      <div>Loading...</div>
+    )}
+    </div>
+  </AdminShell>
+</BaseLayout>

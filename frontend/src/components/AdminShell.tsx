@@ -7,11 +7,18 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { apiClient } from "@/utils/api";
 
 export type ShellUser = {
   name?: string | null;
   email?: string | null;
   avatarUrl?: string | null;
+};
+
+type InboxType = {
+  id: number;
+  name: string;
+  description?: string | null;
 };
 
 type Props = {
@@ -22,7 +29,11 @@ type Props = {
   crumbParentHref?: string;
   crumbCurrent?: string;
   isAdmin?: boolean;
+  isPlatformAdmin?: boolean;
   currentPath?: string;
+  employeeId?: number;
+  clientId?: number;
+  subscriptionTier?: string;
 };
 
 export default function AdminShell({
@@ -33,15 +44,36 @@ export default function AdminShell({
   crumbParentHref = "#",
   crumbCurrent = "Data Fetching",
   isAdmin = false,
+  isPlatformAdmin = false,
   currentPath,
+  employeeId = 0,
+  clientId = 0,
+  subscriptionTier = "free",
 }: Props) {
   // Aktueller Pfad aus dem Browser ermitteln, falls nicht übergeben
   const [detectedPath, setDetectedPath] = React.useState("");
+  const [accessibleInboxes, setAccessibleInboxes] = React.useState<InboxType[]>([]);
 
   React.useEffect(() => {
     if (typeof window !== "undefined") {
       setDetectedPath(window.location.pathname);
     }
+  }, []);
+
+  // Fetch accessible inboxes on mount
+  React.useEffect(() => {
+    const fetchInboxes = async () => {
+      try {
+        const response = await apiClient.get('/inboxes/getAccessibleInboxes');
+        if (response.success && response.data) {
+          setAccessibleInboxes(response.data);
+        }
+      } catch (error) {
+        console.error('Failed to load accessible inboxes:', error);
+      }
+    };
+
+    fetchInboxes();
   }, []);
 
   // Verwende den übergebenen Pfad oder den erkannten Pfad
@@ -57,7 +89,12 @@ export default function AdminShell({
         }}
         firstTeamOverride={firstTeam}
         isAdmin={isAdmin}
+        isPlatformAdmin={isPlatformAdmin}
         currentPath={finalPath}
+        accessibleInboxes={accessibleInboxes}
+        employeeId={employeeId}
+        clientId={clientId}
+        subscriptionTier={subscriptionTier}
       />
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
