@@ -634,12 +634,6 @@ var first = true
         if (navigationStack[navigationStack.length - 1].title !== "Editor") {
           navigationStack.push({ id: null, title: 'Editor'})
         }
-        // attachments.map(async (att : any) => {
-        //   console.log(att);
-        //   att.objectURL = await getAttachmentSignedUrl(att.object_path, 'macro-attachments');
-        //   console.log(att.objectURL);
-        //   preloadedAttachments.push(att);
-        // })
         for (const att of attachments) {
           const objectURL = await getAttachmentSignedUrl(att.object_path, 'macro-attachments');
           preloadedAttachments.push({
