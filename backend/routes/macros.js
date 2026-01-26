@@ -10,6 +10,9 @@ const router = express.Router();
 const supabase = require("../config/supabase");
 const { authenticate } = require('../middleware/auth');
 const { validateId, sanitizeText } = require('../middleware/validation');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
+const {storeMacroAttachmentsInDB, deleteAttachmentsFromStorage} = require("../services/attachments/macroAttachments")
 
 /**
  * Get all macros for authenticated user's client
@@ -109,14 +112,18 @@ router.get('/getMacro',
  */
 router.post('/createMacro',
   authenticate,
+  upload.array('attachments'),
   sanitizeText('title', { required: true, maxLength: 200 }),
   sanitizeText('text', { required: true, maxLength: 5000 }),
   async (req, res) => {
     try {
       const title = req.sanitized.title;
       const text = req.sanitized.text;
-      const groupId = req.body.groupId;
+      console.log(req.body.groupId);
+      const groupId = parseInt(req.body.groupId) || null;
       const client_id = req.user.client_id;
+      const attachments = req.files || [];
+      console.log(attachments, title, text, groupId);
 
       console.log('[MACROS] Creating macro for client:', client_id);
 
@@ -151,6 +158,13 @@ router.post('/createMacro',
       if (error) {
         console.error('[MACROS] Create macro failed:', error.message);
         return res.status(500).json({ error: 'Database error' });
+      }
+
+      if (attachments.length > 0) {
+        console.log('[MACROS] Saving attachments');
+        storeMacroAttachmentsInDB(attachments, client_id, data.id, null, null);
+      } else {
+        console.log('[MACROS] No attachments, continue')
       }
 
       console.log('[MACROS] Macro created successfully:', data.id);
@@ -223,8 +237,9 @@ router.post('/createGroup',
  * Authentication: Required
  * Authorization: Macro must belong to user's client
  */
-router.put('/updateMacro',
+router.post('/updateMacro',
   authenticate,
+  upload.array('attachments'),
   validateId('macroId'),
   sanitizeText('title', { required: false, maxLength: 200 }),
   sanitizeText('text', { required: false, maxLength: 5000 }),
@@ -234,6 +249,8 @@ router.put('/updateMacro',
       const client_id = req.user.client_id;
 
       console.log('[MACROS] Updating macro:', macroId, 'for client:', client_id);
+
+      console.log(deletedAttachments, oldAttachments, attachments);
 
       // Build update object with only provided fields
       const updates = {};
@@ -261,9 +278,15 @@ router.put('/updateMacro',
       if (!data) {
         return res.status(404).json({ error: 'Macro not found or access denied' });
       }
+      result = { success: true, data: data };
+
+      if (attachments.length > 0 || oldAttachments.length > 0 || deletedAttachments > 0) {
+        const newAttachments = storeMacroAttachmentsInDB(attachments, req.user.client_id, data.id, deletedAttachments, oldAttachments);
+        result.attachments = newAttachments;
+      }
 
       console.log('[MACROS] Macro updated successfully');
-      res.json({ success: true, data: data });
+      res.json(result);
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
       res.status(500).json({ error: 'Server error' });
@@ -288,8 +311,28 @@ router.delete('/deleteMacro',
 
       console.log('[MACROS] Deleting macro:', macroId, 'for client:', client_id);
 
-      // Delete macro - include client_id check for security
-      const { data, error } = await supabase
+      //deleting attachments from database
+      const { data: oldAttachments, error: oldAttachmentsError } = await supabase
+        .from('macros')
+        .select('attachments')
+        .eq('id', macroId)
+        .single();
+      
+      if (oldAttachmentsError) {
+        console.error('[MACROS] Delete failed:', oldAttachments.message);
+        return res.status(500).json({ error: 'Datenbankfehler' });
+      }
+      
+      if (oldAttachments.attachments != null && oldAttachments.attachments.length > 0) {
+        const response = await deleteAttachmentsFromStorage(oldAttachments.attachments);
+        if (!response.success) {
+          console.error('[MACROS] Delete failed:', response.message);
+          return res.status(500).json({ error: 'Datenbankfehler' });
+        }
+      }
+
+      // Delete macro
+      const { error } = await supabase
         .from('macros')
         .delete()
         .eq('id', macroId)

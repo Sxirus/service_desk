@@ -56,7 +56,8 @@ const macroArray = [
   ...(groups || []).map((group : any ) => ({
     ...group,
     title: group.name,
-    isMacro: false
+    isMacro: false,
+    attachments: null
   })),
   ...(macros || []).map((macro : any) => ({
     ...macro,
@@ -145,6 +146,7 @@ var first = true
       </div>
     </div>
   </AdminShell>
+<script>
   <script is:inline define:vars={{ 
     translations: {
       macroCreated: t('macros.macroCreated'),
@@ -174,6 +176,7 @@ var first = true
   <script>
     import  { apiClient } from '../../utils/api.ts';
     import { toast } from "sonner";
+    import { getAttachmentSignedUrl } from '@/utils/attachmentManager';
 
     // Get translations from global scope
     const i18n = (window as any).__macroTranslations || {};
@@ -181,6 +184,10 @@ var first = true
     var filteredMacroArray: any[] = [];
     const macroArray = JSON.parse(document.getElementById('macro-section')?.dataset.macroArray || '[]') as any[];
     const navigationStack = [{ id: null, title: "Root" }]; // Stack für Navigation
+
+    const selectedFiles : File[] = [];
+    const deletedFiles : any  = [];
+    const preloadedAttachments : any = [];
 
     const macroVariables = [
       {name: "Customer ID", text: "{customerID}", shopify: false},
@@ -311,6 +318,19 @@ var first = true
             </div>
           </div>
         </div>
+        <!-- File uploead (attachments) -->
+        <div class="flex items-start gap-4 my-4">
+          <!-- Plus button -->
+          <button id="addFilesBtn" class="px-4 py-2 rounded-lg bg-blue-600 text-white flex items-center justify-center">
+            + Add Attachments
+          </button>
+
+          <!--Hidden file input getting only clicked by the plusbutton -->
+          <input id="fileInput" type="file" multiple class="hidden">
+
+          <!-- Preview for the uploaded files -->
+          <div id="attachment-preview" class="flex gap-3 flex-wrap"></div>
+        </div>
         <div class="rounded-lg border bg-card text-card-foreground shadow-sm mt-4">
           <div class="p-6 space-y-4">
             <div class="space-y-1">
@@ -333,7 +353,7 @@ var first = true
         const newMacroTextTextarea = document.getElementById('new-macro-text') as HTMLTextAreaElement;
         if (saveNewMacroBtn && newMacroTitleTextarea && newMacroTextTextarea) {
           saveNewMacroBtn.addEventListener('click', async () => {
-            const groupId = navigationStack[navigationStack.length - 1].id;
+            const groupId = navigationStack[navigationStack.length - 2].id;
             const title = newMacroTitleTextarea.value || "";
             const text = newMacroTextTextarea.value || "";
 
@@ -354,11 +374,17 @@ var first = true
             `;
 
             try {
-              const response = await apiClient.post('/macros/createMacro', {
-                title: title,
-                text: text,
-                groupId: groupId
-              });
+              const formData = new FormData();
+
+              selectedFiles.forEach(file => {
+                formData.append('attachments', file);
+              })
+
+              formData.append('title', title);
+              formData.append('text', text);
+              formData.append('groupId', String(groupId));
+
+              const response = await apiClient.postFormData('/macros/createMacro', formData);
 
               if (!response.success) {
                 throw new Error(response.error || "Failed to save macro");
@@ -387,12 +413,95 @@ var first = true
           console.log("[Macro Editor] Something went wrong in the Macro editor (Textarea or buttons not found)");
         }
       }
+      handleAttachments();
+    }
+
+    function handleAttachments() {
+      const addFilesBtn = document.getElementById("addFilesBtn");
+      const fileInput = document.getElementById("fileInput") as HTMLInputElement;
+      const attachmentPreview = document.getElementById("attachment-preview");
+
+      if (addFilesBtn && fileInput && attachmentPreview) {
+        addFilesBtn.addEventListener("click", () => fileInput.click());
+
+        fileInput.addEventListener("change", () => {
+          const files: File[] = fileInput.files ? Array.from(fileInput.files) : [];
+          
+          files.forEach(file => {
+            selectedFiles.push(file);
+          });
+          renderPreview();
+          fileInput.value = "";
+        });
+        renderPreview();
+      } else {
+        console.log("[Macro Editor] Missing attachment upload button or attachment preview");
+      }
+    }
+
+    //function to render the preview of the selected attachments
+    function renderPreview() {
+      const attachmentPreview = document.getElementById("attachment-preview");
+      if (attachmentPreview) {
+        attachmentPreview.innerHTML = "";
+
+        selectedFiles.forEach((file, index) => {
+          const objectURL = URL.createObjectURL(file);
+
+          const wrapper = document.createElement("div");
+          wrapper.className = "border rounded p-2 w-32 text-xs flex flex-col gap-1"
+
+          //clickeble filename (opens in other tab)
+          const link = document.createElement("a");
+          link.textContent = file.name;
+          link.href = objectURL;
+          link.target = "_blank";
+          link.className = "text-blue-600 underline truncate";
+          wrapper.appendChild(link);
+
+          //remove button
+          const removeBtn = document.createElement("button");
+          removeBtn.textContent = "x";
+          removeBtn.className = "seld-end text-[10px] text-red-500"
+          removeBtn.onclick = () => {
+            selectedFiles.splice(index, 1);
+            renderPreview();
+          };
+          wrapper.appendChild(removeBtn);
+          attachmentPreview.appendChild(wrapper);
+        });
+
+        preloadedAttachments.forEach(async (file : any , index : any) => {
+          const wrapper = document.createElement("div");
+          wrapper.className = "border rounded p-2 w-32 text-xs flex flex-col gap-1"
+
+          //clickeble filename (opens in other tab)
+          const link = document.createElement("a");
+          link.textContent = file.filename;
+          link.href = file.objectURL;
+          link.target = "_blank";
+          link.className = "text-blue-600 underline truncate";
+          wrapper.appendChild(link);
+
+          //remove button
+          const removeBtn = document.createElement("button");
+          removeBtn.textContent = "x";
+          removeBtn.className = "seld-end text-[10px] text-red-500"
+          removeBtn.onclick = () => {
+            deletedFiles.push(file);
+            preloadedAttachments.splice(index, 1);
+            renderPreview();
+          };
+          wrapper.appendChild(removeBtn);
+          attachmentPreview.appendChild(wrapper);
+        }); 
+      }
     }
 
     function addGroup() {
       const mainSection = document.getElementById('main-section');
       if (mainSection) {
-        if (navigationStack[navigationStack.length - 1].title !== "Editor") {
+        if (navigationStack[navigationStack.length - 2].title !== "Editor") {
           navigationStack.push({ id: null, title: 'Editor'})
         }
         mainSection.innerHTML = `
@@ -460,7 +569,7 @@ var first = true
 
         if (saveNewGroupBtn && newGroupNameTextarea) {
           saveNewGroupBtn.addEventListener('click', async () => {
-            const groupId = navigationStack[navigationStack.length - 1].id;
+            const groupId = navigationStack[navigationStack.length - 2].id;
             const groupName = newGroupNameTextarea.value || "";
 
             console.log('[Macro Editor] Creating group',{
@@ -547,7 +656,12 @@ var first = true
         
         if (isMacro) {
           const macroText = macroButton.dataset.macroText;
-          editMacro(macroId, macroTitle, macroText);
+          const index = macroArray.findIndex(item => item.id == macroId && item.isMacro == true);
+          var macroAttachments = null;
+          if (index != -1) {
+            macroAttachments = macroArray[index].attachments;
+          }
+          editMacro(macroId, macroTitle, macroText, macroAttachments);
         } else {
           // Zur Gruppe navigieren
           navigateToGroup(macroId, macroTitle);
@@ -555,12 +669,19 @@ var first = true
       }
     });
 
-    async function editMacro(macroId : any, macroTitle : any, macroText : any) {
-      console.log("[Macro Editor] Starting Macro editor for:", { id: macroId, title: macroTitle, text: macroText });
+    async function editMacro(macroId : any, macroTitle : any, macroText : any, attachments : any) {
+      console.log("[Macro Editor] Starting Macro editor for:", { id: macroId, title: macroTitle, text: macroText, attachments: attachments });
       const mainSection = document.getElementById('main-section');
       if (mainSection) {
         if (navigationStack[navigationStack.length - 1].title !== "Editor") {
           navigationStack.push({ id: null, title: 'Editor'})
+        }
+        for (const att of attachments) {
+          const objectURL = await getAttachmentSignedUrl(att.object_path, 'macro-attachments');
+          preloadedAttachments.push({
+            ...att,
+            objectURL: objectURL
+          });
         }
         mainSection.innerHTML = `
         <button onclick="goBack()" class="mb-4 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
@@ -638,6 +759,19 @@ var first = true
             </div>
           </div>
         </div>
+        <!-- File uploead (attachments) -->
+        <div class="flex items-start gap-4 my-4">
+          <!-- Plus button -->
+          <button id="addFilesBtn" class="px-4 py-2 rounded-lg bg-blue-600 text-white flex items-center justify-center">
+            + Add Attachments
+          </button>
+
+          <!--Hidden file input getting only clicked by the plusbutton -->
+          <input id="fileInput" type="file" multiple class="hidden">
+
+          <!-- Preview for the uploaded files -->
+          <div id="attachment-preview" class="flex gap-3 flex-wrap"></div>
+        </div>
         <div class="rounded-lg border bg-card text-card-foreground shadow-sm mt-4">
           <div class="p-6 space-y-4">
             <div class="space-y-1">
@@ -679,11 +813,19 @@ var first = true
             `;
 
             try {
-              const response = await apiClient.put('/macros/updateMacro', {
-                macroId: macroId,
-                title: title,
-                text: text,
-              });
+              const formData = new FormData();
+              formData.append('deletedAttachments', JSON.stringify(deletedFiles));
+              formData.append('oldAttachments', JSON.stringify(preloadedAttachments));
+
+              selectedFiles.forEach(file => {
+                formData.append('attachments', file);
+              })
+
+              formData.append('macroId', macroId);
+              formData.append('title', title);
+              formData.append('text', text);
+
+              const response = await apiClient.postFormData('/macros/updateMacro', formData);
 
               if (!response.success) {
                 throw new Error(response.error || "Failed to save macro");
@@ -698,10 +840,10 @@ var first = true
               const data = response.data;
 
               const index = macroArray.findIndex(item => item.id == macroId && item.isMacro == true);
-              console.log(index);
               if (index !== -1) {
                 macroArray[index].title = data.title;
                 macroArray[index].text = data.text;
+                macroArray[index].attachments = response.attachments;
               }
             } catch (error) {
               console.error("[Macro Editor] Failed to save macro:", error);
@@ -716,6 +858,7 @@ var first = true
         } else {
           console.log("[Macro Editor] Something went wrong in the Macro editor (Textarea or buttons not found)");
         }
+        handleAttachments();
       }
     }
 

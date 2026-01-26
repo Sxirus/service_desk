@@ -121,7 +121,7 @@ router.get('/getAssignedCustomers',
       }
 
       console.log('[CUSTOMERS] Fetched', data.length, 'assigned customers');
-      res.json({success: true, data});
+      res.json({success: true, data: data});
     } catch (err) {
       console.error('[CUSTOMERS] Server error:', err.message);
       res.status(500).json({ error: 'Server error' });

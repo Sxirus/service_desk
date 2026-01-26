@@ -21,17 +21,22 @@ import type { EmailAttachment, FileUploadState } from '@/types/ticket.types';
  */
 export async function getAttachmentSignedUrl(
   path: string,
-  location: 'mail-attachments' | 'sent-attachments'
+  location: 'mail-attachments' | 'sent-attachments' | 'macro-attachments'
 ): Promise<string> {
   if (!path || !path.trim()) {
     throw new Error('Attachment path is required');
   }
 
   try {
-    const url = await apiClient.post('/emails/getSignedUrl', {
+    const response = await apiClient.post('/emails/getSignedUrl', {
       path: path.trim(),
       location
     });
+
+    if (!response.success) {
+      throw new Error('error');
+    }
+    const url = response.signedUrl;
 
     if (!url || typeof url !== 'string') {
       throw new Error('Invalid URL returned from server');
