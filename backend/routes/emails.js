@@ -164,7 +164,7 @@ router.post('/getSignedUrl', authenticate, async (req, res) => {
   const { location, path } = req.body;
   const client_id = req.user.client_id;
 
-  if (!path || !location || !['attachments', 'avatars'].includes(location)) {
+  if (!path || !location || !['attachments', 'mail-attachments', 'sent-attachments', 'macro-attachments', 'avatars'].includes(location)) {
     return res.status(400).json({ error: 'Invalid parameters' });
   }
 
