@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { RichTextEditor, type RichTextEditorRef } from '@/components/RichTextEditor';
 
 const MIN_HEIGHT = 150;
 const MAX_HEIGHT = 600;
@@ -145,7 +146,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
 }) => {
   const { t } = useTranslation('dashboard');
   const containerRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<RichTextEditorRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadManagerRef = useRef<FileUploadManager>(new FileUploadManager());
   const rafIdRef = useRef<number | null>(null);
@@ -153,7 +154,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [containerHeight, setContainerHeight] = useState(DEFAULT_HEIGHT);
   const [isResizing, setIsResizing] = useState(false);
-  const [replyText, setReplyText] = useState('');
+  const [replyHtml, setReplyHtml] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<FileUploadState[]>([]);
@@ -224,24 +225,18 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
 
       if (!text) return;
 
-      // If reply area is collapsed, expand it first so the textarea is mounted.
+      // If reply area is collapsed, expand it first so the editor is mounted.
       setIsCollapsed(false);
       localStorage.setItem('replyAreaCollapsed', 'false');
 
-      // Append macro text to current reply text.
-      setReplyText((prev) => {
-        const currentValue = prev || '';
-        return currentValue + (currentValue ? '\n\n' : '') + text;
-      });
-
-      // Focus and move cursor to end (after render)
+      // Insert macro text into the rich text editor via ref.
+      // Use a short delay to ensure the editor is mounted after expanding.
       setTimeout(() => {
-        const el = textareaRef.current;
-        if (!el) return;
-        const newValue = el.value;
-        el.focus();
-        el.setSelectionRange(newValue.length, newValue.length);
-      }, 0);
+        if (editorRef.current) {
+          const macroHtml = `<p>${text.replace(/\n/g, '<br>')}</p>`;
+          editorRef.current.insertContent(macroHtml);
+        }
+      }, 50);
     };
 
     window.addEventListener('MacroChoosen', handleMacroChosen);
@@ -386,11 +381,14 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
     setIsSending(true);
 
     try {
-      const body = replyText.trim();
+      // Strip HTML to get plain text for validation
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = replyHtml;
+      const plainText = (tempDiv.textContent || tempDiv.innerText || '').trim();
       const files = uploadManagerRef.current.getFiles();
 
       // If no content and no attachments, just update the status without sending an email
-      if (body === '' && files.length === 0) {
+      if (plainText === '' && files.length === 0) {
         await apiClient.post(`/emails/updateStatus?customerId=${customerId}`, {
           status: ticketStatus
         });
@@ -437,17 +435,20 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
         return;
       }
 
-      // Build body with signature
-      let fullBody = body;
+      // Build body with signature (both HTML and plain text)
+      let fullBodyHtml = replyHtml;
+      let fullBodyText = plainText;
       if (signature && signature.trim() !== '') {
-        fullBody += `\n\n${signature}`;
+        fullBodyHtml += `<br><br>${signature.replace(/\n/g, '<br>')}`;
+        fullBodyText += `\n\n${signature}`;
       }
 
       // Create FormData for attachments
       const formData = new FormData();
       formData.append('to', emailAddress);
       formData.append('subject', subject);
-      formData.append('text', fullBody);
+      formData.append('text', fullBodyText);
+      formData.append('html', fullBodyHtml);
       formData.append('threadEmailAddress', threadEmailAddress || '');
       formData.append('ticketStatus', ticketStatus); // Include status to set after sending
 
@@ -478,7 +479,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       // Clear state only on success
       uploadManagerRef.current.clear();
       setAttachments([]);
-      setReplyText('');
+      setReplyHtml('');
       setTicketStatus('resolved'); // Reset to default for next reply
       
       // Callback or redirect
@@ -495,7 +496,8 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
               id: `temp-sent-${Date.now()}`,
               type: 'sent' as const,
               send_at: new Date().toISOString(),
-              text_content: fullBody,
+              text_content: fullBodyText,
+              html_content: fullBodyHtml,
               attachments: [],
               has_attachments: false,
               employee_id: 'me',
@@ -606,15 +608,14 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
 
           <div className="flex gap-3 items-end h-full">
             <div className="flex-1 h-full relative">
-              <textarea
-                ref={textareaRef}
+              <RichTextEditor
+                ref={editorRef}
                 id="reply-textarea"
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                className="w-full h-full min-h-0 rounded-md border border-input bg-background px-3 py-2 pb-12 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                content={replyHtml}
+                onContentChange={setReplyHtml}
                 placeholder={t('tickets.typeYourReply')}
                 disabled={isSending}
-                aria-label={t('tickets.replyMessage')}
+                className="w-full h-full min-h-0"
               />
               
               {/* Floating Attachment Button */}
@@ -622,7 +623,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isSending}
-                className="absolute cursor-pointer bottom-2 left-2 h-8 w-8 rounded-full bg-primary/70 hover:bg-primary text-primary-foreground flex items-center justify-center transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="absolute cursor-pointer bottom-2 left-2 h-8 w-8 rounded-full bg-primary/70 hover:bg-primary text-primary-foreground flex items-center justify-center transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed z-10"
                 aria-label={t('tickets.addAttachments')}
                 title={t('tickets.attachFiles')}
               >

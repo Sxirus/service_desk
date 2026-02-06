@@ -254,8 +254,8 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
   const [showHtml, setShowHtml] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   
-  // Check if this email has significant HTML (only for incoming emails)
-  const hasHtml = email.type === 'incoming' && hasSignificantHtml(email.html_content);
+  // Check if this email has significant HTML (for both incoming and sent emails)
+  const hasHtml = hasSignificantHtml(email.html_content);
 
   // Get agent name and avatar for sent emails
   const agentName = isOutgoing && email.type === 'sent' ? email.agent_name || t('tickets.supportAgent') : null;
@@ -448,7 +448,7 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
             </Button>
             
             {/* HTML Content Display */}
-            {showHtml && email.type === 'incoming' && email.html_content && (
+            {showHtml && email.html_content && (
               <div 
                 id={`html-content-${email.id}`}
                 className="mt-3 p-4 border rounded-md bg-white overflow-auto max-h-96"
@@ -478,9 +478,9 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
         {email.has_attachments && email.attachments.length > 0 && (
           <div className="mt-3" role="region" aria-label="Email attachments">
             <div className="flex flex-wrap gap-2">
-              {email.attachments.map((attachment, index) => (
+              {email.attachments.map((attachment) => (
                 <AttachmentButton
-                  key={`${email.type}-${email.id}-${attachment.id}-${index}`}
+                  key={attachment.id}
                   attachment={attachment}
                   mailId={email.id}
                   mailType={email.type}
@@ -659,7 +659,7 @@ export const EmailThread: React.FC<EmailThreadProps> = ({
               newMessageIndex === index;
             
             return (
-              <React.Fragment key={`${email.type}-${email.id}`}>
+              <React.Fragment key={email.id}>
                 {shouldShowSeparator && (
                   <div ref={separatorRef}>
                     <NewMessageSeparator

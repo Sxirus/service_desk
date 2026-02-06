@@ -30,7 +30,6 @@ import { ReplyArea } from "@/components/ReplyArea";
 import { TicketSidebar } from "@/components/TicketSidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PresenceIndicator } from "@/components/PresenceIndicator";
-import { getTranslations, getLanguageFromCookies } from "../../i18n/astro";
 import type { 
   ThreadEmail, 
   IncomingEmail, 
@@ -42,10 +41,6 @@ import type {
 
 const log = createPageLogger('customer-ticket');
 log.info('Page accessed');
-
-// Initialize translations
-const lang = getLanguageFromCookies(Astro.cookies);
-const { t } = getTranslations(lang, 'dashboard');
 
 // ============================================================================
 // PERFORMANCE TRACKING - START
@@ -177,6 +172,7 @@ const [
       id,
       send_at,
       text_content,
+      html_content,
       employee_id,
       attachments
     `)
@@ -550,7 +546,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
         <header class="px-6 mt-2 pt-0 py-2">
           <div class="flex items-center gap-3">
             <h1 class="text-2xl font-bold tracking-tight">
-              {t('tickets.conversationWith')} {customer?.name}
+              Conversation with {customer?.name}
             </h1>
             <!-- Status Badge -->
             <span class:list={[

@@ -169,6 +169,19 @@ export const apiClient = {
       },
       body: formData,
     });
+
+    if (!response.ok) {
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch {
+        // If error response isn't JSON, use default message
+      }
+      console.error(`[apiClient] FormData request failed:`, errorMessage);
+      throw new Error(errorMessage);
+    }
+
     return response.json();
   }
 };

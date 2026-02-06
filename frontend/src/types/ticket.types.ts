@@ -54,6 +54,7 @@ export interface SentEmail extends BaseEmail {
   employee_id: string;
   agent_name?: string;
   agent_avatar_url?: string | null;
+  html_content?: string;
 }
 
 /**

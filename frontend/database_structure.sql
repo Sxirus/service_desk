@@ -291,6 +291,7 @@ CREATE TABLE public.sent-mail (
   send_at timestamp with time zone NOT NULL DEFAULT now(),
   employee_id bigint NOT NULL,
   text_content text,
+  html_content text,
   customer_id bigint NOT NULL,
   provider_name text,
   sent_via text,
