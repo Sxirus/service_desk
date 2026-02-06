@@ -21,6 +21,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { MergeCustomerDialog } from './MergeCustomerDialog';
 
 interface CustomerInfoProps {
   customer: {
@@ -30,13 +31,15 @@ interface CustomerInfoProps {
   emailAddress: string;
   shopifyConfig: ShopifyConfig;
   clientData: ShopifyClientData;
+  onMergeComplete?: () => void;
 }
 
 export const CustomerInfo: React.FC<CustomerInfoProps> = ({ 
   customer, 
   emailAddress, 
   shopifyConfig,
-  clientData 
+  clientData,
+  onMergeComplete 
 }) => {
   const { t } = useTranslation('dashboard');
   const [shopifyCustomer, setShopifyCustomer] = useState<ShopifyCustomer | null>(null);
@@ -142,7 +145,12 @@ export const CustomerInfo: React.FC<CustomerInfoProps> = ({
         {/* Header */}
         <div className="flex items-center gap-2">
             <User className="inline-block h-4 w-4 text-muted-foreground ml-1" />
-            <h3 className="text-sm font-semibold">{t('tickets.customerInformation')}</h3>
+            <h3 className="text-sm font-semibold flex-1">{t('tickets.customerInformation')}</h3>
+            <MergeCustomerDialog
+              customer={customer}
+              emailAddress={emailAddress}
+              onMergeComplete={onMergeComplete}
+            />
         </div>
 
         <div className="space-y-3">

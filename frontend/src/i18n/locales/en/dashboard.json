@@ -310,7 +310,22 @@
     "confirmDelete": "Are you sure you want to delete this customer?",
     "shopifyOrders": "Shopify Orders",
     "orderHistory": "Order History",
-    "noOrders": "No orders found"
+    "noOrders": "No orders found",
+    "mergeCustomers": "Merge Customers",
+    "mergeDescription": "Merge two customer records that belong to the same person. All emails and conversations will be combined.",
+    "currentCustomer": "Current Customer",
+    "searchToMerge": "Search for the customer to merge with",
+    "selectPrimaryEmail": "Select the primary customer",
+    "primaryEmailHint": "The primary customer's name and email will be kept. All emails from the other customer will be moved here.",
+    "mergeWarning": "This action cannot be undone. All emails and conversations from the secondary customer will be moved to the primary customer, and the secondary customer will be deleted.",
+    "mergeSummary": "Merge Summary",
+    "mergeSummaryDetail": "\"{{primary}}\" will be kept. All data from \"{{secondary}}\" will be merged and that record deleted.",
+    "mergeBack": "Back",
+    "mergeCancel": "Cancel",
+    "mergeConfirm": "Merge Customers",
+    "merging": "Merging...",
+    "mergeSuccess": "Customers merged successfully!",
+    "mergeFailed": "Failed to merge customers. Please try again."
   },
   "presence": {
     "online": "Online",

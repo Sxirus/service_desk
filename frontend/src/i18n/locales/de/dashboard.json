@@ -310,7 +310,22 @@
     "confirmDelete": "Sind Sie sicher, dass Sie diesen Kunden löschen möchten?",
     "shopifyOrders": "Shopify-Bestellungen",
     "orderHistory": "Bestellverlauf",
-    "noOrders": "Keine Bestellungen gefunden"
+    "noOrders": "Keine Bestellungen gefunden",
+    "mergeCustomers": "Kunden zusammenführen",
+    "mergeDescription": "Zwei Kundendatensätze zusammenführen, die zur selben Person gehören. Alle E-Mails und Konversationen werden zusammengeführt.",
+    "currentCustomer": "Aktueller Kunde",
+    "searchToMerge": "Kunden zum Zusammenführen suchen",
+    "selectPrimaryEmail": "Primären Kunden auswählen",
+    "primaryEmailHint": "Name und E-Mail-Adresse des primären Kunden werden beibehalten. Alle E-Mails des anderen Kunden werden hierher verschoben.",
+    "mergeWarning": "Diese Aktion kann nicht rückgängig gemacht werden. Alle E-Mails und Konversationen des sekundären Kunden werden zum primären Kunden verschoben und der sekundäre Kunde wird gelöscht.",
+    "mergeSummary": "Zusammenfassung",
+    "mergeSummaryDetail": "\"{{primary}}\" wird beibehalten. Alle Daten von \"{{secondary}}\" werden zusammengeführt und dieser Datensatz gelöscht.",
+    "mergeBack": "Zurück",
+    "mergeCancel": "Abbrechen",
+    "mergeConfirm": "Kunden zusammenführen",
+    "merging": "Zusammenführen...",
+    "mergeSuccess": "Kunden erfolgreich zusammengeführt!",
+    "mergeFailed": "Zusammenführen fehlgeschlagen. Bitte versuchen Sie es erneut."
   },
   "presence": {
     "online": "Online",
