@@ -233,7 +233,11 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       // Use a short delay to ensure the editor is mounted after expanding.
       setTimeout(() => {
         if (editorRef.current) {
-          const macroHtml = `<p>${text.replace(/\n/g, '<br>')}</p>`;
+          // Check if the macro text is already HTML (contains HTML tags)
+          const hasHtmlTags = /<[^>]+>/.test(text);
+          const macroHtml = hasHtmlTags 
+            ? text  // Use as-is if already HTML
+            : `<p>${text.replace(/\n/g, '<br>')}</p>`;  // Convert plain text to HTML
           editorRef.current.insertContent(macroHtml);
         }
       }, 50);

@@ -250,7 +250,27 @@ router.post('/updateMacro',
 
       console.log('[MACROS] Updating macro:', macroId, 'for client:', client_id);
 
-      console.log(deletedAttachments, oldAttachments, attachments);
+      // Parse attachments data from request body
+      const attachments = req.files || [];
+      let deletedAttachments = [];
+      let oldAttachments = [];
+      
+      try {
+        if (req.body.deletedAttachments) {
+          deletedAttachments = JSON.parse(req.body.deletedAttachments);
+        }
+        if (req.body.oldAttachments) {
+          oldAttachments = JSON.parse(req.body.oldAttachments);
+        }
+      } catch (parseError) {
+        console.error('[MACROS] Error parsing attachments data:', parseError.message);
+      }
+
+      console.log('[MACROS] Attachments:', { 
+        new: attachments.length, 
+        deleted: deletedAttachments.length, 
+        existing: oldAttachments.length 
+      });
 
       // Build update object with only provided fields
       const updates = {};
@@ -278,10 +298,11 @@ router.post('/updateMacro',
       if (!data) {
         return res.status(404).json({ error: 'Macro not found or access denied' });
       }
-      result = { success: true, data: data };
+      
+      let result = { success: true, data: data };
 
-      if (attachments.length > 0 || oldAttachments.length > 0 || deletedAttachments > 0) {
-        const newAttachments = storeMacroAttachmentsInDB(attachments, req.user.client_id, data.id, deletedAttachments, oldAttachments);
+      if (attachments.length > 0 || oldAttachments.length > 0 || deletedAttachments.length > 0) {
+        const newAttachments = await storeMacroAttachmentsInDB(attachments, req.user.client_id, data.id, deletedAttachments, oldAttachments);
         result.attachments = newAttachments;
       }
 

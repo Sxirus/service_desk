@@ -27,6 +27,12 @@ export function MacroSearch({
   // ---- utils ----
   const norm = (s) => (s || "").toString().trim().toLowerCase();
 
+  // Strip HTML tags for plain text preview
+  const stripHtml = (html) => {
+    if (!html) return '';
+    return html.replace(/<[^>]*>/g, '').trim();
+  };
+
   const levenshtein = (a, b) => {
     a = norm(a); b = norm(b);
     const m = a.length, n = b.length;
@@ -82,7 +88,7 @@ export function MacroSearch({
         type: 'macro',
         id: `m-${m.id}`,
         title: m.title,
-        subtitle: m.text,
+        subtitle: stripHtml(m.text),
         payload: m
       }));
 
@@ -97,10 +103,10 @@ export function MacroSearch({
       type: 'macro',
       id: `m-${m.id}`,
       title: m.title,
-      subtitle: m.text,
+      subtitle: stripHtml(m.text),
       payload: m,
-      // scoring darf Titel + Text berücksichtigen
-      score: scoreText(qn, (m.title || "") + " " + (m.text || ""))
+      // scoring darf Titel + Text berücksichtigen (use original text with HTML for better search)
+      score: scoreText(qn, (m.title || "") + " " + stripHtml(m.text))
     }));
 
     return macroMatches
