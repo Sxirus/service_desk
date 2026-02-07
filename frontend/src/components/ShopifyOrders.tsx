@@ -51,6 +51,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
@@ -274,6 +275,119 @@ const RefundDialog = ({ order, onSuccess }: { order: ShopifyOrder; onSuccess: ()
           <Button disabled={isSubmitting || !calculatedTotal} onClick={submit}>
             {isSubmitting ? <RefreshCcw className="h-4 w-4 animate-spin mr-2" /> : <Undo2 className="h-4 w-4 mr-2" />}
             {t('shopify.refundDialog.confirm')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// ============================================================================
+// Cancel Dialog Component
+// ============================================================================
+
+const CANCEL_REASONS = ['customer', 'inventory', 'fraud', 'declined', 'other'] as const;
+const REASON_TO_API: Record<string, string> = {
+  customer: 'CUSTOMER',
+  inventory: 'INVENTORY',
+  fraud: 'FRAUD',
+  declined: 'DECLINED',
+  other: 'OTHER',
+};
+
+const CancelDialog = ({ order, onSuccess }: { order: ShopifyOrder; onSuccess: () => void }) => {
+  const { t } = useTranslation('manage');
+  const [isOpen, setIsOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [reason, setReason] = useState<string>('customer');
+  const [staffNote, setStaffNote] = useState('');
+  const [refundOriginal, setRefundOriginal] = useState(true);
+  const [notify, setNotify] = useState(true);
+
+  const resetForm = () => {
+    setReason('customer');
+    setStaffNote('');
+    setRefundOriginal(true);
+    setNotify(true);
+  };
+
+  const submit = async () => {
+    setIsSubmitting(true);
+    try {
+      await apiClient.post('/shopify/order/cancel', {
+        orderId: order.id,
+        reason: REASON_TO_API[reason],
+        notifyCustomer: notify,
+        refundOriginalPaymentMethod: refundOriginal,
+        staffNote: staffNote || undefined,
+      });
+      toast.success(t('shopify.cancelSuccess'));
+      setIsOpen(false);
+      resetForm();
+      onSuccess();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) resetForm(); }}>
+      <DialogTrigger asChild>
+        <Button variant="destructive" size="sm" className="flex-1 gap-1.5">
+          <Ban className="h-4 w-4" />
+          {t('shopify.cancel')}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t('shopify.cancelDialog.title', { number: order.order_number })}</DialogTitle>
+          <DialogDescription>{t('shopify.cancelDialog.description')}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">{t('shopify.cancelDialog.reasonLabel')}</Label>
+            <Select value={reason} onValueChange={setReason}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CANCEL_REASONS.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {t(`shopify.cancelDialog.reasons.${r}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cancel-note" className="text-sm font-medium">{t('shopify.cancelDialog.internalNote')}</Label>
+            <Input
+              id="cancel-note"
+              placeholder={t('shopify.refundDialog.notePlaceholder')}
+              value={staffNote}
+              onChange={e => setStaffNote(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-3 p-4 rounded-md bg-muted/50 border">
+            <div className="flex items-center gap-2">
+              <Checkbox id="cancel-refund" checked={refundOriginal} onCheckedChange={v => setRefundOriginal(!!v)} />
+              <Label htmlFor="cancel-refund" className="text-sm font-medium cursor-pointer">{t('shopify.cancelDialog.refundOriginal')}</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox id="cancel-notify" checked={notify} onCheckedChange={v => setNotify(!!v)} />
+              <Label htmlFor="cancel-notify" className="text-sm font-medium cursor-pointer">{t('shopify.cancelDialog.notifyCustomer')}</Label>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setIsOpen(false)}>{t('shopify.cancel')}</Button>
+          <Button variant="destructive" disabled={isSubmitting} onClick={submit}>
+            {isSubmitting ? <RefreshCcw className="h-4 w-4 animate-spin mr-2" /> : <Ban className="h-4 w-4 mr-2" />}
+            {t('shopify.cancelDialog.confirm')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -547,23 +661,7 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
           <div className="flex gap-2">
             <RefundDialog order={order} onSuccess={onRefresh} />
             {!order.cancelled && order.fulfillment_status === 'unfulfilled' && (
-              <Button 
-                variant="destructive" 
-                size="sm" 
-                className="flex-1 gap-1.5"
-                onClick={async () => {
-                  if (confirm(t('shopify.cancelDialog.description'))) {
-                    try {
-                      await apiClient.post('/shopify/order/cancel', { orderId: order.id, reason: 'CUSTOMER', refundOriginalPaymentMethod: true });
-                      toast.success(t('shopify.cancelSuccess'));
-                      onRefresh();
-                    } catch (e: any) { toast.error(e.message); }
-                  }
-                }}
-              >
-                <Ban className="h-4 w-4" />
-                {t('shopify.cancel')}
-              </Button>
+              <CancelDialog order={order} onSuccess={onRefresh} />
             )}
           </div>
           <Button 
