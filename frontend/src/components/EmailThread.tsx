@@ -478,9 +478,9 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
         {email.has_attachments && email.attachments.length > 0 && (
           <div className="mt-3" role="region" aria-label="Email attachments">
             <div className="flex flex-wrap gap-2">
-              {email.attachments.map((attachment) => (
+              {email.attachments.map((attachment, attachmentIndex) => (
                 <AttachmentButton
-                  key={attachment.id}
+                  key={`${email.key}-att-${attachment.id ?? attachmentIndex}`}
                   attachment={attachment}
                   mailId={email.id}
                   mailType={email.type}
@@ -659,7 +659,7 @@ export const EmailThread: React.FC<EmailThreadProps> = ({
               newMessageIndex === index;
             
             return (
-              <React.Fragment key={email.id}>
+              <React.Fragment key={email.key}>
                 {shouldShowSeparator && (
                   <div ref={separatorRef}>
                     <NewMessageSeparator

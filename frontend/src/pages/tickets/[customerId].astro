@@ -333,6 +333,7 @@ const employeeMap = new Map<string, { name: string; avatar_url: string | null }>
 const emailArray: ThreadEmail[] = [
   ...(incomingMails || []).map((mail: any): IncomingEmail => ({
     ...mail,
+    key: `incoming-${mail.id}`,
     type: 'incoming',
     email_address: mail.email_address,
     has_attachments: mail.attachments?.length > 0,
@@ -342,6 +343,7 @@ const emailArray: ThreadEmail[] = [
     const agent = employeeMap.get(String(mail.employee_id));
     return {
       ...mail,
+      key: `sent-${mail.id}`,
       type: 'sent',
       employee_id: mail.employee_id,
       agent_name: agent?.name || 'Support Agent',

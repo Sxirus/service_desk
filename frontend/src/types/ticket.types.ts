@@ -21,6 +21,7 @@ export interface EmailAttachment {
  */
 interface BaseEmail {
   id: string;
+  key: string; // Unique key for React rendering (combines type and id)
   send_at: string;
   text_content: string;
   attachments: EmailAttachment[];

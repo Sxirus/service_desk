@@ -102,6 +102,9 @@ export const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>
       StarterKit.configure({
         // Disable heading since we don't need it for emails
         heading: false,
+        // Disable underline and link - we'll add them separately with custom config
+        underline: false,
+        link: false,
         // Keep these from StarterKit
         bold: {},
         italic: {},
