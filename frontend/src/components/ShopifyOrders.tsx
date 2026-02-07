@@ -176,13 +176,32 @@ const RefundDialog = ({ order, onSuccess }: { order: ShopifyOrder; onSuccess: ()
         <div className="space-y-4">
           <ScrollArea className="max-h-[280px]">
             <div className="space-y-2 pr-4">
-              {order.line_items.map(item => (
+              {order.line_items.filter(item => item.currentQuantity > 0).map(item => (
                 <div key={item.id} className="flex items-center justify-between gap-3 p-3 rounded-md border bg-muted/50">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{item.name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {t('shopify.available', { count: item.refundableQuantity })} • {item.price} {order.currency}
-                    </p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <p className="text-sm font-medium truncate">{item.name}</p>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <p>{item.name}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                      <span className="text-xs text-muted-foreground">
+                        {t('shopify.available', { count: item.refundableQuantity })} • {item.price} {order.currency}
+                      </span>
+                      {item.sku && (
+                        <span className="text-xs text-muted-foreground">
+                          • {t('shopify.sku', 'SKU')}: {item.sku}
+                        </span>
+                      )}
+                      {item.variantTitle && item.variantTitle !== 'Default Title' && (
+                        <span className="text-xs text-muted-foreground">
+                          • {item.variantTitle}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <Input 
                     type="number" min="0" max={item.refundableQuantity} 
@@ -291,7 +310,7 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
                 {new Date(order.created_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}
               </div>
               <div className="text-sm font-semibold">
-                {order.total_price} {order.currency}
+                {order.current_total_price} {order.currency}
               </div>
             </div>
           </div>
@@ -365,18 +384,65 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
               <Package className="h-3 w-3" /> {t('shopify.items')}
             </p>
             <div className="space-y-2">
-              {order.line_items.map((item) => (
-                <div key={item.id} className="flex justify-between items-start gap-3 text-sm">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium px-2 py-1 rounded bg-muted text-muted-foreground">{item.quantity}×</span>
-                      <span className="font-medium text-sm">{item.name}</span>
+              {order.line_items.map((item) => {
+                const isRemoved = item.currentQuantity === 0;
+                const isPartiallyRemoved = item.currentQuantity < item.quantity && item.currentQuantity > 0;
+                return (
+                  <div key={item.id} className={cn("flex justify-between items-start gap-3 text-sm", isRemoved && "opacity-50")}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={cn("text-xs font-medium px-2 py-1 rounded bg-muted text-muted-foreground shrink-0", isRemoved && "line-through")}>
+                          {isPartiallyRemoved ? `${item.currentQuantity}×` : `${item.quantity}×`}
+                        </span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className={cn("font-medium text-sm truncate", isRemoved && "line-through")}>{item.name}</span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs">
+                            <p>{item.name}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        {isPartiallyRemoved && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge variant="outline" className="text-xs shrink-0 text-orange-600 border-orange-300">
+                                {t('shopify.quantityChanged', 'Qty changed')}
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                              <p>{t('shopify.originalQuantity', 'Originally {{count}}', { count: item.quantity })}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </div>
+                      <div className="ml-8 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        {isRemoved && (
+                          <span className="text-xs text-destructive font-medium">
+                            {t('shopify.removed', 'Removed')}
+                          </span>
+                        )}
+                        {isRemoved && (item.sku || (item.variantTitle && item.variantTitle !== 'Default Title')) && (
+                          <span className="text-xs text-muted-foreground">•</span>
+                        )}
+                        {item.sku && (
+                          <span className="text-xs text-muted-foreground">
+                            {t('shopify.sku', 'SKU')}: {item.sku}
+                          </span>
+                        )}
+                        {item.sku && item.variantTitle && item.variantTitle !== 'Default Title' && (
+                          <span className="text-xs text-muted-foreground">•</span>
+                        )}
+                        {item.variantTitle && item.variantTitle !== 'Default Title' && (
+                          <span className="text-xs text-muted-foreground">
+                            {t('shopify.variant', 'Variant')}: {item.variantTitle}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    {item.variantTitle && <p className="text-xs text-muted-foreground mt-0.5 ml-8">{item.variantTitle}</p>}
+                    <span className={cn("text-sm text-muted-foreground shrink-0", isRemoved && "line-through")}>{item.price} {order.currency}</span>
                   </div>
-                  <span className="text-sm text-muted-foreground">{item.price} {order.currency}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -392,10 +458,10 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
             )}
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>{t('shopify.refundDialog.subtotal')}</span>
-              <span>{(parseFloat(order.subtotal) + parseFloat(order.total_discounts)).toFixed(2)} {order.currency}</span>
+              <span>{(parseFloat(order.current_subtotal) + parseFloat(order.current_total_discounts)).toFixed(2)} {order.currency}</span>
             </div>
 
-            {parseFloat(order.total_discounts) > 0 && (
+            {parseFloat(order.current_total_discounts) > 0 && (
               <div className="flex justify-between text-xs text-red-600">
                 <div className="flex items-center gap-1.5">
                   <span>{t('shopify.discounts')}</span>
@@ -419,27 +485,27 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
                     </Tooltip>
                   )}
                 </div>
-                <span>-{order.total_discounts} {order.currency}</span>
+                <span>-{order.current_total_discounts} {order.currency}</span>
               </div>
             )}
             
-            {parseFloat(order.total_shipping) > 0 && (
+            {parseFloat(order.current_shipping) > 0 && (
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>{t('shopify.refundDialog.shipping')}</span>
-                <span>{order.total_shipping} {order.currency}</span>
+                <span>{order.current_shipping} {order.currency}</span>
               </div>
             )}
 
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>{t('shopify.refundDialog.tax')}</span>
-              <span>{order.total_tax} {order.currency}</span>
+              <span>{order.current_total_tax} {order.currency}</span>
             </div>
 
             <Separator />
             
             <div className="flex justify-between items-center text-base font-semibold">
               <span>{t('shopify.total')}</span>
-              <span>{order.total_price} {order.currency}</span>
+              <span>{order.current_total_price} {order.currency}</span>
             </div>
 
             {parseFloat(order.total_refunded) > 0 && (
@@ -451,7 +517,7 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
                 </div>
                 <div className="flex justify-between text-sm font-medium pt-1">
                   <span>{t('shopify.refundDialog.netTotal')}</span>
-                  <span>{(parseFloat(order.total_price) - parseFloat(order.total_refunded)).toFixed(2)} {order.currency}</span>
+                  <span>{(parseFloat(order.current_total_price) - parseFloat(order.total_refunded)).toFixed(2)} {order.currency}</span>
                 </div>
               </>
             )}
