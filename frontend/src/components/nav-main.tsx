@@ -63,7 +63,7 @@ function EmailCount({ count, loading }: { count: number | undefined; loading: bo
   }
 
   return (
-    <span className="ml-auto text-xs text-muted-foreground/60 tabular-nums">
+    <span className="ml-auto text-xs text-muted-foreground/60 tabular-nums shrink-0 mt-0.5">
       {count}
     </span>
   );
@@ -126,8 +126,8 @@ export function NavMain({
                   {item.items?.map((subItem) => (
                     <SidebarMenuSubItem key={subItem.title}>
                       <SidebarMenuSubButton asChild>
-                        <a href={subItem.url} className="flex w-full items-center justify-between">
-                          <span>{subItem.title}</span>
+                        <a href={subItem.url} className="flex w-full items-start justify-between">
+                          <span className="break-words">{subItem.title}</span>
                           <EmailCount 
                             count={getCountForItem(subItem)} 
                             loading={loading && (subItem.url === '/dashboard' || !!subItem.inboxId)} 

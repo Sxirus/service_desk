@@ -28,10 +28,10 @@ import {
 } from '@/components/ui/select';
 import { RichTextEditor, type RichTextEditorRef } from '@/components/RichTextEditor';
 
-const MIN_HEIGHT = 150;
+const MIN_HEIGHT = 200;
 const MAX_HEIGHT = 600;
 const COLLAPSED_HEIGHT = 52;
-const DEFAULT_HEIGHT = 180;
+const DEFAULT_HEIGHT = 200;
 
 type PostSendBehavior = 'stay' | 'next' | 'back';
 type TicketStatus = 'new' | 'open' | 'waiting' | 'resolved';
