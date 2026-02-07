@@ -26,7 +26,8 @@ import {
   CheckCircle2,
   Clock,
   Ban,
-  Truck
+  Truck,
+  Copy
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -335,6 +336,18 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
                               {tn.number}
                             </button>
                           </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => {
+                              navigator.clipboard.writeText(tn.number);
+                              toast.success(t('shopify.trackingCopied', 'Tracking number copied to clipboard'));
+                            }}
+                            title={t('common.copy', 'Copy')}
+                          >
+                            <Copy className="h-3 w-3 text-muted-foreground" />
+                          </Button>
                         </div>
                       ))
                     ) : (

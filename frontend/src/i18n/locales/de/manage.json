@@ -638,7 +638,8 @@
     "connection": "Verbindung",
     "tracking": "Sendungsverfolgung",
     "shipments": "Lieferungen",
-    "noTrackingInfo": "Keine Sendungsinformationen"
+    "noTrackingInfo": "Keine Sendungsinformationen",
+    "trackingCopied": "Sendungsnummer in die Zwischenablage kopiert"
   },
   "tracking": {
     "trackShipment": "Sendung verfolgen",

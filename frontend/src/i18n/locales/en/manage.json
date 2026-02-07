@@ -638,7 +638,8 @@
     "connection": "Connection",
     "tracking": "Tracking",
     "shipments": "Shipments",
-    "noTrackingInfo": "No tracking info"
+    "noTrackingInfo": "No tracking info",
+    "trackingCopied": "Tracking number copied to clipboard"
   },
   "tracking": {
     "trackShipment": "Track Shipment",
