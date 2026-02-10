@@ -56,12 +56,25 @@ export interface SentEmail extends BaseEmail {
   agent_name?: string;
   agent_avatar_url?: string | null;
   html_content?: string;
+  is_internal_note?: boolean;
+}
+
+/**
+ * Internal note left by support agent (not sent to customer)
+ */
+export interface InternalNote extends BaseEmail {
+  type: 'internal_note';
+  employee_id: string;
+  agent_name?: string;
+  agent_avatar_url?: string | null;
+  html_content?: string;
+  is_internal_note: true;
 }
 
 /**
  * Union type for all email types in the thread
  */
-export type ThreadEmail = IncomingEmail | SentEmail;
+export type ThreadEmail = IncomingEmail | SentEmail | InternalNote;
 
 /**
  * Customer information

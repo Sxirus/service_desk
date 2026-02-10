@@ -250,7 +250,8 @@ interface EmailMessageProps {
 
 const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPreview, isNew = false }) => {
   const { t } = useTranslation('dashboard');
-  const isOutgoing = email.type === 'sent';
+  const isOutgoing = email.type === 'sent' || email.type === 'internal_note';
+  const isInternalNote = email.type === 'internal_note' || (email.type === 'sent' && 'is_internal_note' in email && email.is_internal_note);
   const [showHtml, setShowHtml] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   
@@ -258,8 +259,8 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
   const hasHtml = hasSignificantHtml(email.html_content);
 
   // Get agent name and avatar for sent emails
-  const agentName = isOutgoing && email.type === 'sent' ? email.agent_name || t('tickets.supportAgent') : null;
-  const agentAvatarPath = isOutgoing && email.type === 'sent' ? email.agent_avatar_url : null;
+  const agentName = isOutgoing && (email.type === 'sent' || email.type === 'internal_note') ? email.agent_name || t('tickets.supportAgent') : null;
+  const agentAvatarPath = isOutgoing && (email.type === 'sent' || email.type === 'internal_note') ? email.agent_avatar_url : null;
   
   // Resolve avatar URL from private storage path
   const { url: agentAvatarUrl } = useAvatarUrl(agentAvatarPath);
@@ -305,6 +306,9 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
 
   // Determine article styling based on message type
   const getArticleStyles = () => {
+    if (isInternalNote) {
+      return 'bg-amber-50 border-amber-300';
+    }
     if (isOutgoing) {
       return 'bg-blue-50 border-blue-200';
     }
@@ -315,7 +319,7 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
     <article
       className={`rounded-lg border shadow-sm transition-all duration-300 relative ${getArticleStyles()}`}
       id={email.id}
-      aria-label={`${isOutgoing ? t('tickets.sentMessage') : t('tickets.receivedMessage')} ${isOutgoing ? agentName : customerName}`}
+      aria-label={`${isInternalNote ? t('tickets.internalNote') + ' ' : ''}${isOutgoing ? t('tickets.sentMessage') : t('tickets.receivedMessage')} ${isOutgoing ? agentName : customerName}`}
     >
       {/* Unread Badge - Top Right Corner */}
       {isNew && (
@@ -339,7 +343,7 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
             ) : (
               <div 
                 className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium ${
-                  isOutgoing ? 'bg-blue-600 text-white' : 'bg-muted text-muted-foreground'
+                  isInternalNote ? 'bg-amber-500 text-white' : isOutgoing ? 'bg-blue-600 text-white' : 'bg-muted text-muted-foreground'
                 }`}
                 aria-hidden="true"
               >
@@ -363,12 +367,12 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
             )}
             <div>
               <p className={`text-sm font-semibold ${
-                isOutgoing ? 'text-blue-900' : 'text-foreground'
+                isInternalNote ? 'text-amber-900' : isOutgoing ? 'text-blue-900' : 'text-foreground'
               }`}>
                 {isOutgoing ? agentName : customerName}
               </p>
               <p className="text-xs text-muted-foreground">
-                {isOutgoing ? t('tickets.supportAgent') : t('tickets.customer')}
+                {isInternalNote ? t('tickets.internalNote') : isOutgoing ? t('tickets.supportAgent') : t('tickets.customer')}
               </p>
             </div>
           </div>
@@ -509,7 +513,7 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
                   key={`${email.key}-att-${attachment.id ?? attachmentIndex}`}
                   attachment={attachment}
                   mailId={email.id}
-                  mailType={email.type}
+                  mailType={email.type === 'internal_note' ? 'sent' : email.type}
                   onPreview={onPreview}
                 />
               ))}

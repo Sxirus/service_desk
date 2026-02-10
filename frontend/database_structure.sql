@@ -296,6 +296,7 @@ CREATE TABLE public.sent-mail (
   provider_name text,
   sent_via text,
   attachments jsonb,
+  is_internal_note boolean NOT NULL DEFAULT false,
   CONSTRAINT sent-mail_pkey PRIMARY KEY (id),
   CONSTRAINT send-mail_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.employees(id),
   CONSTRAINT send-mail_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id)

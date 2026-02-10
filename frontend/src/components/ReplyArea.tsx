@@ -160,6 +160,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
   const [attachments, setAttachments] = useState<FileUploadState[]>([]);
   const [postSendBehavior, setPostSendBehavior] = useState<PostSendBehavior>('back');
   const [ticketStatus, setTicketStatus] = useState<TicketStatus>('resolved'); // Default to resolved
+  const [isInternalNote, setIsInternalNote] = useState(false); // Toggle between public reply and internal note
 
   // Refs for resize functionality
   const resizeStateRef = useRef({
@@ -425,6 +426,64 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
         return;
       }
 
+      // ---- Internal Note Path ----
+      if (isInternalNote) {
+        if (plainText === '') {
+          setError(t('tickets.enterNoteContent'));
+          setIsSending(false);
+          return;
+        }
+
+        const response = await apiClient.post(`/emails/addInternalNote?customerId=${customerId}`, {
+          text: plainText,
+          html: replyHtml,
+        });
+
+        if (!response || !response.success) {
+          setError(t('tickets.failedToSaveNote'));
+          setIsSending(false);
+          return;
+        }
+
+        toast.success(t('tickets.noteSavedSuccess'));
+
+        // Clear state
+        setReplyHtml('');
+        if (editorRef.current) {
+          editorRef.current.insertContent('');
+        }
+
+        // Optimistically add the note to the thread
+        try {
+          const optimisticNote = {
+            id: `temp-note-${Date.now()}`,
+            key: `internal_note-temp-note-${Date.now()}`,
+            type: 'internal_note' as const,
+            send_at: new Date().toISOString(),
+            text_content: plainText,
+            html_content: replyHtml,
+            attachments: [],
+            has_attachments: false,
+            employee_id: 'me',
+            agent_name: agentName || 'Support Agent',
+            agent_avatar_url: agentAvatarUrl ?? null,
+            is_internal_note: true as const,
+          };
+          window.dispatchEvent(
+            new CustomEvent('TicketEmailSent', {
+              detail: { customerId: String(customerId), email: optimisticNote },
+            })
+          );
+        } catch {
+          // ignore
+        }
+
+        setIsSending(false);
+        return;
+      }
+
+      // ---- Public Reply Path ----
+
       // Validate email address format (only needed when sending email)
       if (!emailAddress || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailAddress)) {
         setError(t('tickets.invalidRecipientEmail'));
@@ -570,11 +629,40 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
         <div className="absolute inset-x-0 -top-2 -bottom-2" aria-hidden="true"></div>
       </div>
 
-      {/* Header with Collapse Button */}
+      {/* Header with Collapse Button and Mode Toggle */}
       <div className="flex items-center justify-between px-6 pt-3 pb-2 shrink-0">
-        <label htmlFor="reply-textarea" className="text-sm font-medium leading-none">
-          {t('tickets.yourReply')}
-        </label>
+        <div className="flex items-center gap-3">
+          <label htmlFor="reply-textarea" className="text-sm font-medium leading-none">
+            {isInternalNote ? t('tickets.internalNote') : t('tickets.yourReply')}
+          </label>
+          {/* Public Reply / Internal Note Toggle */}
+          <div className="flex items-center rounded-md border bg-muted p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setIsInternalNote(false)}
+              className={`cursor-pointer px-2.5 py-1 rounded transition-colors font-medium ${
+                !isInternalNote
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              aria-pressed={!isInternalNote}
+            >
+              {t('tickets.publicReply')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsInternalNote(true)}
+              className={`cursor-pointer px-2.5 py-1 rounded transition-colors font-medium ${
+                isInternalNote
+                  ? 'bg-amber-200 text-amber-900 shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              aria-pressed={isInternalNote}
+            >
+              {t('tickets.internalNote')}
+            </button>
+          </div>
+        </div>
         <button
           type="button"
           onClick={handleToggleCollapse}
@@ -611,15 +699,17 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
           )}
 
           <div className="flex gap-3 items-end h-full">
-            <div className="flex-1 h-full relative">
+            <div className={`flex-1 h-full relative rounded-md transition-colors duration-200 ${
+              isInternalNote ? 'ring-2 ring-amber-300 bg-amber-50/50' : ''
+            }`}>
               <RichTextEditor
                 ref={editorRef}
                 id="reply-textarea"
                 content={replyHtml}
                 onContentChange={setReplyHtml}
-                placeholder={t('tickets.typeYourReply')}
+                placeholder={isInternalNote ? t('tickets.typeInternalNote') : t('tickets.typeYourReply')}
                 disabled={isSending}
-                className="w-full h-full min-h-0"
+                className={`w-full h-full min-h-0 ${isInternalNote ? '[&_.tiptap]:bg-amber-50/80' : ''}`}
               />
               
               {/* Floating Attachment Button */}
@@ -699,7 +789,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                 onClick={handleSend}
                 disabled={isSending}
                 className="shrink-0 cursor-pointer"
-                aria-label={t('tickets.sendReply')}
+                aria-label={isInternalNote ? t('tickets.saveNote') : t('tickets.sendReply')}
               >
               {isSending ? (
                 <>
@@ -713,26 +803,44 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  {t('tickets.sending')}
+                  {isInternalNote ? t('tickets.savingNote') : t('tickets.sending')}
                 </>
               ) : (
                 <>
-                  <svg
-                    className="mr-2 h-4 w-4"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth="1.5"
-                    stroke="currentColor"
-                    aria-hidden="true"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
-                    />
-                  </svg>
-                  {t('tickets.sendReply')}
+                  {isInternalNote ? (
+                    <svg
+                      className="mr-2 h-4 w-4"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth="1.5"
+                      stroke="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
+                      />
+                    </svg>
+                  ) : (
+                    <svg
+                      className="mr-2 h-4 w-4"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth="1.5"
+                      stroke="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
+                      />
+                    </svg>
+                  )}
+                  {isInternalNote ? t('tickets.saveNote') : t('tickets.sendReply')}
                 </>
               )}
               </Button>

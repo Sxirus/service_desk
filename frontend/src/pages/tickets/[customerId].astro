@@ -34,6 +34,7 @@ import type {
   ThreadEmail, 
   IncomingEmail, 
   SentEmail,
+  InternalNote,
   BrowserTokens,
   MacroContext
 } from "@/types/ticket.types";
@@ -174,7 +175,8 @@ const [
       text_content,
       html_content,
       employee_id,
-      attachments
+      attachments,
+      is_internal_note
     `)
     .eq("customer_id", customerId)
     .order("send_at", { ascending: true }),
@@ -339,17 +341,19 @@ const emailArray: ThreadEmail[] = [
     has_attachments: mail.attachments?.length > 0,
     attachments: mail.attachments || []
   })),
-  ...(sentMails || []).map((mail: any): SentEmail => {
+  ...(sentMails || []).map((mail: any): SentEmail | InternalNote => {
     const agent = employeeMap.get(String(mail.employee_id));
+    const isNote = !!mail.is_internal_note;
     return {
       ...mail,
-      key: `sent-${mail.id}`,
-      type: 'sent',
+      key: `${isNote ? 'internal_note' : 'sent'}-${mail.id}`,
+      type: isNote ? 'internal_note' as const : 'sent' as const,
       employee_id: mail.employee_id,
       agent_name: agent?.name || 'Support Agent',
       agent_avatar_url: agent?.avatar_url || null,
       has_attachments: mail.attachments?.length > 0,
-      attachments: mail.attachments || []
+      attachments: mail.attachments || [],
+      ...(isNote ? { is_internal_note: true as const } : {})
     };
   })
 ].sort((a, b) => new Date(a.send_at).getTime() - new Date(b.send_at).getTime());

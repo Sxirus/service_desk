@@ -451,6 +451,69 @@ router.post('/sendMail',
 );
 
 /**
+ * Add an internal note to a ticket
+ * POST /api/emails/addInternalNote?customerId=123
+ * Body: { text: string, html?: string }
+ * 
+ * Authentication: Required
+ * Authorization: Customer must belong to user's client
+ * 
+ * Internal notes are stored in sent-mail with is_internal_note=true.
+ * They appear in the email thread for agents but are never sent to the customer.
+ */
+router.post('/addInternalNote',
+  authenticate,
+  validateId('customerId'),
+  authorizeCustomerAccess,
+  sanitizeText('text', { required: true, maxLength: 50000 }),
+  sanitizeHtmlField('html', { required: false, maxLength: 100000 }),
+  async (req, res) => {
+    try {
+      const customerId = req.sanitized.customerId;
+      const text = req.sanitized.text;
+      const html = req.sanitized.html || null;
+      const employee_id = req.user.employee_id;
+
+      console.log('[EMAILS] Adding internal note for customer:', customerId, 'by employee:', employee_id);
+
+      const insertData = {
+        employee_id,
+        text_content: text,
+        customer_id: customerId,
+        is_internal_note: true,
+      };
+
+      if (html) {
+        insertData.html_content = html;
+      }
+
+      const { data, error } = await supabase
+        .from('sent-mail')
+        .insert([insertData])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[EMAILS] Internal note insert error:', error);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to save internal note',
+        });
+      }
+
+      console.log('[EMAILS] Internal note saved successfully, id:', data.id);
+      res.json({ success: true, note: data });
+    } catch (err) {
+      console.error('[EMAILS] Internal note error:', err);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to save internal note: ' + err.message,
+      });
+    }
+  }
+);
+
+/**
  * Update ticket status for a customer
  * POST /api/emails/updateStatus?customerId=123
  * Body: { status: 'new' | 'open' | 'waiting' | 'resolved' }
