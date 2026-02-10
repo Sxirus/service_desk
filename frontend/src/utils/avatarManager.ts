@@ -13,6 +13,9 @@ import { apiClient } from './api';
 // Key: avatar path, Value: { url: string, expiry: number }
 const avatarUrlCache = new Map<string, { url: string; expiry: number }>();
 
+// Track in-flight requests to dedupe concurrent calls per path
+const avatarUrlInFlight = new Map<string, Promise<string | null>>();
+
 // Cache duration: 50 minutes (signed URLs expire after 60 minutes)
 const CACHE_DURATION_MS = 50 * 60 * 1000;
 
@@ -60,27 +63,43 @@ export async function getAvatarSignedUrl(path: string): Promise<string | null> {
     return cached.url;
   }
 
-  try {
-    const response = await apiClient.post('/avatars/getSignedUrl', {
-      path: path.trim()
-    }) as { success?: boolean; signedUrl?: string };
-
-    if (!response || !response.signedUrl) {
-      console.error('[AvatarManager] Invalid URL returned from server');
-      return null;
-    }
-
-    // Cache the URL
-    avatarUrlCache.set(path, {
-      url: response.signedUrl,
-      expiry: Date.now() + CACHE_DURATION_MS
-    });
-
-    return response.signedUrl;
-  } catch (error) {
-    console.error('[AvatarManager] Failed to get signed URL:', error);
-    return null;
+  // Reuse any in-flight request for this path
+  const inFlight = avatarUrlInFlight.get(path);
+  if (inFlight) {
+    return inFlight;
   }
+
+  // Create a promise that never rejects - always resolves to string or null
+  // This ensures all concurrent callers get consistent behavior
+  const requestPromise = (async (): Promise<string | null> => {
+    try {
+      const response = await apiClient.post('/avatars/getSignedUrl', {
+        path: path.trim()
+      }) as { success?: boolean; signedUrl?: string };
+
+      if (!response || !response.signedUrl) {
+        console.error('[AvatarManager] Invalid URL returned from server');
+        return null;
+      }
+
+      // Cache the URL
+      avatarUrlCache.set(path, {
+        url: response.signedUrl,
+        expiry: Date.now() + CACHE_DURATION_MS
+      });
+
+      return response.signedUrl;
+    } catch (error) {
+      console.error('[AvatarManager] Failed to get signed URL:', error);
+      return null;
+    } finally {
+      // Clean up in-flight tracking regardless of success/failure
+      avatarUrlInFlight.delete(path);
+    }
+  })();
+
+  avatarUrlInFlight.set(path, requestPromise);
+  return requestPromise;
 }
 
 /**
@@ -144,6 +163,7 @@ export async function getAvatarSignedUrls(paths: string[]): Promise<Map<string, 
  */
 export function clearAvatarCache(): void {
   avatarUrlCache.clear();
+  avatarUrlInFlight.clear();
 }
 
 /**
@@ -153,6 +173,7 @@ export function clearAvatarCache(): void {
  */
 export function clearAvatarFromCache(path: string): void {
   avatarUrlCache.delete(path);
+  avatarUrlInFlight.delete(path);
 }
 
 /**
