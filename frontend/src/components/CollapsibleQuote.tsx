@@ -55,7 +55,7 @@ export function CollapsibleQuote({ segments }: CollapsibleQuoteProps) {
         
         {/* Render remaining nested quotes */}
         {remainingSegments.length > 0 && (
-          <CollapsibleQuote segments={remainingSegments} />
+          <CollapsibleQuote key={`nested-${remainingSegments[0].depth}`} segments={remainingSegments} />
         )}
       </CollapsibleContent>
     </Collapsible>

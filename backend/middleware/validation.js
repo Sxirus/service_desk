@@ -228,11 +228,73 @@ function sanitizeText(paramName, options = {}) {
   };
 }
 
+/**
+ * Middleware to sanitize HTML body fields (for rich-text email content).
+ * Uses sanitize-html to allow safe formatting tags while stripping
+ * dangerous content like scripts, event handlers, etc.
+ */
+function sanitizeHtmlField(paramName, options = {}) {
+  const sanitizeHtmlLib = require('sanitize-html');
+  return (req, res, next) => {
+    const { required = false, maxLength = 100000 } = options;
+    const value = req.body[paramName];
+
+    if (!value) {
+      if (required) {
+        return res.status(400).json({
+          error: 'Bad Request',
+          message: `${paramName} is required`
+        });
+      }
+      req.sanitized = req.sanitized || {};
+      req.sanitized[paramName] = '';
+      return next();
+    }
+
+    if (typeof value !== 'string') {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: `${paramName} must be a string`
+      });
+    }
+
+    if (value.length > maxLength) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: `${paramName} exceeds maximum length of ${maxLength}`
+      });
+    }
+
+    // Sanitize HTML — allow safe formatting tags only
+    const clean = sanitizeHtmlLib(value, {
+      allowedTags: [
+        'p', 'br', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'del',
+        'ul', 'ol', 'li', 'blockquote', 'a', 'hr', 'span',
+      ],
+      allowedAttributes: {
+        'a': ['href', 'target', 'rel'],
+        'span': ['style'],
+      },
+      allowedStyles: {
+        'span': {
+          'color': [/^#[0-9a-fA-F]{3,6}$/, /^rgb\(/, /^rgba\(/],
+          'text-decoration': [/^underline$/, /^line-through$/],
+        },
+      },
+    });
+
+    req.sanitized = req.sanitized || {};
+    req.sanitized[paramName] = clean;
+    next();
+  };
+}
+
 module.exports = {
   validateShopName,
   validateEmail,
   validateId,
   validateOAuthState,
   validateShopifyHMAC,
-  sanitizeText
+  sanitizeText,
+  sanitizeHtmlField
 };

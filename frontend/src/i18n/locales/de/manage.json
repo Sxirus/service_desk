@@ -295,6 +295,7 @@
     "saving": "Wird gespeichert...",
     "back": "Zurück",
     "variablesLabel": "Variablen",
+    "addAttachments": "Anhänge hinzufügen",
     "search": {
       "placeholder": "Makros suchen...",
       "allRoot": "Alle (Root)",
@@ -550,6 +551,12 @@
     "allRefunded": "Alle Artikel bereits erstattet",
     "refundHistory": "Erstattungsverlauf",
     "items": "Artikel",
+    "sku": "Art.-Nr.",
+    "variant": "Variante",
+    "edited": "Bearbeitet",
+    "removed": "Entfernt",
+    "quantityChanged": "Menge ge\u00e4ndert",
+    "originalQuantity": "Urspr\u00fcnglich {{count}}",
     "total": "Gesamt",
     "available": "{{count}} verfügbar",
     "discounts": "Rabatte",
@@ -638,7 +645,8 @@
     "connection": "Verbindung",
     "tracking": "Sendungsverfolgung",
     "shipments": "Lieferungen",
-    "noTrackingInfo": "Keine Sendungsinformationen"
+    "noTrackingInfo": "Keine Sendungsinformationen",
+    "trackingCopied": "Sendungsnummer in die Zwischenablage kopiert"
   },
   "tracking": {
     "trackShipment": "Sendung verfolgen",

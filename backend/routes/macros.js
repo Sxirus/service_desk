@@ -292,7 +292,8 @@ router.post('/updateMacro',
       if (!data) {
         return res.status(404).json({ error: 'Macro not found or access denied' });
       }
-      result = { success: true, data: data };
+      
+      let result = { success: true, data: data };
 
       if (attachments.length > 0 || oldAttachments.length > 0 || deletedAttachments.length > 0) {
         const newAttachments = await storeMacroAttachmentsInDB(attachments, req.user.client_id, data.id, deletedAttachments, oldAttachments);

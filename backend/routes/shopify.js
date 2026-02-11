@@ -621,11 +621,17 @@ router.get('/orders',
                       displayFinancialStatus
                       displayFulfillmentStatus
                       totalPriceSet { shopMoney { amount currencyCode } }
+                      currentTotalPriceSet { shopMoney { amount } }
                       totalDiscountsSet { shopMoney { amount } }
+                      currentTotalDiscountsSet { shopMoney { amount } }
                       totalShippingPriceSet { shopMoney { amount } }
+                      currentShippingPriceSet { shopMoney { amount } }
                       totalTaxSet { shopMoney { amount } }
+                      currentTotalTaxSet { shopMoney { amount } }
                       subtotalPriceSet { shopMoney { amount } }
+                      currentSubtotalPriceSet { shopMoney { amount } }
                       totalRefundedSet { shopMoney { amount } }
+                      edited
                       discountApplications(first: 10) {
                         edges {
                           node {
@@ -690,7 +696,9 @@ router.get('/orders',
                             id
                             title
                             quantity
+                            currentQuantity
                             refundableQuantity
+                            sku
                             variant { title sku }
                             originalUnitPriceSet { shopMoney { amount } }
                           }
@@ -720,11 +728,17 @@ router.get('/orders',
           financial_status: node.displayFinancialStatus.toLowerCase(),
           fulfillment_status: node.displayFulfillmentStatus.toLowerCase(),
           total_price: node.totalPriceSet?.shopMoney?.amount || "0.00",
+          current_total_price: node.currentTotalPriceSet?.shopMoney?.amount || node.totalPriceSet?.shopMoney?.amount || "0.00",
           total_discounts: node.totalDiscountsSet?.shopMoney?.amount || "0.00",
+          current_total_discounts: node.currentTotalDiscountsSet?.shopMoney?.amount || node.totalDiscountsSet?.shopMoney?.amount || "0.00",
           total_shipping: node.totalShippingPriceSet?.shopMoney?.amount || "0.00",
+          current_shipping: node.currentShippingPriceSet?.shopMoney?.amount || node.totalShippingPriceSet?.shopMoney?.amount || "0.00",
           total_tax: node.totalTaxSet?.shopMoney?.amount || "0.00",
+          current_total_tax: node.currentTotalTaxSet?.shopMoney?.amount || node.totalTaxSet?.shopMoney?.amount || "0.00",
           subtotal: node.subtotalPriceSet?.shopMoney?.amount || "0.00",
+          current_subtotal: node.currentSubtotalPriceSet?.shopMoney?.amount || node.subtotalPriceSet?.shopMoney?.amount || "0.00",
           total_refunded: node.totalRefundedSet?.shopMoney?.amount || "0.00",
+          edited: !!node.edited,
           discount_applications: (node.discountApplications?.edges || []).map(e => ({
             type: e.node.__typename,
             title: e.node.code || e.node.title,
@@ -753,10 +767,11 @@ router.get('/orders',
             id: li.node.id,
             name: li.node.title,
             quantity: li.node.quantity,
+            currentQuantity: li.node.currentQuantity,
             refundableQuantity: li.node.refundableQuantity,
             price: li.node.originalUnitPriceSet.shopMoney.amount,
             variantTitle: li.node.variant?.title,
-            sku: li.node.variant?.sku
+            sku: li.node.sku || li.node.variant?.sku
           }))
         };
       });

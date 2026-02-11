@@ -295,6 +295,7 @@
     "saving": "Saving...",
     "back": "Back",
     "variablesLabel": "Variables",
+    "addAttachments": "Add Attachments",
     "search": {
       "placeholder": "Search macros...",
       "allRoot": "All (Root)",
@@ -550,6 +551,12 @@
     "allRefunded": "All items already refunded",
     "refundHistory": "Refund History",
     "items": "Items",
+    "sku": "SKU",
+    "variant": "Variant",
+    "edited": "Edited",
+    "removed": "Removed",
+    "quantityChanged": "Qty changed",
+    "originalQuantity": "Originally {{count}}",
     "total": "Total",
     "available": "{{count}} available",
     "discounts": "Discounts",
@@ -638,7 +645,8 @@
     "connection": "Connection",
     "tracking": "Tracking",
     "shipments": "Shipments",
-    "noTrackingInfo": "No tracking info"
+    "noTrackingInfo": "No tracking info",
+    "trackingCopied": "Tracking number copied to clipboard"
   },
   "tracking": {
     "trackShipment": "Track Shipment",

@@ -62,6 +62,7 @@ export function ParsedEmailContent({ textContent }: ParsedEmailContentProps) {
       {/* Render quotes as nested collapsible sections */}
       {quoteSegments.length > 0 && (
         <CollapsibleQuote 
+          key={`quotes-${quoteSegments[0].depth}`}
           segments={quoteSegments}
         />
       )}

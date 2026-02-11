@@ -250,16 +250,17 @@ interface EmailMessageProps {
 
 const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPreview, isNew = false }) => {
   const { t } = useTranslation('dashboard');
-  const isOutgoing = email.type === 'sent';
+  const isOutgoing = email.type === 'sent' || email.type === 'internal_note';
+  const isInternalNote = email.type === 'internal_note' || (email.type === 'sent' && 'is_internal_note' in email && email.is_internal_note);
   const [showHtml, setShowHtml] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   
-  // Check if this email has significant HTML (only for incoming emails)
-  const hasHtml = email.type === 'incoming' && hasSignificantHtml(email.html_content);
+  // Check if this email has significant HTML (only relevant for incoming emails)
+  const hasHtml = hasSignificantHtml(email.html_content);
 
   // Get agent name and avatar for sent emails
-  const agentName = isOutgoing && email.type === 'sent' ? email.agent_name || t('tickets.supportAgent') : null;
-  const agentAvatarPath = isOutgoing && email.type === 'sent' ? email.agent_avatar_url : null;
+  const agentName = isOutgoing && (email.type === 'sent' || email.type === 'internal_note') ? email.agent_name || t('tickets.supportAgent') : null;
+  const agentAvatarPath = isOutgoing && (email.type === 'sent' || email.type === 'internal_note') ? email.agent_avatar_url : null;
   
   // Resolve avatar URL from private storage path
   const { url: agentAvatarUrl } = useAvatarUrl(agentAvatarPath);
@@ -305,6 +306,9 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
 
   // Determine article styling based on message type
   const getArticleStyles = () => {
+    if (isInternalNote) {
+      return 'bg-amber-50 border-amber-300';
+    }
     if (isOutgoing) {
       return 'bg-blue-50 border-blue-200';
     }
@@ -315,7 +319,7 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
     <article
       className={`rounded-lg border shadow-sm transition-all duration-300 relative ${getArticleStyles()}`}
       id={email.id}
-      aria-label={`${isOutgoing ? t('tickets.sentMessage') : t('tickets.receivedMessage')} ${isOutgoing ? agentName : customerName}`}
+      aria-label={`${isInternalNote ? t('tickets.internalNote') + ' ' : ''}${isOutgoing ? t('tickets.sentMessage') : t('tickets.receivedMessage')} ${isOutgoing ? agentName : customerName}`}
     >
       {/* Unread Badge - Top Right Corner */}
       {isNew && (
@@ -339,7 +343,7 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
             ) : (
               <div 
                 className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium ${
-                  isOutgoing ? 'bg-blue-600 text-white' : 'bg-muted text-muted-foreground'
+                  isInternalNote ? 'bg-amber-500 text-white' : isOutgoing ? 'bg-blue-600 text-white' : 'bg-muted text-muted-foreground'
                 }`}
                 aria-hidden="true"
               >
@@ -363,12 +367,12 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
             )}
             <div>
               <p className={`text-sm font-semibold ${
-                isOutgoing ? 'text-blue-900' : 'text-foreground'
+                isInternalNote ? 'text-amber-900' : isOutgoing ? 'text-blue-900' : 'text-foreground'
               }`}>
                 {isOutgoing ? agentName : customerName}
               </p>
               <p className="text-xs text-muted-foreground">
-                {isOutgoing ? t('tickets.supportAgent') : t('tickets.customer')}
+                {isInternalNote ? t('tickets.internalNote') : isOutgoing ? t('tickets.supportAgent') : t('tickets.customer')}
               </p>
             </div>
           </div>
@@ -377,78 +381,104 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
           </time>
         </header>
 
-        {/* Message Body - With collapsible quoted replies */}
-        <ParsedEmailContent textContent={getTruncatedContent()} />
+        {/* Message Body - Sent emails show HTML directly, incoming shows text with optional HTML toggle */}
+        {isOutgoing && email.html_content ? (
+          // Sent emails: HTML is the primary content (matching text email styling)
+          <div 
+            className="text-sm text-foreground overflow-auto"
+            style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
+            dangerouslySetInnerHTML={{ 
+              __html: DOMPurify.sanitize(email.html_content, {
+                ALLOWED_TAGS: [
+                  'b', 'i', 'em', 'strong', 'a', 'br', 'p', 'ul', 'ol', 'li',
+                  'div', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+                  'table', 'thead', 'tbody', 'tr', 'td', 'th',
+                  'img', 'blockquote', 'pre', 'code', 'hr', 'sup', 'sub'
+                ],
+                ALLOWED_ATTR: [
+                  'href', 'title', 'target', 'src', 'alt', 'width', 'height',
+                  'style', 'class', 'colspan', 'rowspan', 'align', 'valign'
+                ],
+                ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
+              })
+            }}
+          />
+        ) : (
+          // Incoming emails: Text view with collapsible quoted replies
+          <>
+            <ParsedEmailContent textContent={getTruncatedContent()} />
 
-        {/* Show More/Less Button for long emails */}
-        {isLongContent && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="mt-2 text-xs text-muted-foreground hover:text-foreground p-0 h-auto"
-          >
-            {isExpanded ? (
-              <>
-                <svg 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  className="h-3 w-3 mr-1"
-                  fill="none" 
-                  viewBox="0 0 24 24" 
-                  stroke="currentColor" 
-                  strokeWidth="2"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7"/>
-                </svg>
-                {t('tickets.showLess')}
-              </>
-            ) : (
-              <>
-                <svg 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  className="h-3 w-3 mr-1"
-                  fill="none" 
-                  viewBox="0 0 24 24" 
-                  stroke="currentColor" 
-                  strokeWidth="2"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
-                </svg>
-                {t('tickets.showMore')}
-              </>
+            {/* Show More/Less Button for long emails */}
+            {isLongContent && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="mt-2 text-xs text-muted-foreground hover:text-foreground p-0 h-auto"
+              >
+                {isExpanded ? (
+                  <>
+                    <svg 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      className="h-3 w-3 mr-1"
+                      fill="none" 
+                      viewBox="0 0 24 24" 
+                      stroke="currentColor" 
+                      strokeWidth="2"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7"/>
+                    </svg>
+                    {t('tickets.showLess')}
+                  </>
+                ) : (
+                  <>
+                    <svg 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      className="h-3 w-3 mr-1"
+                      fill="none" 
+                      viewBox="0 0 24 24" 
+                      stroke="currentColor" 
+                      strokeWidth="2"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                    {t('tickets.showMore')}
+                  </>
+                )}
+              </Button>
             )}
-          </Button>
-        )}
 
-        {/* HTML View Toggle Button - Only show if email has significant HTML */}
-        {hasHtml && (
-          <div className="mt-3">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setShowHtml(!showHtml)}
-              className="text-xs"
-              aria-expanded={showHtml}
-              aria-controls={`html-content-${email.id}`}
-            >
-              <>
-                <svg 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  className={`h-3 w-3 mr-1 transition-transform ${showHtml ? 'rotate-90' : ''}`}
-                  fill="none" 
-                  viewBox="0 0 24 24" 
-                  stroke="currentColor" 
-                  strokeWidth="2"
-                  aria-hidden="true"
+            {/* HTML View Toggle Button - Only show for incoming emails with significant HTML */}
+            {hasHtml && (
+              <div className="mt-3">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowHtml(!showHtml)}
+                  className="text-xs"
+                  aria-expanded={showHtml}
+                  aria-controls={`html-content-${email.id}`}
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
-                </svg>
-                {showHtml ? t('tickets.hideHtmlVersion') : t('tickets.showHtmlVersion')}
-              </>
-            </Button>
+                  <>
+                    <svg 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      className={`h-3 w-3 mr-1 transition-transform ${showHtml ? 'rotate-90' : ''}`}
+                      fill="none" 
+                      viewBox="0 0 24 24" 
+                      stroke="currentColor" 
+                      strokeWidth="2"
+                      aria-hidden="true"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
+                    </svg>
+                    {showHtml ? t('tickets.hideHtmlVersion') : t('tickets.showHtmlVersion')}
+                  </>
+                </Button>
+              </div>
+            )}
             
-            {/* HTML Content Display */}
-            {showHtml && email.type === 'incoming' && email.html_content && (
+            {/* HTML Content Display for incoming emails */}
+            {showHtml && email.html_content && (
               <div 
                 id={`html-content-${email.id}`}
                 className="mt-3 p-4 border rounded-md bg-white overflow-auto max-h-96"
@@ -471,19 +501,19 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
                 }}
               />
             )}
-          </div>
+          </>
         )}
 
         {/* Attachments */}
         {email.has_attachments && email.attachments.length > 0 && (
           <div className="mt-3" role="region" aria-label="Email attachments">
             <div className="flex flex-wrap gap-2">
-              {email.attachments.map((attachment, index) => (
+              {email.attachments.map((attachment, attachmentIndex) => (
                 <AttachmentButton
-                  key={`${email.type}-${email.id}-${attachment.id}-${index}`}
+                  key={`${email.key}-att-${attachment.id ?? attachmentIndex}`}
                   attachment={attachment}
                   mailId={email.id}
-                  mailType={email.type}
+                  mailType={email.type === 'internal_note' ? 'sent' : email.type}
                   onPreview={onPreview}
                 />
               ))}
@@ -659,7 +689,7 @@ export const EmailThread: React.FC<EmailThreadProps> = ({
               newMessageIndex === index;
             
             return (
-              <React.Fragment key={`${email.type}-${email.id}`}>
+              <React.Fragment key={email.key}>
                 {shouldShowSeparator && (
                   <div ref={separatorRef}>
                     <NewMessageSeparator

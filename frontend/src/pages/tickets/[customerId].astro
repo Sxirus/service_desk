@@ -30,11 +30,11 @@ import { ReplyArea } from "@/components/ReplyArea";
 import { TicketSidebar } from "@/components/TicketSidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PresenceIndicator } from "@/components/PresenceIndicator";
-import { getTranslations, getLanguageFromCookies } from "../../i18n/astro";
 import type { 
   ThreadEmail, 
   IncomingEmail, 
   SentEmail,
+  InternalNote,
   BrowserTokens,
   MacroContext
 } from "@/types/ticket.types";
@@ -42,10 +42,6 @@ import type {
 
 const log = createPageLogger('customer-ticket');
 log.info('Page accessed');
-
-// Initialize translations
-const lang = getLanguageFromCookies(Astro.cookies);
-const { t } = getTranslations(lang, 'dashboard');
 
 // ============================================================================
 // PERFORMANCE TRACKING - START
@@ -177,8 +173,10 @@ const [
       id,
       send_at,
       text_content,
+      html_content,
       employee_id,
-      attachments
+      attachments,
+      is_internal_note
     `)
     .eq("customer_id", customerId)
     .order("send_at", { ascending: true }),
@@ -337,21 +335,25 @@ const employeeMap = new Map<string, { name: string; avatar_url: string | null }>
 const emailArray: ThreadEmail[] = [
   ...(incomingMails || []).map((mail: any): IncomingEmail => ({
     ...mail,
+    key: `incoming-${mail.id}`,
     type: 'incoming',
     email_address: mail.email_address,
     has_attachments: mail.attachments?.length > 0,
     attachments: mail.attachments || []
   })),
-  ...(sentMails || []).map((mail: any): SentEmail => {
+  ...(sentMails || []).map((mail: any): SentEmail | InternalNote => {
     const agent = employeeMap.get(String(mail.employee_id));
+    const isNote = !!mail.is_internal_note;
     return {
       ...mail,
-      type: 'sent',
+      key: `${isNote ? 'internal_note' : 'sent'}-${mail.id}`,
+      type: isNote ? 'internal_note' as const : 'sent' as const,
       employee_id: mail.employee_id,
       agent_name: agent?.name || 'Support Agent',
       agent_avatar_url: agent?.avatar_url || null,
       has_attachments: mail.attachments?.length > 0,
-      attachments: mail.attachments || []
+      attachments: mail.attachments || [],
+      ...(isNote ? { is_internal_note: true as const } : {})
     };
   })
 ].sort((a, b) => new Date(a.send_at).getTime() - new Date(b.send_at).getTime());
@@ -550,7 +552,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
         <header class="px-6 mt-2 pt-0 py-2">
           <div class="flex items-center gap-3">
             <h1 class="text-2xl font-bold tracking-tight">
-              {t('tickets.conversationWith')} {customer?.name}
+              Conversation with {customer?.name}
             </h1>
             <!-- Status Badge -->
             <span class:list={[

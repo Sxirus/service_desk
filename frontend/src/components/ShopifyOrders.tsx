@@ -26,7 +26,8 @@ import {
   CheckCircle2,
   Clock,
   Ban,
-  Truck
+  Truck,
+  Copy
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -50,6 +51,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
@@ -175,13 +177,32 @@ const RefundDialog = ({ order, onSuccess }: { order: ShopifyOrder; onSuccess: ()
         <div className="space-y-4">
           <ScrollArea className="max-h-[280px]">
             <div className="space-y-2 pr-4">
-              {order.line_items.map(item => (
+              {order.line_items.filter(item => item.currentQuantity > 0).map(item => (
                 <div key={item.id} className="flex items-center justify-between gap-3 p-3 rounded-md border bg-muted/50">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{item.name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {t('shopify.available', { count: item.refundableQuantity })} • {item.price} {order.currency}
-                    </p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <p className="text-sm font-medium truncate">{item.name}</p>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <p>{item.name}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                      <span className="text-xs text-muted-foreground">
+                        {t('shopify.available', { count: item.refundableQuantity })} • {item.price} {order.currency}
+                      </span>
+                      {item.sku && (
+                        <span className="text-xs text-muted-foreground">
+                          • {t('shopify.sku', 'SKU')}: {item.sku}
+                        </span>
+                      )}
+                      {item.variantTitle && item.variantTitle !== 'Default Title' && (
+                        <span className="text-xs text-muted-foreground">
+                          • {item.variantTitle}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <Input 
                     type="number" min="0" max={item.refundableQuantity} 
@@ -262,6 +283,119 @@ const RefundDialog = ({ order, onSuccess }: { order: ShopifyOrder; onSuccess: ()
 };
 
 // ============================================================================
+// Cancel Dialog Component
+// ============================================================================
+
+const CANCEL_REASONS = ['customer', 'inventory', 'fraud', 'declined', 'other'] as const;
+const REASON_TO_API: Record<string, string> = {
+  customer: 'CUSTOMER',
+  inventory: 'INVENTORY',
+  fraud: 'FRAUD',
+  declined: 'DECLINED',
+  other: 'OTHER',
+};
+
+const CancelDialog = ({ order, onSuccess }: { order: ShopifyOrder; onSuccess: () => void }) => {
+  const { t } = useTranslation('manage');
+  const [isOpen, setIsOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [reason, setReason] = useState<string>('customer');
+  const [staffNote, setStaffNote] = useState('');
+  const [refundOriginal, setRefundOriginal] = useState(true);
+  const [notify, setNotify] = useState(true);
+
+  const resetForm = () => {
+    setReason('customer');
+    setStaffNote('');
+    setRefundOriginal(true);
+    setNotify(true);
+  };
+
+  const submit = async () => {
+    setIsSubmitting(true);
+    try {
+      await apiClient.post('/shopify/order/cancel', {
+        orderId: order.id,
+        reason: REASON_TO_API[reason],
+        notifyCustomer: notify,
+        refundOriginalPaymentMethod: refundOriginal,
+        staffNote: staffNote || undefined,
+      });
+      toast.success(t('shopify.cancelSuccess'));
+      setIsOpen(false);
+      resetForm();
+      onSuccess();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) resetForm(); }}>
+      <DialogTrigger asChild>
+        <Button variant="destructive" size="sm" className="flex-1 gap-1.5">
+          <Ban className="h-4 w-4" />
+          {t('shopify.cancel')}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t('shopify.cancelDialog.title', { number: order.order_number })}</DialogTitle>
+          <DialogDescription>{t('shopify.cancelDialog.description')}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">{t('shopify.cancelDialog.reasonLabel')}</Label>
+            <Select value={reason} onValueChange={setReason}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CANCEL_REASONS.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {t(`shopify.cancelDialog.reasons.${r}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cancel-note" className="text-sm font-medium">{t('shopify.cancelDialog.internalNote')}</Label>
+            <Input
+              id="cancel-note"
+              placeholder={t('shopify.refundDialog.notePlaceholder')}
+              value={staffNote}
+              onChange={e => setStaffNote(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-3 p-4 rounded-md bg-muted/50 border">
+            <div className="flex items-center gap-2">
+              <Checkbox id="cancel-refund" checked={refundOriginal} onCheckedChange={v => setRefundOriginal(!!v)} />
+              <Label htmlFor="cancel-refund" className="text-sm font-medium cursor-pointer">{t('shopify.cancelDialog.refundOriginal')}</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox id="cancel-notify" checked={notify} onCheckedChange={v => setNotify(!!v)} />
+              <Label htmlFor="cancel-notify" className="text-sm font-medium cursor-pointer">{t('shopify.cancelDialog.notifyCustomer')}</Label>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setIsOpen(false)}>{t('shopify.cancel')}</Button>
+          <Button variant="destructive" disabled={isSubmitting} onClick={submit}>
+            {isSubmitting ? <RefreshCcw className="h-4 w-4 animate-spin mr-2" /> : <Ban className="h-4 w-4 mr-2" />}
+            {t('shopify.cancelDialog.confirm')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// ============================================================================
 // Order Item Component
 // ============================================================================
 
@@ -290,7 +424,7 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
                 {new Date(order.created_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}
               </div>
               <div className="text-sm font-semibold">
-                {order.total_price} {order.currency}
+                {order.current_total_price} {order.currency}
               </div>
             </div>
           </div>
@@ -335,6 +469,18 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
                               {tn.number}
                             </button>
                           </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => {
+                              navigator.clipboard.writeText(tn.number);
+                              toast.success(t('shopify.trackingCopied', 'Tracking number copied to clipboard'));
+                            }}
+                            title={t('common.copy', 'Copy')}
+                          >
+                            <Copy className="h-3 w-3 text-muted-foreground" />
+                          </Button>
                         </div>
                       ))
                     ) : (
@@ -352,18 +498,65 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
               <Package className="h-3 w-3" /> {t('shopify.items')}
             </p>
             <div className="space-y-2">
-              {order.line_items.map((item) => (
-                <div key={item.id} className="flex justify-between items-start gap-3 text-sm">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium px-2 py-1 rounded bg-muted text-muted-foreground">{item.quantity}×</span>
-                      <span className="font-medium text-sm">{item.name}</span>
+              {order.line_items.map((item) => {
+                const isRemoved = item.currentQuantity === 0;
+                const isPartiallyRemoved = item.currentQuantity < item.quantity && item.currentQuantity > 0;
+                return (
+                  <div key={item.id} className={cn("flex justify-between items-start gap-3 text-sm", isRemoved && "opacity-50")}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={cn("text-xs font-medium px-2 py-1 rounded bg-muted text-muted-foreground shrink-0", isRemoved && "line-through")}>
+                          {isPartiallyRemoved ? `${item.currentQuantity}×` : `${item.quantity}×`}
+                        </span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className={cn("font-medium text-sm truncate", isRemoved && "line-through")}>{item.name}</span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs">
+                            <p>{item.name}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        {isPartiallyRemoved && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge variant="outline" className="text-xs shrink-0 text-orange-600 border-orange-300">
+                                {t('shopify.quantityChanged', 'Qty changed')}
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                              <p>{t('shopify.originalQuantity', 'Originally {{count}}', { count: item.quantity })}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </div>
+                      <div className="ml-8 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        {isRemoved && (
+                          <span className="text-xs text-destructive font-medium">
+                            {t('shopify.removed', 'Removed')}
+                          </span>
+                        )}
+                        {isRemoved && (item.sku || (item.variantTitle && item.variantTitle !== 'Default Title')) && (
+                          <span className="text-xs text-muted-foreground">•</span>
+                        )}
+                        {item.sku && (
+                          <span className="text-xs text-muted-foreground">
+                            {t('shopify.sku', 'SKU')}: {item.sku}
+                          </span>
+                        )}
+                        {item.sku && item.variantTitle && item.variantTitle !== 'Default Title' && (
+                          <span className="text-xs text-muted-foreground">•</span>
+                        )}
+                        {item.variantTitle && item.variantTitle !== 'Default Title' && (
+                          <span className="text-xs text-muted-foreground">
+                            {t('shopify.variant', 'Variant')}: {item.variantTitle}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    {item.variantTitle && <p className="text-xs text-muted-foreground mt-0.5 ml-8">{item.variantTitle}</p>}
+                    <span className={cn("text-sm text-muted-foreground shrink-0", isRemoved && "line-through")}>{item.price} {order.currency}</span>
                   </div>
-                  <span className="text-sm text-muted-foreground">{item.price} {order.currency}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -379,10 +572,10 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
             )}
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>{t('shopify.refundDialog.subtotal')}</span>
-              <span>{(parseFloat(order.subtotal) + parseFloat(order.total_discounts)).toFixed(2)} {order.currency}</span>
+              <span>{(parseFloat(order.current_subtotal) + parseFloat(order.current_total_discounts)).toFixed(2)} {order.currency}</span>
             </div>
 
-            {parseFloat(order.total_discounts) > 0 && (
+            {parseFloat(order.current_total_discounts) > 0 && (
               <div className="flex justify-between text-xs text-red-600">
                 <div className="flex items-center gap-1.5">
                   <span>{t('shopify.discounts')}</span>
@@ -406,27 +599,27 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
                     </Tooltip>
                   )}
                 </div>
-                <span>-{order.total_discounts} {order.currency}</span>
+                <span>-{order.current_total_discounts} {order.currency}</span>
               </div>
             )}
             
-            {parseFloat(order.total_shipping) > 0 && (
+            {parseFloat(order.current_shipping) > 0 && (
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>{t('shopify.refundDialog.shipping')}</span>
-                <span>{order.total_shipping} {order.currency}</span>
+                <span>{order.current_shipping} {order.currency}</span>
               </div>
             )}
 
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>{t('shopify.refundDialog.tax')}</span>
-              <span>{order.total_tax} {order.currency}</span>
+              <span>{order.current_total_tax} {order.currency}</span>
             </div>
 
             <Separator />
             
             <div className="flex justify-between items-center text-base font-semibold">
               <span>{t('shopify.total')}</span>
-              <span>{order.total_price} {order.currency}</span>
+              <span>{order.current_total_price} {order.currency}</span>
             </div>
 
             {parseFloat(order.total_refunded) > 0 && (
@@ -438,7 +631,7 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
                 </div>
                 <div className="flex justify-between text-sm font-medium pt-1">
                   <span>{t('shopify.refundDialog.netTotal')}</span>
-                  <span>{(parseFloat(order.total_price) - parseFloat(order.total_refunded)).toFixed(2)} {order.currency}</span>
+                  <span>{(parseFloat(order.current_total_price) - parseFloat(order.total_refunded)).toFixed(2)} {order.currency}</span>
                 </div>
               </>
             )}
@@ -468,23 +661,7 @@ const OrderItem = ({ order, isExpanded, onToggle, shopifyStore, onRefresh }: {
           <div className="flex gap-2">
             <RefundDialog order={order} onSuccess={onRefresh} />
             {!order.cancelled && order.fulfillment_status === 'unfulfilled' && (
-              <Button 
-                variant="destructive" 
-                size="sm" 
-                className="flex-1 gap-1.5"
-                onClick={async () => {
-                  if (confirm(t('shopify.cancelDialog.description'))) {
-                    try {
-                      await apiClient.post('/shopify/order/cancel', { orderId: order.id, reason: 'CUSTOMER', refundOriginalPaymentMethod: true });
-                      toast.success(t('shopify.cancelSuccess'));
-                      onRefresh();
-                    } catch (e: any) { toast.error(e.message); }
-                  }
-                }}
-              >
-                <Ban className="h-4 w-4" />
-                {t('shopify.cancel')}
-              </Button>
+              <CancelDialog order={order} onSuccess={onRefresh} />
             )}
           </div>
           <Button 

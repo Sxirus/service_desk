@@ -270,4 +270,246 @@ router.post(
   }
 );
 
+/**
+ * Search customers by name or email (for merge dialog)
+ * GET /api/customers/search?q=searchterm
+ *
+ * Authentication: Required
+ * Authorization: Automatically filtered by user's client_id
+ */
+router.get('/search',
+  authenticate,
+  async (req, res) => {
+    try {
+      const client_id = req.user.client_id;
+      const q = (req.query.q || '').trim();
+
+      if (!q || q.length < 2) {
+        return res.json({ success: true, data: [] });
+      }
+
+      console.log('[CUSTOMERS] Searching customers for:', q);
+
+      // Search customers by name
+      const { data: customersByName, error: nameError } = await supabase
+        .from('customers')
+        .select('id, name, client_id')
+        .eq('client_id', client_id)
+        .ilike('name', `%${q}%`)
+        .limit(20);
+
+      if (nameError) {
+        console.error('[CUSTOMERS] Search by name error:', nameError.message);
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      // Search email-addresses table and join with customers
+      const { data: emailMatches, error: emailError } = await supabase
+        .from('email-addresses')
+        .select('customer_id, email_address')
+        .ilike('email_address', `%${q}%`);
+
+      if (emailError) {
+        console.error('[CUSTOMERS] Search by email error:', emailError.message);
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      // Gather unique customer IDs from both searches
+      const customerMap = new Map();
+      for (const c of customersByName) {
+        customerMap.set(c.id, { id: c.id, name: c.name, emails: [] });
+      }
+
+      if (emailMatches.length > 0) {
+        const emailCustomerIds = [...new Set(emailMatches.map(e => e.customer_id))];
+        // Fetch those customers and verify client_id
+        const { data: emailCustomers, error: ecError } = await supabase
+          .from('customers')
+          .select('id, name, client_id')
+          .in('id', emailCustomerIds)
+          .eq('client_id', client_id);
+
+        if (!ecError && emailCustomers) {
+          for (const c of emailCustomers) {
+            if (!customerMap.has(c.id)) {
+              customerMap.set(c.id, { id: c.id, name: c.name, emails: [] });
+            }
+          }
+        }
+      }
+
+      // Fetch all email addresses for found customers
+      const customerIds = [...customerMap.keys()];
+      if (customerIds.length > 0) {
+        const { data: allEmails, error: allEmailsError } = await supabase
+          .from('email-addresses')
+          .select('customer_id, email_address')
+          .in('customer_id', customerIds);
+
+        if (!allEmailsError && allEmails) {
+          for (const e of allEmails) {
+            const entry = customerMap.get(e.customer_id);
+            if (entry) {
+              entry.emails.push(e.email_address);
+            }
+          }
+        }
+      }
+
+      const results = [...customerMap.values()];
+      console.log('[CUSTOMERS] Search returned', results.length, 'results');
+      res.json({ success: true, data: results });
+    } catch (err) {
+      console.error('[CUSTOMERS] Server error:', err.message);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+/**
+ * Merge two customers
+ * POST /api/customers/merge
+ * Body: { primaryCustomerId, secondaryCustomerId }
+ *
+ * Merges the secondary customer into the primary customer:
+ * - Moves all email addresses from secondary to primary
+ * - Moves all incoming mails from secondary to primary
+ * - Moves all sent mails from secondary to primary
+ * - Preserves employee/group assignment from secondary if primary has none
+ * - Deletes the secondary customer
+ *
+ * Authentication: Required
+ * Authorization: Both customers must belong to user's client
+ */
+router.post('/merge',
+  authenticate,
+  validateId('primaryCustomerId'),
+  validateId('secondaryCustomerId'),
+  async (req, res) => {
+    try {
+      const client_id = req.user.client_id;
+      const primaryId = req.sanitized.primaryCustomerId;
+      const secondaryId = req.sanitized.secondaryCustomerId;
+
+      console.log('[CUSTOMERS] Merge request:', { primaryId, secondaryId });
+
+      if (primaryId === secondaryId) {
+        return res.status(400).json({ error: 'Cannot merge a customer with itself' });
+      }
+
+      // Fetch both customers and verify they belong to the same client
+      const { data: primary, error: primaryError } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('id', primaryId)
+        .single();
+
+      if (primaryError || !primary) {
+        console.error('[CUSTOMERS] Primary customer not found:', primaryId);
+        return res.status(404).json({ error: 'Primary customer not found' });
+      }
+
+      const { data: secondary, error: secondaryError } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('id', secondaryId)
+        .single();
+
+      if (secondaryError || !secondary) {
+        console.error('[CUSTOMERS] Secondary customer not found:', secondaryId);
+        return res.status(404).json({ error: 'Secondary customer not found' });
+      }
+
+      if (primary.client_id !== client_id || secondary.client_id !== client_id) {
+        console.warn('[CUSTOMERS] Merge access denied:', {
+          primary_client_id: primary.client_id,
+          secondary_client_id: secondary.client_id,
+          user_client_id: client_id
+        });
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      // 1. Move all email addresses from secondary to primary
+      const { error: emailMoveError } = await supabase
+        .from('email-addresses')
+        .update({ customer_id: primaryId })
+        .eq('customer_id', secondaryId);
+
+      if (emailMoveError) {
+        console.error('[CUSTOMERS] Error moving email addresses:', emailMoveError.message);
+        return res.status(500).json({ error: 'Failed to move email addresses' });
+      }
+
+      // 2. Move all incoming mails from secondary to primary
+      const { error: incomingMoveError } = await supabase
+        .from('incoming-mails')
+        .update({ customer_id: primaryId })
+        .eq('customer_id', secondaryId);
+
+      if (incomingMoveError) {
+        console.error('[CUSTOMERS] Error moving incoming mails:', incomingMoveError.message);
+        return res.status(500).json({ error: 'Failed to move incoming mails' });
+      }
+
+      // 3. Move all sent mails from secondary to primary
+      const { error: sentMoveError } = await supabase
+        .from('sent-mail')
+        .update({ customer_id: primaryId })
+        .eq('customer_id', secondaryId);
+
+      if (sentMoveError) {
+        console.error('[CUSTOMERS] Error moving sent mails:', sentMoveError.message);
+        return res.status(500).json({ error: 'Failed to move sent mails' });
+      }
+
+      // 4. Preserve assignment if primary has none
+      const updates = {};
+      if (!primary.employee_id && secondary.employee_id) {
+        updates.employee_id = secondary.employee_id;
+      }
+      if (!primary.group_id && secondary.group_id) {
+        updates.group_id = secondary.group_id;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        const { error: updateError } = await supabase
+          .from('customers')
+          .update(updates)
+          .eq('id', primaryId);
+
+        if (updateError) {
+          console.error('[CUSTOMERS] Error updating primary customer:', updateError.message);
+          // Non-critical, continue with deletion
+        }
+      }
+
+      // 5. Delete the secondary customer
+      const { error: deleteError } = await supabase
+        .from('customers')
+        .delete()
+        .eq('id', secondaryId);
+
+      if (deleteError) {
+        console.error('[CUSTOMERS] Error deleting secondary customer:', deleteError.message);
+        return res.status(500).json({ error: 'Failed to delete merged customer' });
+      }
+
+      console.log('[CUSTOMERS] Merge completed successfully:', {
+        primaryId,
+        secondaryId,
+        assignmentUpdated: Object.keys(updates).length > 0
+      });
+
+      res.json({
+        success: true,
+        message: 'Customers merged successfully',
+        primaryCustomerId: primaryId
+      });
+    } catch (err) {
+      console.error('[CUSTOMERS] Merge server error:', err.message);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
 module.exports = router;

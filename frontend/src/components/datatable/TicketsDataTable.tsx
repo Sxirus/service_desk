@@ -235,8 +235,8 @@ export function TicketsDataTable({
   const dates = React.useMemo(() => data.map(d => d.send_at), [data])
   const tick = useRelativeTimeUpdater(dates)
 
-  // Navigation handler with order persistence
-  const navigateToTicket = React.useCallback((customerId: number) => {
+  // Persist ticket order before navigating (used by both left-click and middle-click)
+  const persistOrderAndGetUrl = React.useCallback((customerId: number): string => {
     try {
       const order = calculateTicketOrder(
         data, 
@@ -248,8 +248,13 @@ export function TicketsDataTable({
     } catch (e) {
       console.warn('[TicketsDataTable] Failed to persist ticket order:', e)
     }
-    window.location.href = buildTicketUrl(customerId, tableId)
+    return buildTicketUrl(customerId, tableId)
   }, [tableId, data, state.sorting, state.columnFilters, state.statusFilter])
+
+  // Navigation handler — same-tab navigation
+  const navigateToTicket = React.useCallback((customerId: number) => {
+    window.location.href = persistOrderAndGetUrl(customerId)
+  }, [persistOrderAndGetUrl])
 
   // Get columns from helper
   const columns = React.useMemo(
@@ -307,15 +312,33 @@ export function TicketsDataTable({
     },
   })
 
-  // Handle row click navigation
+  // Handle row click navigation (left-click, supports Ctrl/Meta for new tab)
   const handleRowClick = React.useCallback((e: React.MouseEvent, customerId: number) => {
     const target = e.target as HTMLElement
     // Don't navigate if clicking on interactive elements
     if (target.closest('button') || target.closest('[role="checkbox"]') || target.closest('[role="menuitem"]')) {
       return
     }
+    // Ctrl+Click or Meta+Click (⌘+Click on Mac) → open in new tab
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault()
+      window.open(persistOrderAndGetUrl(customerId), '_blank')
+      return
+    }
     navigateToTicket(customerId)
-  }, [navigateToTicket])
+  }, [navigateToTicket, persistOrderAndGetUrl])
+
+  // Handle middle-click (auxclick) → open in new tab
+  const handleRowAuxClick = React.useCallback((e: React.MouseEvent, customerId: number) => {
+    // button === 1 is middle mouse button
+    if (e.button !== 1) return
+    const target = e.target as HTMLElement
+    if (target.closest('button') || target.closest('[role="checkbox"]') || target.closest('[role="menuitem"]')) {
+      return
+    }
+    e.preventDefault()
+    window.open(persistOrderAndGetUrl(customerId), '_blank')
+  }, [persistOrderAndGetUrl])
 
   return (
     <div className="w-full" role="region" aria-label={t('tickets.title')}>
@@ -358,6 +381,7 @@ export function TicketsDataTable({
                   data-state={row.getIsSelected() && "selected"}
                   className="cursor-pointer"
                   onClick={(e) => handleRowClick(e, row.original.customer_id)}
+                  onAuxClick={(e) => handleRowAuxClick(e, row.original.customer_id)}
                   role="row"
                   tabIndex={0}
                   onKeyDown={(e) => {

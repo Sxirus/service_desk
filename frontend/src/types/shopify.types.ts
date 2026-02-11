@@ -32,6 +32,7 @@ export interface ShopifyLineItem {
   id: string;
   name: string;
   quantity: number;
+  currentQuantity: number;
   refundableQuantity: number;
   price: string;
   variantTitle?: string;
@@ -48,11 +49,17 @@ export interface ShopifyOrder {
   financial_status: string;
   fulfillment_status: string;
   total_price: string;
+  current_total_price: string;
   total_discounts: string;
+  current_total_discounts: string;
   total_shipping: string;
+  current_shipping: string;
   total_tax: string;
+  current_total_tax: string;
   subtotal: string;
+  current_subtotal: string;
   total_refunded: string;
+  edited: boolean;
   discount_applications: {
     type: string;
     title: string;
