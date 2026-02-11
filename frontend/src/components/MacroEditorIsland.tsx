@@ -5,7 +5,7 @@
  * Wraps MacroEditor with save/cancel functionality and attachment management.
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { MacroEditor, type MacroVariable } from '@/components/MacroEditor';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -189,6 +189,7 @@ export const MacroEditorIsland: React.FC<MacroEditorIslandProps> = ({
         <Button
           type="button"
           variant="outline"
+          size="sm"
           onClick={() => fileInputRef.current?.click()}
           disabled={isSaving}
         >
@@ -196,44 +197,45 @@ export const MacroEditorIsland: React.FC<MacroEditorIslandProps> = ({
         </Button>
 
         {/* File Previews */}
-        <div className="flex gap-3 flex-wrap">
+        <div className="flex gap-2 flex-wrap">
           {existingAttachments.map((att, index) => (
-            <div key={att.id || att.object_path} className="border rounded p-2 w-32 text-xs flex flex-col gap-1 bg-card">
+            <div key={att.id || att.object_path} className="inline-flex items-center gap-2 rounded-md bg-accent px-2.5 py-1 text-xs transition-colors">
               <a
                 href={att.objectURL || '#'}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 underline truncate"
+                className="text-primary underline-offset-4 hover:underline truncate max-w-[120px]"
               >
-                {att.filename}
+                📎 {att.filename}
               </a>
               <button
                 type="button"
                 onClick={() => handleRemoveExisting(index)}
                 disabled={isSaving}
-                className="self-end text-[10px] text-red-500 hover:text-red-700 font-bold"
+                className="text-destructive hover:text-destructive/80 font-bold disabled:opacity-50"
               >
                 ✕
               </button>
             </div>
           ))}
           {selectedFiles.map((file, index) => {
-            const objectURL = URL.createObjectURL(file);
             return (
-              <div key={`${file.name}-${index}`} className="border rounded p-2 w-32 text-xs flex flex-col gap-1 bg-card">
-                <a
-                  href={objectURL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 underline truncate"
+              <div key={`${file.name}-${index}`} className="inline-flex items-center gap-2 rounded-md bg-accent px-2.5 py-1 text-xs transition-colors">
+                <span
+                  className="text-primary underline-offset-4 hover:underline truncate max-w-[120px] cursor-pointer"
+                  onClick={() => {
+                    const url = URL.createObjectURL(file);
+                    window.open(url, '_blank');
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                  }}
                 >
-                  {file.name}
-                </a>
+                  📎 {file.name}
+                </span>
                 <button
                   type="button"
                   onClick={() => handleRemoveNewFile(index)}
                   disabled={isSaving}
-                  className="self-end text-[10px] text-red-500 hover:text-red-700 font-bold"
+                  className="text-destructive hover:text-destructive/80 font-bold disabled:opacity-50"
                 >
                   ✕
                 </button>

@@ -162,13 +162,14 @@ router.post('/createMacro',
 
       if (attachments.length > 0) {
         console.log('[MACROS] Saving attachments');
-        await storeMacroAttachmentsInDB(attachments, client_id, data.id, null, null);
+        const updatedMacro = await storeMacroAttachmentsInDB(attachments, client_id, data.id, null, null);
+        console.log('[MACROS] Macro created successfully:', data.id);
+        res.json({ success: true, data: updatedMacro || data });
       } else {
         console.log('[MACROS] No attachments, continue')
+        console.log('[MACROS] Macro created successfully:', data.id);
+        res.json({ success: true, data: data });
       }
-
-      console.log('[MACROS] Macro created successfully:', data.id);
-      res.json({ success: true, data: data });
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
       res.status(500).json({ error: 'Server error' });
@@ -296,8 +297,8 @@ router.post('/updateMacro',
       let result = { success: true, data: data };
 
       if (attachments.length > 0 || oldAttachments.length > 0 || deletedAttachments.length > 0) {
-        const newAttachments = await storeMacroAttachmentsInDB(attachments, req.user.client_id, data.id, deletedAttachments, oldAttachments);
-        result.attachments = newAttachments;
+        const updatedMacro = await storeMacroAttachmentsInDB(attachments, req.user.client_id, data.id, deletedAttachments, oldAttachments);
+        result.attachments = updatedMacro?.attachments || [];
       }
 
       console.log('[MACROS] Macro updated successfully');
@@ -347,7 +348,7 @@ router.delete('/deleteMacro',
       }
 
       // Delete macro
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('macros')
         .delete()
         .eq('id', macroId)
