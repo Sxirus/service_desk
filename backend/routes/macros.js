@@ -162,7 +162,7 @@ router.post('/createMacro',
 
       if (attachments.length > 0) {
         console.log('[MACROS] Saving attachments');
-        storeMacroAttachmentsInDB(attachments, client_id, data.id, null, null);
+        await storeMacroAttachmentsInDB(attachments, client_id, data.id, null, null);
       } else {
         console.log('[MACROS] No attachments, continue')
       }
@@ -247,10 +247,24 @@ router.post('/updateMacro',
     try {
       const macroId = req.sanitized.macroId;
       const client_id = req.user.client_id;
+      
+      let deletedAttachments = [];
+      try {
+        deletedAttachments = req.body.deletedAttachments ? JSON.parse(req.body.deletedAttachments) : [];
+      } catch (e) {
+        console.error('[MACROS] Failed to parse deletedAttachments', e);
+      }
+
+      let oldAttachments = [];
+      try {
+        oldAttachments = req.body.oldAttachments ? JSON.parse(req.body.oldAttachments) : [];
+      } catch (e) {
+        console.error('[MACROS] Failed to parse oldAttachments', e);
+      }
+
+      const attachments = req.files || [];
 
       console.log('[MACROS] Updating macro:', macroId, 'for client:', client_id);
-
-      console.log(deletedAttachments, oldAttachments, attachments);
 
       // Build update object with only provided fields
       const updates = {};
@@ -280,8 +294,8 @@ router.post('/updateMacro',
       }
       result = { success: true, data: data };
 
-      if (attachments.length > 0 || oldAttachments.length > 0 || deletedAttachments > 0) {
-        const newAttachments = storeMacroAttachmentsInDB(attachments, req.user.client_id, data.id, deletedAttachments, oldAttachments);
+      if (attachments.length > 0 || oldAttachments.length > 0 || deletedAttachments.length > 0) {
+        const newAttachments = await storeMacroAttachmentsInDB(attachments, req.user.client_id, data.id, deletedAttachments, oldAttachments);
         result.attachments = newAttachments;
       }
 

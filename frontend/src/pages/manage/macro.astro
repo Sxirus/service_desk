@@ -236,6 +236,11 @@ var first = true
     }
 
     function addMacro() {
+      // Reset attachment arrays
+      selectedFiles.length = 0;
+      deletedFiles.length = 0;
+      preloadedAttachments.length = 0;
+
       const mainSection = document.getElementById('main-section');
       if (mainSection) {
         if (navigationStack[navigationStack.length - 1].title !== "Editor") {
@@ -669,6 +674,11 @@ var first = true
     });
 
     async function editMacro(macroId : any, macroTitle : any, macroText : any, attachments : any) {
+      // Reset attachment arrays
+      selectedFiles.length = 0;
+      deletedFiles.length = 0;
+      preloadedAttachments.length = 0;
+
       console.log("[Macro Editor] Starting Macro editor for:", { id: macroId, title: macroTitle, text: macroText, attachments: attachments });
       const mainSection = document.getElementById('main-section');
       if (mainSection) {
@@ -814,6 +824,7 @@ var first = true
             `;
 
             try {
+              console.log("Deleted files", deletedFiles);
               const formData = new FormData();
               formData.append('deletedAttachments', JSON.stringify(deletedFiles));
               formData.append('oldAttachments', JSON.stringify(preloadedAttachments));

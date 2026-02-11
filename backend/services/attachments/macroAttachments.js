@@ -2,17 +2,18 @@ const supabase = require('../../config/supabase');
 const crypto = require('node:crypto');
 const {convertMulterFilesToNodemailerAttachments} = require('./attachmenthandler');
 
-async function storeMacroAttachmentsInDB(attachments, client_id, macro_id, deletedAttachments, oldAttachments) {
+async function storeMacroAttachmentsInDB(attachments, client_id, macro_id, deletedAttachments, parsedOldAttachments) {
   console.log("[Attachment-Handler-Macro] Saving attachments", attachments.length);
   const formatedAttachments = convertMulterFilesToNodemailerAttachments(attachments);
   const attachmentData = [];
+  const oldAttachments = Array.isArray(parsedOldAttachments) ? parsedOldAttachments : [];
 
   oldAttachments.forEach(att => {
     attachmentData.push(att);
   });
 
   if (deletedAttachments != null && deletedAttachments.length > 0) {
-    deleteAttachmentsFromStorage(deletedAttachments);
+    await deleteAttachmentsFromStorage(deletedAttachments);
   }
 
   for(const att of formatedAttachments) {
