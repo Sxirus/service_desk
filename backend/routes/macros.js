@@ -162,7 +162,7 @@ router.post('/createMacro',
 
       if (attachments.length > 0) {
         console.log('[MACROS] Saving attachments');
-        storeMacroAttachmentsInDB(attachments, client_id, data.id, null, null);
+        await storeMacroAttachmentsInDB(attachments, client_id, data.id, null, null);
       } else {
         console.log('[MACROS] No attachments, continue')
       }
@@ -247,30 +247,24 @@ router.post('/updateMacro',
     try {
       const macroId = req.sanitized.macroId;
       const client_id = req.user.client_id;
-
-      console.log('[MACROS] Updating macro:', macroId, 'for client:', client_id);
-
-      // Parse attachments data from request body
-      const attachments = req.files || [];
-      let deletedAttachments = [];
-      let oldAttachments = [];
       
+      let deletedAttachments = [];
       try {
-        if (req.body.deletedAttachments) {
-          deletedAttachments = JSON.parse(req.body.deletedAttachments);
-        }
-        if (req.body.oldAttachments) {
-          oldAttachments = JSON.parse(req.body.oldAttachments);
-        }
-      } catch (parseError) {
-        console.error('[MACROS] Error parsing attachments data:', parseError.message);
+        deletedAttachments = req.body.deletedAttachments ? JSON.parse(req.body.deletedAttachments) : [];
+      } catch (e) {
+        console.error('[MACROS] Failed to parse deletedAttachments', e);
       }
 
-      console.log('[MACROS] Attachments:', { 
-        new: attachments.length, 
-        deleted: deletedAttachments.length, 
-        existing: oldAttachments.length 
-      });
+      let oldAttachments = [];
+      try {
+        oldAttachments = req.body.oldAttachments ? JSON.parse(req.body.oldAttachments) : [];
+      } catch (e) {
+        console.error('[MACROS] Failed to parse oldAttachments', e);
+      }
+
+      const attachments = req.files || [];
+
+      console.log('[MACROS] Updating macro:', macroId, 'for client:', client_id);
 
       // Build update object with only provided fields
       const updates = {};
