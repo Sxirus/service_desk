@@ -84,6 +84,7 @@ CREATE TABLE public.clients (
   subscription_cancelled_at timestamp with time zone,
   subscription_ends_at timestamp with time zone,
   tracking_settings jsonb DEFAULT '{"providers": [], "customProviders": []}'::jsonb,
+  confirmation_mail_mode text NOT NULL DEFAULT 'all'::text CHECK (confirmation_mail_mode IN ('all', 'new_only', 'disabled')),
   CONSTRAINT clients_pkey PRIMARY KEY (id),
   CONSTRAINT clients_primary_email_id_fkey FOREIGN KEY (primary_email_id) REFERENCES public.client-emails(id)
 );

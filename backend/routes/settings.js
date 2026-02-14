@@ -9,7 +9,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require("../config/supabase");
 const { authenticate } = require('../middleware/auth');
-const { sanitizeText } = require('../middleware/validation');
+const { sanitizeText, sanitizeHtmlField } = require('../middleware/validation');
 
 /**
  * Update email signature
@@ -17,7 +17,7 @@ const { sanitizeText } = require('../middleware/validation');
  */
 router.post('/updateSignature', 
   authenticate,
-  sanitizeText('signature', { required: false, maxLength: 5000 }),
+  sanitizeHtmlField('signature', { required: false, maxLength: 50000 }),
   async (req, res) => {
     try {
       const client_id = req.user.client_id;
@@ -117,7 +117,7 @@ router.post('/updateEmailConfig',
 router.post('/updateConfirmMail', 
   authenticate,
   sanitizeText('subject', { required: false, maxLength: 500 }),
-  sanitizeText('body', { required: false, maxLength: 10000 }),
+  sanitizeHtmlField('body', { required: false, maxLength: 100000 }),
   async (req, res) => {
     try {
       const subject = req.sanitized?.subject ?? req.body.subject;
@@ -373,6 +373,40 @@ router.get('/getShopifyStatus',
     } catch (err) {
       console.error('[SETTINGS] Server error:', err.message);
       res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+//updating the confirmation mail mode setting
+router.post('/updateConfirmMailMode',
+  authenticate,
+  async (req, res) => {
+    try {
+      const client_id = req.user.client_id;
+      const mode = req.body.mode;
+
+      const validModes = ['all', 'new_only', 'disabled'];
+      if (!validModes.includes(mode)) {
+        return res.status(400).json({ success: false, error: 'Invalid mode. Must be one of: all, new_only, disabled' });
+      }
+
+      console.log('[SETTINGS] Updating confirmation mail mode for client:', client_id, 'to:', mode);
+
+      const { data, error } = await supabase
+        .from('clients')
+        .update({ confirmation_mail_mode: mode })
+        .eq('id', client_id);
+
+      if (error) {
+        console.error('[SETTINGS] Confirmation mail mode update failed:', error.message);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+
+      console.log('[SETTINGS] Confirmation mail mode updated successfully');
+      res.json({ success: true, data });
+    } catch (err) {
+      console.error('[SETTINGS] Server error:', err.message);
+      res.status(500).json({ success: false, error: 'Server error' });
     }
   }
 );

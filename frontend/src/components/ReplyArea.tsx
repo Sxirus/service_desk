@@ -517,8 +517,9 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       let fullBodyHtml = replyHtml;
       let fullBodyText = plainText;
       if (signature && signature.trim() !== '') {
-        fullBodyHtml += `<br><br>${signature.replace(/\n/g, '<br>')}`;
-        fullBodyText += `\n\n${signature}`;
+        // Signature is stored as HTML from the TipTap editor
+        fullBodyHtml += `<br><br>${signature}`;
+        fullBodyText += `\n\n${signature.replace(/<[^>]*>/g, '')}`;
       }
 
       // Create FormData for attachments
