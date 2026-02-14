@@ -159,6 +159,16 @@ export function MacroSearch({
   setHovered(suggestions.length ? 0 : -1);
 }, [focused, suggestions, query, minChars]);
 
+  useEffect(() => {
+    if (!open || hovered < 0) return;
+    const targetId = `${listboxId}-opt-${hovered}`;
+    const scrollTarget = document.getElementById(targetId);
+    if (!scrollTarget || !listRef.current?.contains(scrollTarget)) return;
+    requestAnimationFrame(() => {
+      scrollTarget.scrollIntoView({ block: "nearest" });
+    });
+  }, [open, hovered, listboxId]);
+
   const fireMacro = useCallback((macro) => {
     let text = macro.text && String(macro.text).length > 0 ? String(macro.text) : macro.title;
     text = interpreter(text, ctx);
@@ -248,7 +258,7 @@ export function MacroSearch({
         <input
           ref={inputRef}
           type="search"
-          className="w-full bg-white cursor-pointer rounded-2xl border border-gray-300 px-4 py-2 outline-none focus:ring-4 focus:ring-gray-200 shadow-sm"
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           placeholder={effectivePlaceholder}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -299,9 +309,6 @@ export function MacroSearch({
           </ul>
         )}
       </div>
-      <p className="mt-2 text-xs text-gray-500">
-        {t('macros.search.helpText')}
-      </p>
     </div>
   );
 }

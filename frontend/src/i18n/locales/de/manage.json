@@ -300,8 +300,7 @@
       "placeholder": "Makros suchen...",
       "allRoot": "Alle (Root)",
       "back": "Zurück",
-      "noResults": "Keine Treffer gefunden",
-      "helpText": "Tippen zum Suchen. Ohne Eingabe: Gruppen & Makros durchsuchen. ↑/↓ zum Navigieren, Enter zum Auswählen."
+      "noResults": "Keine Treffer gefunden"
     }
   },
   "settings": {

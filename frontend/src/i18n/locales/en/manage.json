@@ -300,8 +300,7 @@
       "placeholder": "Search macros...",
       "allRoot": "All (Root)",
       "back": "Back",
-      "noResults": "No results found",
-      "helpText": "Type to search. Without input: browse groups & macros. ↑/↓ to navigate, Enter to select."
+      "noResults": "No results found"
     }
   },
   "settings": {
