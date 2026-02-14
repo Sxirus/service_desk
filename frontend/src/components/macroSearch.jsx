@@ -277,7 +277,7 @@ export function MacroSearch({
             ref={listRef}
             id={listboxId}
             role="listbox"
-            className="absolute z-20 mt-1 w-full rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden max-h-80 overflow-y-auto"
+            className="absolute z-20 mt-1 w-full rounded-md border border-border bg-popover shadow-md overflow-hidden max-h-64 overflow-y-auto py-1"
           >
             {suggestions.map((s, i) => (
               <li
@@ -286,8 +286,10 @@ export function MacroSearch({
                 role="option"
                 aria-selected={i === hovered}
                 className={
-                  "cursor-pointer px-4 py-2 text-sm flex flex-col gap-0.5 " +
-                  (i === hovered ? "bg-gray-100" : "hover:bg-gray-50")
+                  "cursor-pointer px-3 py-1.5 text-sm flex flex-col gap-0.5 rounded-sm mx-1 transition-colors " +
+                  (i === hovered
+                    ? "bg-accent text-accent-foreground"
+                    : "hover:bg-accent hover:text-accent-foreground")
                 }
                 onMouseEnter={() => setHovered(i)}
                 onMouseDown={(e) => e.preventDefault()}
@@ -299,12 +301,16 @@ export function MacroSearch({
                   {s.title}
                 </div>
                 {s.subtitle ? (
-                  <div className="text-gray-500 truncate">{s.subtitle}</div>
+                  <div className={"truncate " + (i === hovered ? "text-accent-foreground/80" : "text-muted-foreground")}>
+                    {s.subtitle}
+                  </div>
                 ) : null}
               </li>
             ))}
             {suggestions.length === 0 && (
-              <li className="px-4 py-2 text-sm text-gray-500">{t('macros.search.noResults')}</li>
+              <li className="px-3 py-4 text-center text-sm text-muted-foreground">
+                {t('macros.search.noResults')}
+              </li>
             )}
           </ul>
         )}
