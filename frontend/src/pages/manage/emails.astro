@@ -46,14 +46,14 @@ try {
 }
 ---
 
-<BaseLayout title={t('emailAccounts.title')}>
+<BaseLayout title={t('pages.emails.pageTitle')}>
   <AdminShell
     client:load
     user={sidebarData.user}
     firstTeam={sidebarData.team ?? undefined}
     crumbParentLabel={tCommon.t('sidebar.administration')}
     crumbParentHref="/manage"
-    crumbCurrent={t('emailAccounts.title')}
+    crumbCurrent={t('pages.emails.pageTitle')}
     isAdmin={authContext.isAdmin}
     isPlatformAdmin={pageContext.isPlatformAdmin}
     currentPath="/manage/emails"
@@ -61,10 +61,22 @@ try {
     clientId={sidebarData.clientId}
     subscriptionTier={sidebarData.subscriptionTier}
   >
-    <EmailAccountsPanel 
-        client:load 
-        clientId={authContext.employee.client_id} 
-        primaryEmailId={primaryEmailId} 
-    />
+    <div class="space-y-8">
+      <!-- Page Header -->
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div class="space-y-1 mt-2">
+          <h1 class="text-2xl font-semibold tracking-tight">{t('pages.emails.heading')}</h1>
+          <p class="text-sm text-muted-foreground">
+            {t('pages.emails.description')}
+          </p>
+        </div>
+      </div>
+
+      <EmailAccountsPanel 
+          client:load 
+          clientId={authContext.employee.client_id} 
+          primaryEmailId={primaryEmailId} 
+      />
+    </div>
   </AdminShell>
 </BaseLayout>
