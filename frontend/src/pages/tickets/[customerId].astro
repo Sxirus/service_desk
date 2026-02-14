@@ -30,6 +30,7 @@ import { ReplyArea } from "@/components/ReplyArea";
 import { TicketSidebar } from "@/components/TicketSidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PresenceIndicator } from "@/components/PresenceIndicator";
+import { EditableSubject } from "@/components/EditableSubject";
 import type { 
   ThreadEmail, 
   IncomingEmail, 
@@ -380,6 +381,7 @@ const storedCustomerEmail = customerEmailAddresses?.[0]?.email_address || null;
 // In compose mode, also accept ?to= from URL as fallback
 const composeEmailFallback = isComposeMode && composeTo ? composeTo : null;
 const emailAddress = lastMail?.email_address || storedCustomerEmail || composeEmailFallback;
+const rawSubject = lastMail?.subject || composeSubject || '';
 const newSubject = lastMail ? `RE: ${lastMail.subject}` : composeSubject;
 
 log.info('Email resolution:', {
@@ -550,10 +552,14 @@ log.info("[customer-ticket] Page setup complete, rendering");
       <main class="flex-1 flex flex-col min-w-0 overflow-hidden" role="main">
         <!-- Page Header -->
         <header class="px-6 mt-2 pt-0 py-2">
-          <div class="flex items-center gap-3">
-            <h1 class="text-2xl font-bold tracking-tight">
-              Conversation with {customer?.name}
-            </h1>
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="min-w-0 flex-1">
+              <EditableSubject
+                client:load
+                initialSubject={rawSubject}
+                customerId={customerId as string}
+              />
+            </div>
             <!-- Status Badge -->
             <span class:list={[
               "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
@@ -589,7 +595,7 @@ log.info("[customer-ticket] Page setup complete, rendering");
           <ReplyArea 
             client:load
             emailAddress={emailAddress}
-            subject={isComposeMode ? composeSubject : newSubject}
+            subject={isComposeMode ? composeSubject : rawSubject}
             customerId={customerId as string}
             signature={signature}
             threadEmailAddress={threadEmailAddress}
