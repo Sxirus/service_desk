@@ -1,5 +1,4 @@
 // src/components/platform/PlatformShell.tsx
-"use client"
 
 import * as React from "react";
 import { I18nProvider } from "@/i18n/I18nProvider";

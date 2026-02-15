@@ -26,6 +26,42 @@ let user: { id: string; email: string } | null = null;
 let hasClientLink = false;
 let clientName: string | undefined;
 
+interface ClientStats {
+  employee_count: number;
+  customer_count: number;
+  emails_sent: number;
+  monthly_revenue: number;
+  total_revenue: number;
+}
+
+interface Employee {
+  id: number;
+  name: string;
+  email: string;
+  avatar_url: string | null;
+  created_at: string;
+  disabled?: boolean;
+}
+
+interface ClientData {
+  id: number;
+  name: string;
+  website: string | null;
+  address_street: string | null;
+  address_city: string | null;
+  address_zip: string | null;
+  address_country: string | null;
+  vat: string | null;
+  subscription_tier: string;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  shopify_connected: boolean;
+  shopify_store_url: string | null;
+  created_at: string;
+  employees: Employee[];
+  stats: ClientStats;
+}
+
 const pageContext = await getCompletePageContext(supabase, Astro.cookies);
 if (pageContext && pageContext.isPlatformAdmin) {
   user = pageContext.authContext.user;
@@ -52,7 +88,7 @@ if (!session) {
 }
 
 // Fetch client details from backend API
-let clientData: any = null;
+let clientData: ClientData | null = null;
 try {
   const response = await fetch(getApiUrl(`/api/platform/clients/${id}`), {
     headers: {

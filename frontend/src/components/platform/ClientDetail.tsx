@@ -1,5 +1,4 @@
 // src/components/platform/ClientDetail.tsx
-"use client"
 
 import * as React from "react"
 import { useTranslation } from 'react-i18next'
@@ -21,7 +20,6 @@ import {
   Trash2,
   UserX,
   UserCheck,
-  Plus,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -126,11 +124,29 @@ export default function ClientDetail({ clientData }: Props) {
   const [isEmployeeActionLoading, setIsEmployeeActionLoading] = React.useState(false)
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    return new Date(dateString).toLocaleDateString('de-DE', {
       month: 'long',
       day: 'numeric',
       year: 'numeric'
     })
+  }
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('de-DE', {
+      style: 'currency',
+      currency: 'EUR',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(value)
+  }
+
+  const formatAddress = () => {
+    const parts = [
+      client.address_street,
+      [client.address_zip, client.address_city].filter(Boolean).join(' '),
+      client.address_country
+    ].filter(Boolean)
+    return parts.length > 0 ? parts.join(', ') : null
   }
 
   const getInitials = (name: string) => {
@@ -357,7 +373,7 @@ export default function ClientDetail({ clientData }: Props) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(client.stats.monthly_revenue || 0)}
+              {formatCurrency(client.stats.monthly_revenue || 0)}
             </div>
           </CardContent>
         </Card>
@@ -369,7 +385,7 @@ export default function ClientDetail({ clientData }: Props) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(client.stats.total_revenue || 0)}
+              {formatCurrency(client.stats.total_revenue || 0)}
             </div>
           </CardContent>
         </Card>
@@ -477,9 +493,7 @@ export default function ClientDetail({ clientData }: Props) {
                   <div>
                     <p className="text-sm font-medium">{t('clientDetail.address')}</p>
                     <p className="text-sm text-muted-foreground">
-                      {client.address_street || client.address_city || client.address_country
-                        ? `${client.address_street || ""} ${client.address_zip || ""} ${client.address_city || ""} ${client.address_country || ""}`.trim()
-                        : t('clientDetail.notSet')}
+                      {formatAddress() || t('clientDetail.notSet')}
                     </p>
                   </div>
                 </div>

@@ -131,36 +131,86 @@ async function getClientDetail(clientId) {
     .select('*, roles-employees(role_id, roles(name))')
     .eq('client_id', clientId);
 
-  // Fetch email stats
-  let emailStats = { sent: 0, received: 0 };
-  const { count: sent } = await supabase.from('sent-mail').select('*', { count: 'exact', head: true }).eq('client_id', clientId); // Requires join or denormalization, approximated here
-  
-  // Actually we need to fetch via customers or add client_id to sent-mail. Assuming join logic from route:
-  // Route logic:
+  // Generate signed avatar URLs for employees
+  const employeesWithAvatars = await Promise.all((employees || []).map(async (emp) => {
+    if (emp.avatar_url) {
+      try {
+        const { data: signedData } = await supabase.storage
+          .from('avatars')
+          .createSignedUrl(emp.avatar_url, 60 * 60); // 1 hour
+        return { ...emp, avatar_url: signedData?.signedUrl || null };
+      } catch {
+        return { ...emp, avatar_url: null };
+      }
+    }
+    return emp;
+  }));
+
+  // Fetch employee count (active only)
+  const { count: employeeCount } = await supabase
+    .from('employees')
+    .select('*', { count: 'exact', head: true })
+    .eq('client_id', clientId)
+    .or('disabled.is.null,disabled.eq.false');
+
+  // Fetch customer count
+  const { count: customerCount } = await supabase
+    .from('customers')
+    .select('*', { count: 'exact', head: true })
+    .eq('client_id', clientId);
+
+  // Fetch email sent count via employee IDs
+  let emailsSent = 0;
   const { data: empIds } = await supabase.from('employees').select('id').eq('client_id', clientId);
-  const ids = empIds.map(e => e.id);
+  const ids = (empIds || []).map(e => e.id);
   if (ids.length > 0) {
-    const { count: sentCount } = await supabase.from('sent-mail').select('*', { count: 'exact', head: true }).in('employee_id', ids);
-    emailStats.sent = sentCount || 0;
+    const { count: sentCount } = await supabase
+      .from('sent-mail')
+      .select('*', { count: 'exact', head: true })
+      .in('employee_id', ids);
+    emailsSent = sentCount || 0;
   }
 
-  const { count: received } = await supabase.from('incoming-mails').select('*', { count: 'exact', head: true }).eq('client_id', clientId);
-  emailStats.received = received || 0;
+  // Calculate revenue based on subscription tier and active employees
+  const activeEmployees = employeeCount || 0;
+  const monthlyRevenue = client.subscription_tier === 'paid' ? activeEmployees * 9.99 : 0;
 
   return {
     ...client,
-    employees: employees || [],
+    employees: employeesWithAvatars,
     stats: {
-      ...emailStats,
-      tickets: emailStats.received
+      employee_count: employeeCount || 0,
+      customer_count: customerCount || 0,
+      emails_sent: emailsSent,
+      monthly_revenue: monthlyRevenue,
+      total_revenue: 0 // Would need Stripe invoice data for accurate total
     }
   };
 }
 
+// Allowed fields for client update (whitelist)
+const ALLOWED_CLIENT_UPDATE_FIELDS = [
+  'name', 'website', 'subscription_tier',
+  'address_street', 'address_city', 'address_zip', 'address_country',
+  'vat'
+];
+
 async function updateClient(clientId, updates) {
+  // Whitelist allowed fields to prevent injection of sensitive columns
+  const sanitizedUpdates = {};
+  for (const key of ALLOWED_CLIENT_UPDATE_FIELDS) {
+    if (updates[key] !== undefined) {
+      sanitizedUpdates[key] = updates[key];
+    }
+  }
+
+  if (Object.keys(sanitizedUpdates).length === 0) {
+    throw new Error('No valid fields to update');
+  }
+
   const { data, error } = await supabase
     .from('clients')
-    .update(updates)
+    .update(sanitizedUpdates)
     .eq('id', clientId)
     .select()
     .single();
@@ -170,11 +220,22 @@ async function updateClient(clientId, updates) {
   // Sync with Stripe if needed
   if (data.stripe_customer_id) {
     const stripeUpdates = {};
-    if (updates.name) stripeUpdates.name = updates.name;
-    // Address updates would require mapping address fields
+    if (sanitizedUpdates.name) stripeUpdates.name = sanitizedUpdates.name;
+    if (sanitizedUpdates.address_street || sanitizedUpdates.address_city || sanitizedUpdates.address_zip || sanitizedUpdates.address_country) {
+      stripeUpdates.address = {
+        line1: data.address_street || '',
+        city: data.address_city || '',
+        postal_code: data.address_zip || '',
+        country: data.address_country || ''
+      };
+    }
     
     if (Object.keys(stripeUpdates).length > 0) {
-      await updateStripeCustomer(data.stripe_customer_id, stripeUpdates);
+      try {
+        await updateStripeCustomer(data.stripe_customer_id, stripeUpdates);
+      } catch (stripeErr) {
+        logger.error('[PLATFORM] Stripe sync failed (non-blocking)', { error: stripeErr.message });
+      }
     }
   }
 
@@ -183,14 +244,116 @@ async function updateClient(clientId, updates) {
 
 async function deleteClient(clientId) {
   // 1. Get client data for cleanup
-  const { data: client } = await supabase.from('clients').select('stripe_subscription_id').eq('id', clientId).single();
+  const { data: client } = await supabase
+    .from('clients')
+    .select('stripe_subscription_id, stripe_customer_id')
+    .eq('id', clientId)
+    .single();
 
-  // 2. Cancel subscription if active (handled via stripeService potentially, or manually here)
-  // For now, just deleting the DB record. Real-world would need Stripe cancellation.
+  if (!client) throw new Error('Client not found');
+
+  // 2. Cancel Stripe subscription if active
+  if (client.stripe_subscription_id) {
+    try {
+      const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+      await stripe.subscriptions.cancel(client.stripe_subscription_id);
+      logger.info('[PLATFORM] Cancelled Stripe subscription', { clientId, subscriptionId: client.stripe_subscription_id });
+    } catch (stripeErr) {
+      logger.error('[PLATFORM] Failed to cancel Stripe subscription (proceeding with delete)', {
+        clientId,
+        error: stripeErr.message
+      });
+    }
+  }
   
-  // 3. Delete from DB (Cascade should handle relations, but let's be safe)
+  // 3. Delete from DB (cascade should handle relations)
   const { error } = await supabase.from('clients').delete().eq('id', clientId);
   if (error) throw new Error(error.message);
+
+  return true;
+}
+
+/**
+ * Update an employee belonging to a client
+ */
+async function updateEmployee(clientId, employeeId, updates) {
+  // Verify employee belongs to this client
+  const { data: employee, error: fetchError } = await supabase
+    .from('employees')
+    .select('id, client_id')
+    .eq('id', employeeId)
+    .eq('client_id', clientId)
+    .single();
+
+  if (fetchError || !employee) {
+    throw new Error('Employee not found or does not belong to this client');
+  }
+
+  // Whitelist allowed fields
+  const allowedFields = ['name', 'disabled'];
+  const sanitizedUpdates = {};
+  for (const key of allowedFields) {
+    if (updates[key] !== undefined) {
+      sanitizedUpdates[key] = updates[key];
+    }
+  }
+
+  if (Object.keys(sanitizedUpdates).length === 0) {
+    throw new Error('No valid fields to update');
+  }
+
+  const { data, error } = await supabase
+    .from('employees')
+    .update(sanitizedUpdates)
+    .eq('id', employeeId)
+    .eq('client_id', clientId)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  // If toggling disabled status, update Stripe seat count
+  if ('disabled' in sanitizedUpdates) {
+    try {
+      await updateSubscriptionQuantity(clientId);
+    } catch (stripeErr) {
+      logger.error('[PLATFORM] Stripe seat sync failed (non-blocking)', { error: stripeErr.message });
+    }
+  }
+
+  return data;
+}
+
+/**
+ * Delete an employee belonging to a client
+ */
+async function deleteEmployee(clientId, employeeId) {
+  // Verify employee belongs to this client
+  const { data: employee, error: fetchError } = await supabase
+    .from('employees')
+    .select('id, client_id')
+    .eq('id', employeeId)
+    .eq('client_id', clientId)
+    .single();
+
+  if (fetchError || !employee) {
+    throw new Error('Employee not found or does not belong to this client');
+  }
+
+  const { error } = await supabase
+    .from('employees')
+    .delete()
+    .eq('id', employeeId)
+    .eq('client_id', clientId);
+
+  if (error) throw new Error(error.message);
+
+  // Update Stripe seat count
+  try {
+    await updateSubscriptionQuantity(clientId);
+  } catch (stripeErr) {
+    logger.error('[PLATFORM] Stripe seat sync failed (non-blocking)', { error: stripeErr.message });
+  }
 
   return true;
 }
@@ -201,5 +364,7 @@ module.exports = {
   getClients,
   getClientDetail,
   updateClient,
-  deleteClient
+  deleteClient,
+  updateEmployee,
+  deleteEmployee
 };

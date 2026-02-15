@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/popover"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { apiClient } from "@/utils/api"
 
 interface Notification {
   id: string
@@ -43,14 +44,9 @@ export function NotificationBell({ initialUnreadCount = 0 }: Props) {
   const fetchNotifications = React.useCallback(async () => {
     setIsLoading(true)
     try {
-      const response = await fetch('/api/platform/notifications?limit=20', {
-        credentials: 'include'
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setNotifications(data.data || [])
-        setUnreadCount(data.unread_count || 0)
-      }
+      const data = await apiClient.get('/platform/notifications?limit=20')
+      setNotifications(data.data || [])
+      setUnreadCount(data.unread_count || 0)
     } catch (err) {
       console.error('Failed to fetch notifications:', err)
     } finally {
@@ -62,13 +58,8 @@ export function NotificationBell({ initialUnreadCount = 0 }: Props) {
   React.useEffect(() => {
     const fetchUnreadCount = async () => {
       try {
-        const response = await fetch('/api/platform/notifications/unread-count', {
-          credentials: 'include'
-        })
-        if (response.ok) {
-          const data = await response.json()
-          setUnreadCount(data.count || 0)
-        }
+        const data = await apiClient.get('/platform/notifications/unread-count')
+        setUnreadCount(data.count || 0)
       } catch (err) {
         console.error('Failed to fetch unread count:', err)
       }
@@ -88,10 +79,7 @@ export function NotificationBell({ initialUnreadCount = 0 }: Props) {
 
   const markAsRead = async (id: string) => {
     try {
-      await fetch(`/api/platform/notifications/${id}/read`, {
-        method: 'PUT',
-        credentials: 'include'
-      })
+      await apiClient.put(`/platform/notifications/${id}/read`)
       setNotifications(prev => 
         prev.map(n => n.id === id ? { ...n, read: true } : n)
       )
@@ -103,10 +91,7 @@ export function NotificationBell({ initialUnreadCount = 0 }: Props) {
 
   const markAllAsRead = async () => {
     try {
-      await fetch('/api/platform/notifications/mark-all-read', {
-        method: 'PUT',
-        credentials: 'include'
-      })
+      await apiClient.put('/platform/notifications/mark-all-read')
       setNotifications(prev => prev.map(n => ({ ...n, read: true })))
       setUnreadCount(0)
     } catch (err) {

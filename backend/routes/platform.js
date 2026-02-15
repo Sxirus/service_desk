@@ -95,6 +95,38 @@ router.delete('/clients/:id', validateId('id'), async (req, res) => {
 });
 
 /**
+ * Update Employee (name, disabled status)
+ */
+router.patch('/clients/:id/employees/:employeeId', validateId('id'), validateId('employeeId'), async (req, res) => {
+  try {
+    const data = await platformService.updateEmployee(req.sanitized.id, req.sanitized.employeeId, req.body);
+    res.json({ success: true, data });
+  } catch (err) {
+    logger.error('[PLATFORM] Employee update error', { error: err.message });
+    if (err.message.includes('not found')) {
+      return res.status(404).json({ error: err.message });
+    }
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/**
+ * Delete Employee
+ */
+router.delete('/clients/:id/employees/:employeeId', validateId('id'), validateId('employeeId'), async (req, res) => {
+  try {
+    await platformService.deleteEmployee(req.sanitized.id, req.sanitized.employeeId);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('[PLATFORM] Employee delete error', { error: err.message });
+    if (err.message.includes('not found')) {
+      return res.status(404).json({ error: err.message });
+    }
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/**
  * Get Audit Log
  */
 router.get('/audit-log', async (req, res) => {
@@ -110,6 +142,24 @@ router.get('/audit-log', async (req, res) => {
     res.json({ success: true, data });
   } catch (err) {
     logger.error('[PLATFORM] Audit log error', { error: err.message });
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/**
+ * Get Unread Notification Count
+ */
+router.get('/notifications/unread-count', async (req, res) => {
+  try {
+    const { count, error } = await supabase
+      .from('platform_notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('read', false);
+
+    if (error) throw error;
+    res.json({ success: true, count: count || 0 });
+  } catch (err) {
+    logger.error('[PLATFORM] Unread count error', { error: err.message });
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -150,13 +200,12 @@ router.get('/notifications', async (req, res) => {
 /**
  * Mark Notification Read
  */
-router.post('/notifications/:id/read', async (req, res) => {
+router.post('/notifications/:id/read', validateId('id'), async (req, res) => {
   try {
-    const { id } = req.params;
     const { error } = await supabase
       .from('platform_notifications')
       .update({ read: true })
-      .eq('id', id);
+      .eq('id', req.sanitized.id);
 
     if (error) throw error;
     res.json({ success: true });

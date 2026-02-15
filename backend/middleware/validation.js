@@ -75,7 +75,7 @@ function validateEmail(paramName = 'email') {
 function validateId(paramName, options = {}) {
   return (req, res, next) => {
     const { required = true, min = 1 } = options;
-    const value = req.query[paramName] || req.body[paramName] || req.params[paramName];
+    const value = req.query?.[paramName] || req.body?.[paramName] || req.params?.[paramName];
 
     if (!value) {
       if (required) {
