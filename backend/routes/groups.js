@@ -10,6 +10,7 @@ const router = express.Router();
 const supabase = require("../config/supabase");
 const { authenticate } = require('../middleware/auth');
 const { validateId } = require('../middleware/validation');
+const { logFromReq, ACTIONS } = require('../services/activityLogger');
 
 /**
  * Get all groups for authenticated user's client
@@ -232,6 +233,7 @@ router.post('/createGroup',
       }
 
       console.log('[GROUPS] Group created successfully:', data.id);
+      logFromReq(req, { ...ACTIONS.GROUP_CREATED, targetType: 'group', targetId: data.id, details: { name: data.name } });
       res.json({ success: true, data });
     } catch (err) {
       console.error('[GROUPS] Server error:', err.message);
@@ -301,6 +303,7 @@ router.put('/updateGroup',
       }
 
       console.log('[GROUPS] Group updated successfully');
+      logFromReq(req, { ...ACTIONS.GROUP_UPDATED, targetType: 'group', targetId: group_id, details: { name: data.name } });
       res.json({ success: true, data });
     } catch (err) {
       console.error('[GROUPS] Server error:', err.message);
@@ -360,6 +363,7 @@ router.delete('/deleteGroup',
       }
 
       console.log('[GROUPS] Group deleted successfully');
+      logFromReq(req, { ...ACTIONS.GROUP_DELETED, targetType: 'group', targetId: group_id });
       res.json({ success: true });
     } catch (err) {
       console.error('[GROUPS] Server error:', err.message);
@@ -447,6 +451,7 @@ router.post('/addMember',
       }
 
       console.log('[GROUPS] Member added successfully');
+      logFromReq(req, { ...ACTIONS.GROUP_MEMBER_ADDED, targetType: 'group', targetId: group_id, details: { employeeId: employee_id } });
       res.json({ success: true, data });
     } catch (err) {
       console.error('[GROUPS] Server error:', err.message);
@@ -509,6 +514,7 @@ router.delete('/removeMember',
       }
 
       console.log('[GROUPS] Member removed successfully');
+      logFromReq(req, { ...ACTIONS.GROUP_MEMBER_REMOVED, targetType: 'group', targetId: group_id, details: { employeeId: employee_id } });
       res.json({ success: true });
     } catch (err) {
       console.error('[GROUPS] Server error:', err.message);

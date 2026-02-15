@@ -844,6 +844,11 @@
       "pageTitle": "Abonnement-Verwaltung",
       "heading": "Abonnement-Verwaltung",
       "description": "Anzeigen und verwalten Sie Ihren aktuellen Plan, Nutzung und Abrechnung."
+    },
+    "activityLog": {
+      "pageTitle": "Aktivitätsprotokoll",
+      "heading": "Aktivitätsprotokoll",
+      "description": "Eine chronologische Aufzeichnung aller Aktionen in Ihrem Workspace."
     }
   }
 }

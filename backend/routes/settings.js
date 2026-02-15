@@ -10,6 +10,7 @@ const router = express.Router();
 const supabase = require("../config/supabase");
 const { authenticate } = require('../middleware/auth');
 const { sanitizeText, sanitizeHtmlField } = require('../middleware/validation');
+const { logFromReq, ACTIONS } = require('../services/activityLogger');
 
 /**
  * Update email signature
@@ -38,6 +39,7 @@ router.post('/updateSignature',
         });
       }
 
+      logFromReq(req, { ...ACTIONS.SETTINGS_SIGNATURE });
       res.json({ success: true });
     } catch (err) {
       console.error('[SETTINGS] Server error:', err);
@@ -105,6 +107,7 @@ router.post('/updateEmailConfig',
         });
       }
 
+      logFromReq(req, { ...ACTIONS.SETTINGS_EMAIL_CONFIG, details: { sendingMode, primaryEmailId: primaryEmailId || null } });
       res.json({ success: true });
     } catch (err) {
       console.error('[SETTINGS] Server error:', err);
@@ -140,6 +143,7 @@ router.post('/updateConfirmMail',
       }
 
       console.log('[SETTINGS] Confirm mail updated successfully');
+      logFromReq(req, { ...ACTIONS.SETTINGS_CONFIRM_MAIL });
       res.json({ success: true, data });
     } catch (err) {
       console.error('[SETTINGS] Server error:', err.message);
@@ -198,6 +202,7 @@ router.post('/tracking', authenticate, async (req, res) => {
 
     if (error) throw error;
 
+    logFromReq(req, { ...ACTIONS.SETTINGS_TRACKING });
     res.json({ success: true });
   } catch (err) {
     console.error('[SETTINGS] Error updating tracking settings:', err);
@@ -330,6 +335,7 @@ router.put('/updateSettings',
       }
 
       console.log('[SETTINGS] Settings updated successfully');
+      logFromReq(req, { ...ACTIONS.SETTINGS_GENERAL, details: { changedFields: Object.keys(updates) } });
       res.json({ success: true, data });
     } catch (err) {
       console.error('[SETTINGS] Server error:', err.message);
@@ -403,6 +409,7 @@ router.post('/updateConfirmMailMode',
       }
 
       console.log('[SETTINGS] Confirmation mail mode updated successfully');
+      logFromReq(req, { ...ACTIONS.SETTINGS_CONFIRM_MODE, details: { mode } });
       res.json({ success: true, data });
     } catch (err) {
       console.error('[SETTINGS] Server error:', err.message);
@@ -432,6 +439,7 @@ router.post('/updateAutoAssignEmployeeOnSend',
       }
 
       console.log('[SETTINGS] Auto assign employee on send updated successfully');
+      logFromReq(req, { ...ACTIONS.SETTINGS_AUTO_ASSIGN, details: { enabled: value } });
       res.json({success: true, data})
     } catch (err) {
       console.error('[SETTINGS] Server error:', err.message);

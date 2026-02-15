@@ -10,6 +10,7 @@ const { authenticate } = require('../middleware/auth');
 const { validateId } = require('../middleware/validation');
 const clientService = require('../services/clientService');
 const logger = require('../utils/logger');
+const { logFromReq, ACTIONS } = require('../services/activityLogger');
 const supabase = require("../config/supabase"); // needed for direct queries in some edge cases if any
 
 /**
@@ -39,6 +40,7 @@ router.post('/assignEmployee',
         req.sanitized.employee_id, 
         req.sanitized.customer_id
       );
+      logFromReq(req, { ...ACTIONS.EMPLOYEE_ASSIGNED, targetType: 'customer', targetId: req.sanitized.customer_id, details: { employeeId: req.sanitized.employee_id } });
       res.json({ success: true, data });
     } catch (err) {
       logger.error('[CLIENT] Assign employee error', { error: err.message });
@@ -62,6 +64,7 @@ router.post('/assignGroup',
         req.sanitized.group_id, 
         req.sanitized.customer_id
       );
+      logFromReq(req, { ...ACTIONS.GROUP_ASSIGNED, targetType: 'customer', targetId: req.sanitized.customer_id, details: { groupId: req.sanitized.group_id } });
       res.json({ success: true, data });
     } catch (err) {
       logger.error('[CLIENT] Assign group error', { error: err.message });
@@ -80,6 +83,7 @@ router.post('/unassign',
   async (req, res) => {
     try {
       const data = await clientService.unassignCustomer(req.user.client_id, req.sanitized.customer_id);
+      logFromReq(req, { ...ACTIONS.UNASSIGNED, targetType: 'customer', targetId: req.sanitized.customer_id });
       res.json({ success: true, data });
     } catch (err) {
       logger.error('[CLIENT] Unassign error', { error: err.message });
@@ -112,6 +116,7 @@ router.post('/bulkAssign',
         groupId: groupId ? Number(groupId) : null
       });
 
+      logFromReq(req, { ...ACTIONS.BULK_ASSIGNED, details: { customerIds, employeeId: employeeId || null, groupId: groupId || null } });
       res.json({ success: true, ...result });
     } catch (err) {
       logger.error('[CLIENT] Bulk assign error', { error: err.message });
@@ -234,6 +239,7 @@ router.post('/complete-subscription', authenticate, async (req, res) => {
 
     await supabase.from('clients').update({ subscription_tier: 'paid', stripe_subscription_id: subscriptionId }).eq('id', req.user.client_id);
     
+    logFromReq(req, { ...ACTIONS.SUBSCRIPTION_COMPLETED, details: { tier: 'paid', subscriptionId } });
     res.json({ success: true, subscriptionId, tier: 'paid' });
   } catch (err) {
     logger.error('[CLIENT] Complete subscription error', { error: err.message });

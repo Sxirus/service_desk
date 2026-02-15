@@ -10,6 +10,7 @@ const encryption = require('../utils/encryption');
 const { authenticate } = require('../middleware/auth');
 const { validateId } = require('../middleware/validation');
 const { stopWorkerById } = require('../services/workerManager');
+const { logFromReq, ACTIONS } = require('../services/activityLogger');
 
 /**
  * GET /api/email-accounts/providers
@@ -107,6 +108,7 @@ router.post('/', authenticate, async (req, res) => {
         // Note: New workers are usually picked up on server restart or 
         // we could trigger a specific manager reload here.
         
+        logFromReq(req, { ...ACTIONS.EMAIL_ACCOUNT_ADDED, targetType: 'email_account', targetId: data.id, details: { emailAddress: email_address } });
         res.json({ success: true, data });
     } catch (err) {
         console.error('[EMAIL_ACCOUNTS] Create error:', err);
@@ -154,6 +156,7 @@ router.patch('/:id', authenticate, validateId('id'), async (req, res) => {
             stopWorkerById(id);
         }
 
+        logFromReq(req, { ...ACTIONS.EMAIL_ACCOUNT_UPDATED, targetType: 'email_account', targetId: id, details: { changedFields: Object.keys(updates).filter(k => k !== 'password') } });
         res.json({ success: true, data });
     } catch (err) {
         console.error('[EMAIL_ACCOUNTS] Update error:', err);
@@ -195,6 +198,7 @@ router.delete('/:id', authenticate, validateId('id'), async (req, res) => {
         // Stop the worker immediately
         stopWorkerById(id);
 
+        logFromReq(req, { ...ACTIONS.EMAIL_ACCOUNT_DELETED, targetType: 'email_account', targetId: id });
         res.json({ success: true });
     } catch (err) {
         console.error('[EMAIL_ACCOUNTS] Delete error:', err);

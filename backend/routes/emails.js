@@ -13,6 +13,7 @@ const { authenticate } = require('../middleware/auth');
 const { authorizeCustomerAccess } = require('../middleware/authorization');
 const { validateId, sanitizeText, sanitizeHtmlField } = require('../middleware/validation');
 const multer = require('multer');
+const { logFromReq, ACTIONS } = require('../services/activityLogger');
 const upload = multer();
 const { storeOutgoingAttachmentsInDB } = require('../services/attachments/outgoing');
 const encryption = require('../utils/encryption');
@@ -433,6 +434,8 @@ router.post('/sendMail',
       }
       
 
+      logFromReq(req, { ...ACTIONS.EMAIL_SENT, targetType: 'customer', targetId: customerId, details: { subject, hasAttachments: attachments.length > 0, sentVia: smtpConfig.auth.user } });
+
       res.json({
         success: true,
         messageId: info.messageId,
@@ -502,6 +505,7 @@ router.post('/addInternalNote',
       }
 
       console.log('[EMAILS] Internal note saved successfully, id:', data.id);
+      logFromReq(req, { ...ACTIONS.INTERNAL_NOTE_ADDED, targetType: 'customer', targetId: customerId });
       res.json({ success: true, note: data });
     } catch (err) {
       console.error('[EMAILS] Internal note error:', err);
@@ -553,6 +557,7 @@ router.post('/updateSubject',
       }
 
       console.log('[EMAILS] Subject updated successfully');
+      logFromReq(req, { ...ACTIONS.TICKET_SUBJECT_CHANGED, targetType: 'customer', targetId: customerId, details: { newSubject: sanitizedSubject } });
       res.json({ success: true, subject: sanitizedSubject });
     } catch (err) {
       console.error('[EMAILS] Server error:', err.message);
@@ -600,6 +605,7 @@ router.post('/updateStatus',
       }
 
       console.log('[EMAILS] Status updated to:', status);
+      logFromReq(req, { ...ACTIONS.TICKET_STATUS_CHANGED, targetType: 'customer', targetId: customerId, details: { newStatus: status } });
       res.json({ success: true, status });
     } catch (err) {
       console.error('[EMAILS] Server error:', err.message);
@@ -675,6 +681,7 @@ router.post('/bulkUpdateStatus',
       }
 
       console.log('[EMAILS] Bulk status updated to', status, 'for', authorizedIds.length, 'customers');
+      logFromReq(req, { ...ACTIONS.TICKET_BULK_STATUS, details: { customerIds: authorizedIds, newStatus: status, count: authorizedIds.length } });
       res.json({ success: true, updated: authorizedIds.length, status });
     } catch (err) {
       console.error('[EMAILS] Server error:', err.message);

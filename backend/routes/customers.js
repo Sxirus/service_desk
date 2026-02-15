@@ -11,6 +11,7 @@ const supabase = require("../config/supabase");
 const { authenticate } = require('../middleware/auth');
 const { authorizeCustomerAccess, authorizeEmployeeAccess } = require('../middleware/authorization');
 const { validateId, validateEmail, sanitizeText } = require('../middleware/validation');
+const { logFromReq, ACTIONS } = require('../services/activityLogger');
 
 /**
  * Get customer by ID
@@ -499,6 +500,8 @@ router.post('/merge',
         secondaryId,
         assignmentUpdated: Object.keys(updates).length > 0
       });
+
+      logFromReq(req, { ...ACTIONS.CUSTOMER_MERGED, targetType: 'customer', targetId: primaryId, details: { primaryId, secondaryId, primaryName: primary.name, secondaryName: secondary.name } });
 
       res.json({
         success: true,

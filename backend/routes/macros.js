@@ -13,6 +13,7 @@ const { validateId, sanitizeText } = require('../middleware/validation');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
 const {storeMacroAttachmentsInDB, deleteAttachmentsFromStorage} = require("../services/attachments/macroAttachments")
+const { logFromReq, ACTIONS } = require('../services/activityLogger');
 
 /**
  * Get all macros for authenticated user's client
@@ -164,10 +165,12 @@ router.post('/createMacro',
         console.log('[MACROS] Saving attachments');
         const updatedMacro = await storeMacroAttachmentsInDB(attachments, client_id, data.id, null, null);
         console.log('[MACROS] Macro created successfully:', data.id);
+        logFromReq(req, { ...ACTIONS.MACRO_CREATED, targetType: 'macro', targetId: data.id, details: { title } });
         res.json({ success: true, data: updatedMacro || data });
       } else {
         console.log('[MACROS] No attachments, continue')
         console.log('[MACROS] Macro created successfully:', data.id);
+        logFromReq(req, { ...ACTIONS.MACRO_CREATED, targetType: 'macro', targetId: data.id, details: { title } });
         res.json({ success: true, data: data });
       }
     } catch (err) {
@@ -222,6 +225,7 @@ router.post('/createGroup',
       }
 
       console.log('[MACROS] Group created successfully:', data.id);
+      logFromReq(req, { ...ACTIONS.MACRO_CREATED, targetType: 'macro_group', targetId: data.id, details: { name } });
       res.json({ success: true, data: data });
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
@@ -302,6 +306,7 @@ router.post('/updateMacro',
       }
 
       console.log('[MACROS] Macro updated successfully');
+      logFromReq(req, { ...ACTIONS.MACRO_UPDATED, targetType: 'macro', targetId: data.id, details: { title: data.title } });
       res.json(result);
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
@@ -366,6 +371,7 @@ router.delete('/deleteMacro',
       }
 
       console.log('[MACROS] Macro deleted successfully');
+      logFromReq(req, { ...ACTIONS.MACRO_DELETED, targetType: 'macro', targetId: macroId });
       res.json({ success: true });
     } catch (err) {
       console.error('[MACROS] Server error:', err.message);
@@ -402,6 +408,7 @@ router.delete('/deleteMacroGroup',
       }
 
       console.log('[MACROS] Group deleted successfully');
+      logFromReq(req, { ...ACTIONS.MACRO_GROUP_DELETED, targetType: 'macro_group', targetId: groupId });
       res.json({ success: true });
     } catch (err) {
       console.error('[MACROS] Failed to delete macro group', err.message);

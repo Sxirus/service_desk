@@ -19,6 +19,7 @@ const {
   validateOAuthState,
   validateShopifyHMAC
 } = require('../middleware/validation');
+const { logActivity, logFromReq, ACTIONS } = require('../services/activityLogger');
 
 /**
  * Initiate Shopify OAuth flow
@@ -200,6 +201,8 @@ router.get('/callback',
         console.log('[SHOPIFY_CALLBACK] Shopify connected for client:', stateData.clientId);
       }
 
+      logActivity({ clientId: stateData.clientId, employeeId: null, ...ACTIONS.SHOPIFY_CONNECTED, details: { shop } });
+
       // Clear OAuth state cookie
       res.clearCookie('shopify_oauth_state');
 
@@ -359,6 +362,8 @@ router.post('/disconnect',
       }
 
       console.log('[SHOPIFY_DISCONNECT] Successfully disconnected');
+
+      logFromReq(req, { ...ACTIONS.SHOPIFY_DISCONNECTED });
 
       res.json({ 
         success: true,
@@ -980,6 +985,7 @@ router.post('/refund/create',
         throw new Error(result.data.refundCreate.userErrors[0].message);
       }
 
+      logFromReq(req, { ...ACTIONS.SHOPIFY_REFUND_CREATED, targetType: 'order', targetId: orderId, details: { orderId } });
       res.json({ success: true, refund: result.data.refundCreate.refund });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -1040,6 +1046,7 @@ router.post('/order/cancel',
         throw new Error(json.data.orderCancel.orderCancelUserErrors[0].message);
       }
 
+      logFromReq(req, { ...ACTIONS.SHOPIFY_ORDER_CANCELLED, targetType: 'order', targetId: orderId, details: { orderId, reason } });
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error.message });

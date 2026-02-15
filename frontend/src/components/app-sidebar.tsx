@@ -151,6 +151,10 @@ export function AppSidebar({
           {
             title: t('sidebar.subscription'),
             url: "/manage/subscription"
+          },
+          {
+            title: t('sidebar.activityLog'),
+            url: "/manage/activity-log"
           }
         ],
       });

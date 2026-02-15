@@ -77,6 +77,8 @@ app.use('/api/email-accounts', require('./routes/email-accounts'));
 
 app.use('/api/avatars', require('./routes/avatars'));
 
+app.use('/api/activity-log', require('./routes/activity-log'));
+
 app.use('/api/platform', require('./routes/platform'));
 
 // Global error handling middleware

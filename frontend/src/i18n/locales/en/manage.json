@@ -844,6 +844,11 @@
       "pageTitle": "Subscription Management",
       "heading": "Subscription Management",
       "description": "View and manage your current plan, usage, and billing."
+    },
+    "activityLog": {
+      "pageTitle": "Activity Log",
+      "heading": "Activity Log",
+      "description": "A chronological record of all actions performed in your workspace."
     }
   }
 }

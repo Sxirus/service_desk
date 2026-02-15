@@ -10,6 +10,7 @@ const router = express.Router();
 const supabase = require("../config/supabase");
 const { authenticate } = require('../middleware/auth');
 const { validateId } = require('../middleware/validation');
+const { logFromReq, ACTIONS } = require('../services/activityLogger');
 
 /**
  * Get all inboxes for authenticated user's client (Admin only)
@@ -319,6 +320,7 @@ router.post('/createInbox',
       }
 
       console.log('[INBOXES] Inbox created successfully:', data.id);
+      logFromReq(req, { ...ACTIONS.INBOX_CREATED, targetType: 'inbox', targetId: data.id, details: { name: data.name } });
       res.json({ success: true, data });
     } catch (err) {
       console.error('[INBOXES] Server error:', err.message);
@@ -383,6 +385,7 @@ router.put('/updateInbox',
       }
 
       console.log('[INBOXES] Inbox updated successfully');
+      logFromReq(req, { ...ACTIONS.INBOX_UPDATED, targetType: 'inbox', targetId: inbox_id, details: { name: data.name } });
       res.json({ success: true, data });
     } catch (err) {
       console.error('[INBOXES] Server error:', err.message);
@@ -436,6 +439,7 @@ router.delete('/deleteInbox',
       }
 
       console.log('[INBOXES] Inbox deleted successfully');
+      logFromReq(req, { ...ACTIONS.INBOX_DELETED, targetType: 'inbox', targetId: inbox_id });
       res.json({ success: true });
     } catch (err) {
       console.error('[INBOXES] Server error:', err.message);
@@ -483,6 +487,7 @@ router.post('/addGroup',
         return res.status(500).json({ error: 'Database error' });
       }
 
+      logFromReq(req, { ...ACTIONS.INBOX_GROUP_ADDED, targetType: 'inbox', targetId: inbox_id, details: { groupId: group_id } });
       res.json({ success: true, data });
     } catch (err) {
       console.error('[INBOXES] Server error:', err.message);
@@ -528,6 +533,7 @@ router.delete('/removeGroup',
         return res.status(500).json({ error: 'Database error' });
       }
 
+      logFromReq(req, { ...ACTIONS.INBOX_GROUP_REMOVED, targetType: 'inbox', targetId: inbox_id, details: { groupId: group_id } });
       res.json({ success: true });
     } catch (err) {
       console.error('[INBOXES] Server error:', err.message);
@@ -589,6 +595,7 @@ router.post('/setFilters',
         }
       }
 
+      logFromReq(req, { ...ACTIONS.INBOX_FILTERS_SET, targetType: 'inbox', targetId: inbox_id, details: { filterCount: filters.length } });
       res.json({ success: true });
     } catch (err) {
       console.error('[INBOXES] Server error:', err.message);

@@ -5,6 +5,33 @@ import { createClient as createAdmin } from "@supabase/supabase-js";
 import { encrypt } from "../utils/encryption";
 import { getApiUrl } from "../lib/api-config";
 
+/**
+ * Fire-and-forget activity logging from frontend actions.
+ * Calls the backend POST /api/activity-log endpoint.
+ */
+function logActivityFromAction(
+  accessToken: string,
+  data: {
+    action: string;
+    category: string;
+    targetType?: string;
+    targetId?: string;
+    details?: Record<string, any>;
+  }
+) {
+  const apiUrl = getApiUrl('/api');
+  fetch(`${apiUrl}/activity-log`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(data),
+  }).catch((err) => {
+    console.warn('[activityLog] failed to log:', err?.message);
+  });
+}
+
 /* ----------------------- SIGN IN (Password) ----------------------- */
 
 /**
@@ -47,6 +74,15 @@ const emailSignIn = async (
     }
 
     console.log("[actions.signIn] ok:", data?.user?.id);
+
+    // Log activity
+    if (data.session?.access_token) {
+      logActivityFromAction(data.session.access_token, {
+        action: 'auth.signed_in',
+        category: 'auth',
+      });
+    }
+
     return { success: true, message: "Successfully logged in" };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -210,6 +246,20 @@ const updateMyProfile = async (
     }
     console.log("[actions.updateMyProfile] Update result:", JSON.stringify(updateResult));
     console.log("[actions.updateMyProfile] Profile updated successfully");
+
+    // Log activity
+    try {
+      const { data: { session: logSession } } = await ssr.auth.getSession();
+      if (logSession?.access_token) {
+        logActivityFromAction(logSession.access_token, {
+          action: 'employee.profile_updated',
+          category: 'employee_mgmt',
+          targetType: 'employee',
+          targetId: String(me.id),
+          details: { name, hasAvatar: !!avatarBase64 },
+        });
+      }
+    } catch {}
 
     return { success: true, message: "Profile updated successfully" };
   } catch (err: unknown) {
@@ -416,6 +466,21 @@ const createEmployee = async (
     }
 
     console.log("[actions.createEmployee] ok");
+
+    // Log activity
+    try {
+      const { data: { session: logSession } } = await ssr.auth.getSession();
+      if (logSession?.access_token) {
+        logActivityFromAction(logSession.access_token, {
+          action: 'employee.created',
+          category: 'employee_mgmt',
+          targetType: 'employee',
+          targetId: String(empRow.id),
+          details: { email, name, role_id },
+        });
+      }
+    } catch {}
+
     return { success: true, message: "Employee created and invite sent" };
   } catch (e: any) {
     console.error("[actions.createEmployee] unexpected:", e?.message ?? e);
@@ -569,6 +634,21 @@ const updateEmployee = async (
     console.log("[actions.updateEmployee] New role assigned:", role_id);
 
     console.log("[actions.updateEmployee] ok");
+
+    // Log activity
+    try {
+      const { data: { session: logSession } } = await ssr.auth.getSession();
+      if (logSession?.access_token) {
+        logActivityFromAction(logSession.access_token, {
+          action: 'employee.updated',
+          category: 'employee_mgmt',
+          targetType: 'employee',
+          targetId: String(id),
+          details: { name, role_id },
+        });
+      }
+    } catch {}
+
     return { success: true, message: "Employee updated successfully" };
   } catch (e: any) {
     console.error("[actions.updateEmployee] unexpected:", e?.message ?? e);
@@ -745,6 +825,20 @@ const deleteEmployee = async (
     }
 
     console.log("[actions.deleteEmployee] ok");
+
+    // Log activity
+    try {
+      const { data: { session: logSession } } = await ssr.auth.getSession();
+      if (logSession?.access_token) {
+        logActivityFromAction(logSession.access_token, {
+          action: 'employee.deleted',
+          category: 'employee_mgmt',
+          targetType: 'employee',
+          targetId: String(id),
+        });
+      }
+    } catch {}
+
     return { success: true, message: "Employee deleted successfully" };
   } catch (e: any) {
     console.error("[actions.deleteEmployee] unexpected:", e?.message ?? e);
@@ -862,6 +956,19 @@ const disableEmployee = async (
       console.warn("[actions.disableEmployee] Stripe update warning:", stripeErr?.message);
     }
 
+    // Log activity
+    try {
+      const { data: { session: logSession } } = await ssr.auth.getSession();
+      if (logSession?.access_token) {
+        logActivityFromAction(logSession.access_token, {
+          action: 'employee.disabled',
+          category: 'employee_mgmt',
+          targetType: 'employee',
+          targetId: String(id),
+        });
+      }
+    } catch {}
+
     return { success: true, message: "Employee disabled successfully" };
   } catch (e: any) {
     console.error("[actions.disableEmployee] unexpected:", e?.message ?? e);
@@ -973,6 +1080,19 @@ const enableEmployee = async (
     } catch (stripeErr: any) {
       console.warn("[actions.enableEmployee] Stripe update warning:", stripeErr?.message);
     }
+
+    // Log activity
+    try {
+      const { data: { session: logSession } } = await ssr.auth.getSession();
+      if (logSession?.access_token) {
+        logActivityFromAction(logSession.access_token, {
+          action: 'employee.enabled',
+          category: 'employee_mgmt',
+          targetType: 'employee',
+          targetId: String(id),
+        });
+      }
+    } catch {}
 
     return { success: true, message: "Employee enabled successfully" };
   } catch (e: any) {
@@ -1184,6 +1304,21 @@ const updateCompany = async (
     }
 
     console.log("[actions.updateCompany] ok");
+
+    // Log activity
+    try {
+      const { data: { session: logSession } } = await ssr.auth.getSession();
+      if (logSession?.access_token) {
+        logActivityFromAction(logSession.access_token, {
+          action: 'company.updated',
+          category: 'settings',
+          targetType: 'client',
+          targetId: String(id),
+          details: { name },
+        });
+      }
+    } catch {}
+
     return {
       success: true,
       message: "Company updated successfully",
@@ -1795,6 +1930,21 @@ const unassignAllTickets = async (
     }
 
     console.log("[actions.unassignAllTickets] Unassigned", affectedCount, "customers from employee", employeeId);
+
+    // Log activity
+    try {
+      const { data: { session: logSession } } = await ssr.auth.getSession();
+      if (logSession?.access_token) {
+        logActivityFromAction(logSession.access_token, {
+          action: 'assignment.bulk_unassigned',
+          category: 'assignment',
+          targetType: 'employee',
+          targetId: String(employeeId),
+          details: { employeeName: targetEmployee.name, ticketCount: affectedCount || 0 },
+        });
+      }
+    } catch {}
+
     return { 
       success: true, 
       message: `Successfully unassigned ${affectedCount || 0} ticket(s) from ${targetEmployee.name}`,
@@ -1907,6 +2057,21 @@ const reassignAllTickets = async (
     }
 
     console.log("[actions.reassignAllTickets] Reassigned", affectedCount, "customers from", fromEmployeeId, "to", toEmployeeId);
+
+    // Log activity
+    try {
+      const { data: { session: logSession } } = await ssr.auth.getSession();
+      if (logSession?.access_token) {
+        logActivityFromAction(logSession.access_token, {
+          action: 'assignment.bulk_reassigned',
+          category: 'assignment',
+          targetType: 'employee',
+          targetId: String(toEmployeeId),
+          details: { fromEmployeeId, fromName: fromEmployee.name, toName: toEmployee.name, ticketCount: affectedCount || 0 },
+        });
+      }
+    } catch {}
+
     return { 
       success: true, 
       message: `Successfully reassigned ${affectedCount || 0} ticket(s) from ${fromEmployee.name} to ${toEmployee.name}`,
@@ -1983,11 +2148,23 @@ export const server = {
       const supabase = createSSR({ request: context.request, cookies: context.cookies });
       console.log("[actions.signOut] SSR client created");
       
+      // Save session for activity logging before sign-out destroys it
+      const { data: { session: preSignOutSession } } = await supabase.auth.getSession();
+      
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error("[actions.signOut] error:", error);
         return { success: false, message: error.message };
       }
+
+      // Log activity (using saved token since session is now destroyed)
+      if (preSignOutSession?.access_token) {
+        logActivityFromAction(preSignOutSession.access_token, {
+          action: 'auth.signed_out',
+          category: 'auth',
+        });
+      }
+
       console.log("[actions.signOut] ok");
       return { success: true, message: "Successfully signed out" };
     },

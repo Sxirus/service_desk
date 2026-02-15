@@ -1,0 +1,71 @@
+---
+/**
+ * Activity Log Page
+ *
+ * Displays a searchable, paginated log of all agent/system actions.
+ * Only accessible to admin users (role_id = 1).
+ *
+ * Security: Admin role required (server-side check + RLS)
+ */
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { createClient } from "../../lib/supabase.ts";
+import { getCompletePageContext } from "../../lib/auth-helpers.ts";
+import AdminShell from "@/components/AdminShell";
+import { ActivityLog } from "@/components/ActivityLog";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// Get translations
+const lang = getLanguageFromCookies(Astro.cookies);
+const tCommon = getTranslations(lang, 'common');
+
+// ============================================================================
+// AUTHENTICATION & AUTHORIZATION
+// ============================================================================
+
+const supabase = Astro.locals.supabase || createClient({
+  request: Astro.request,
+  cookies: Astro.cookies,
+});
+
+const { data: { session } } = await supabase.auth.getSession();
+if (!session) {
+  return Astro.redirect("/");
+}
+
+const pageContext = await getCompletePageContext(
+  supabase,
+  Astro.cookies,
+  Astro.locals.user
+);
+
+if (!pageContext) {
+  return Astro.redirect("/");
+}
+
+const { authContext, sidebarData } = pageContext;
+
+// Admin-only page
+if (!authContext.isAdmin) {
+  return new Response("Forbidden - Admin access required", { status: 403 });
+}
+---
+
+<BaseLayout title="Activity Log - Service Desk">
+  <AdminShell
+    client:load
+    user={sidebarData.user}
+    firstTeam={sidebarData.team ?? undefined}
+    crumbParentLabel={tCommon.t('sidebar.administration')}
+    crumbParentHref="/manage/settings"
+    crumbCurrent="Activity Log"
+    isAdmin={authContext.isAdmin}
+    isPlatformAdmin={pageContext.isPlatformAdmin}
+    currentPath="/manage/activity-log"
+    employeeId={sidebarData.employeeId}
+    clientId={sidebarData.clientId}
+    subscriptionTier={sidebarData.subscriptionTier}
+  >
+    <ActivityLog client:load />
+  </AdminShell>
+</BaseLayout>
