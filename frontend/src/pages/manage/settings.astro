@@ -18,6 +18,9 @@ import Layout from "../../layouts/BaseLayout.astro";
 import { createClient } from "../../lib/supabase.ts";
 import { getCompletePageContext } from "../../lib/auth-helpers.ts";
 import ToggleSwitch from "@/components/ToggleSwitch";
+import SettingsSignatureEditor from "@/components/SettingsSignatureEditor";
+import SettingsConfirmMailEditor from "@/components/SettingsConfirmMailEditor";
+import ConfirmMailModeSelector from "@/components/ConfirmMailModeSelector";
 import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
 
 // Get translations
@@ -118,7 +121,7 @@ try {
     //confirmation mail 
     supabase
       .from('clients')
-      .select('confirm_mail, confirmation_mail_subject')
+      .select('confirm_mail, confirmation_mail_subject, confirmation_mail_mode')
       .eq('id', clientId)
       .single(),
 
@@ -182,6 +185,7 @@ console.log('[Settings] Client settings:', { emailSendingMode, primaryEmailId })
 
 const confirmation_subject = confirmationJSON?.confirmation_mail_subject;
 const confirmation_body = confirmationJSON?.confirm_mail;
+const confirmation_mail_mode = confirmationJSON?.confirmation_mail_mode || 'all';
 
 const auto_assign_employee_on_send = truefalseSettingsJSON?.auto_assign_employee_on_send;
 
@@ -389,49 +393,24 @@ console.log("[general-settings] Page setup complete, rendering");
               </div>
             )}
 
-            <!-- Signature Editor -->
-            <div class="space-y-2">
-              <label 
-                for="signature" 
-                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                {t('pages.settings.emailSignature.signature')}
-              </label>
-              <textarea
-                id="signature"
-                class="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-                placeholder={t('pages.settings.emailSignature.placeholder')}
-                rows="6"
-              >{signature}</textarea>
-              <p class="text-xs text-muted-foreground">
-                {t('pages.settings.emailSignature.hint')}
-              </p>
-            </div>
-
-            <!-- Action Button -->
-            <div class="flex items-center justify-end pt-2">
-              <button
-                id="save-signature"
-                type="button"
-                class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
-              >
-                <svg
-                  class="mr-2 h-4 w-4"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke-width="1.5"
-                  stroke="currentColor"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                {t('common.save')}
-              </button>
-            </div>
+            <!-- Signature Editor (TipTap Rich Text) -->
+            <SettingsSignatureEditor
+              client:load
+              initialContent={signature}
+              translations={{
+                label: t('pages.settings.emailSignature.signature'),
+                placeholder: t('pages.settings.emailSignature.placeholder'),
+                hint: t('pages.settings.emailSignature.hint'),
+                save: t('common.save'),
+                saving: t('common.saving'),
+                invalidSignature: t('settings.invalidSignature'),
+                changesSaved: t('settings.changesSaved'),
+                updatedSuccessfully: t('settings.emailSignatureUpdatedSuccessfully'),
+                updatedSanitized: t('settings.emailSignatureUpdatedSanitized'),
+                failedToSave: t('settings.failedToSave'),
+                unexpectedError: tCommon.t('errors.generic'),
+              }}
+            />
           </div>
         </div>
 
@@ -478,67 +457,49 @@ console.log("[general-settings] Page setup complete, rendering");
               </div>
             )}
 
-            <!-- Subject Editor -->
-            <div class="space-y-2">
-              <label 
-                for="confirm-subject" 
-                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                {t('settings.subject')}
-              </label>
-              <textarea
-                id="confirm-subject"
-                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-                placeholder={t('settings.subjectPlaceholder')}
-                rows="6"
-              >{confirmation_subject}</textarea>
-              <p class="text-xs text-muted-foreground">
-                {t('settings.subjectHint')}
-              </p>
-            </div>
+            <!-- Confirmation Mail Editor (TipTap Rich Text) -->
+            <SettingsConfirmMailEditor
+              client:load
+              initialSubject={confirmation_subject || ''}
+              initialBody={confirmation_body || ''}
+              translations={{
+                subjectLabel: t('settings.subject'),
+                subjectPlaceholder: t('settings.subjectPlaceholder'),
+                subjectHint: t('settings.subjectHint'),
+                bodyLabel: t('settings.emailBody'),
+                bodyPlaceholder: t('settings.emailBodyPlaceholder'),
+                bodyHint: t('settings.emailBodyHint'),
+                save: t('settings.saveConfirmationEmail'),
+                saving: t('common.saving'),
+                invalidSubject: t('settings.invalidSubject'),
+                invalidBody: t('settings.invalidBody'),
+                changesSaved: t('settings.changesSaved'),
+                updatedSuccessfully: t('settings.emailSignatureUpdatedSuccessfully'),
+                failedToSave: t('settings.failedToSave'),
+                unexpectedError: tCommon.t('errors.generic'),
+              }}
+            />
 
-            <!-- Email Body Editor -->
-            <div class="space-y-2">
-              <label 
-                for="confirm-body" 
-                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                {t('settings.emailBody')}
-              </label>
-              <textarea
-                id="confirm-body"
-                class="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-                placeholder={t('settings.emailBodyPlaceholder')}
-                rows="6"
-              >{confirmation_body}</textarea>
-              <p class="text-xs text-muted-foreground">
-                {t('settings.emailBodyHint')}
-              </p>
-            </div>
-
-            <!-- Action Button -->
-            <div class="flex items-center justify-end pt-2">
-              <button
-                id="save-confirm-mail"
-                type="button"
-                class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
-              >
-                <svg
-                  class="mr-2 h-4 w-4"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke-width="1.5"
-                  stroke="currentColor"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                {t('settings.saveConfirmationEmail')}
-              </button>
+            <!-- Confirmation Mail Mode Selector -->
+            <div class="mt-6 pt-6 border-t">
+              <ConfirmMailModeSelector
+                client:load
+                initialMode={confirmation_mail_mode}
+                translations={{
+                  title: t('settings.confirmMailMode'),
+                  description: t('settings.confirmMailModeDescription'),
+                  modeAll: t('settings.confirmMailModeAll'),
+                  modeAllDescription: t('settings.confirmMailModeAllDescription'),
+                  modeNewOnly: t('settings.confirmMailModeNewOnly'),
+                  modeNewOnlyDescription: t('settings.confirmMailModeNewOnlyDescription'),
+                  modeDisabled: t('settings.confirmMailModeDisabled'),
+                  modeDisabledDescription: t('settings.confirmMailModeDisabledDescription'),
+                  changesSaved: t('settings.changesSaved'),
+                  modeSaved: t('settings.confirmMailModeSaved'),
+                  failedToSave: t('settings.failedToSave'),
+                  unexpectedError: tCommon.t('errors.generic'),
+                }}
+              />
             </div>
           </div>
         </div>
@@ -587,7 +548,6 @@ console.log("[general-settings] Page setup complete, rendering");
      */
 
     import { toast } from "sonner";
-    import { validateEmailSignature, validateTextInput } from "../../lib/validation";
     import { apiClient } from "../../utils/api";
 
     // ============================================================================
@@ -681,181 +641,8 @@ console.log("[general-settings] Page setup complete, rendering");
     }
 
     // ============================================================================
-    // SIGNATURE HANDLING (existing code)
+    // AUTO ASSIGN EMPLOYEE TOGGLE HANDLER
     // ============================================================================
-
-    const saveSignatureButton = document.getElementById("save-signature");
-    const signatureTextarea = document.getElementById("signature") as HTMLTextAreaElement;
-
-    if (saveSignatureButton && signatureTextarea) {
-      console.log("[settings-script] Save sigature button handler initialized");
-
-      saveSignatureButton.addEventListener("click", async () => {
-        const signature = signatureTextarea.value || "";
-
-        console.log("[settings-script] Validating signature:", {
-          signatureLength: signature.length
-        });
-
-        // Validate and sanitize input for XSS protection
-        const validation = validateEmailSignature(signature);
-        
-        if (!validation.isValid) {
-          console.error("[settings-script] Validation failed:", validation.error);
-          toast.error(msgs.invalidSignature, {
-            description: validation.error
-          });
-          return;
-        }
-
-        const sanitizedSignature = validation.sanitized!;
-
-        console.log("[settings-script] Saving signature:", {
-          originalLength: signature.length,
-          sanitizedLength: sanitizedSignature.length
-        });
-
-        // Disable button during save
-        saveSignatureButton.setAttribute("disabled", "true");
-        saveSignatureButton.innerHTML = `
-          <svg class='mr-2 h-4 w-4 animate-spin' xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24'>
-            <circle class='opacity-25' cx='12' cy='12' r='10' stroke='currentColor' stroke-width='4'></circle>
-            <path class='opacity-75' fill='currentColor' d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'></path>
-          </svg>
-          ${msgs.commonSaving}
-        `;
-
-        try {
-          const response = await apiClient.post('/settings/updateSignature', {
-            signature: sanitizedSignature
-          });
-
-          if (!response.success) {
-            throw new Error(response.error || 'Failed to save signature');
-          }
-
-          console.log("[settings-script] Signature saved successfully");
-          
-          // Update textarea with sanitized value if it was changed
-          if (sanitizedSignature !== signature) {
-            signatureTextarea.value = sanitizedSignature;
-            toast.success(msgs.changesSaved, {
-              description: msgs.emailSignatureUpdatedSanitized,
-            });
-          } else {
-            toast.success(msgs.changesSaved, {
-              description: msgs.emailSignatureUpdatedSuccessfully,
-            });
-          }
-
-        } catch (error) {
-          console.error("[settings-script] Failed to save signature:", error);
-          
-          toast.error(msgs.failedToSave, {
-            description: error instanceof Error ? error.message : msgs.unexpectedError,
-          });
-        } finally {
-          // Re-enable button
-          saveSignatureButton.removeAttribute("disabled");
-          saveSignatureButton.innerHTML = `
-            <svg class='mr-2 h-4 w-4' xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='1.5' stroke='currentColor'>
-              <path stroke-linecap='round' stroke-linejoin='round' d='M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z' />
-            </svg>
-            ${msgs.saveSignature}
-          `;
-        }
-      });
-    } else {
-      console.error("[settings-script] Save signature button or textarea not found");
-    }
-
-    //save button for the confirmation email
-    const saveConfirmationMailButton = document.getElementById('save-confirm-mail');
-    const confirmSubjectTextarea = document.getElementById('confirm-subject') as HTMLTextAreaElement;
-    const confirmBodyTextarea = document.getElementById('confirm-body') as HTMLTextAreaElement;
-
-    if (saveConfirmationMailButton && confirmSubjectTextarea && confirmBodyTextarea) {
-      console.log("[settings-script] Save confirm mail button handler initialized");
-
-      saveConfirmationMailButton.addEventListener("click", async () => {
-        let subject = confirmSubjectTextarea.value || "";
-        let body = confirmBodyTextarea.value || "";
-
-        console.log("[settings-script] validating confirm mail", {
-          subjectlength: subject.length,
-          bodylength: body.length
-        })
-
-        const validationSubject = validateTextInput(subject);
-        const validationBody = validateTextInput(body);
-
-        if (!validationSubject.isValid) {
-          console.error("[settings-script] Validation failed:", validationSubject.error);
-          toast.error(msgs.invalidSubject, {
-            description: validationSubject.error
-          });
-          return;
-        } else if (!validationBody.isValid) {
-          console.error ("[settings-script] Validation failed", validationBody.error);
-          toast.error(msgs.invalidBody, {
-            description: validationBody.error
-          });
-          return;
-        }
-
-        subject = validationSubject.sanitized || "";
-        body = validationBody.sanitized || "";
-
-        console.log("[settings-script] Saving confirmation email");
-
-        //disable button during save
-        saveConfirmationMailButton.setAttribute("disabled", "true");
-        saveConfirmationMailButton.innerHTML = `
-          <svg class='mr-2 h-4 w-4 animate-spin' xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24'>
-            <circle class='opacity-25' cx='12' cy='12' r='10' stroke='currentColor' stroke-width='4'></circle>
-            <path class='opacity-75' fill='currentColor' d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'></path>
-          </svg>
-          ${msgs.commonSaving}
-        `;
-
-        try {
-          const response = await apiClient.post('/settings/updateConfirmMail', {
-            subject: subject,
-            body: body
-          })
-          if (!response.success) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          }
-
-          console.log("[settings-script] Confirm mail saved successfully");
-
-          //updating value incase somethign was changed sanitzing
-          confirmSubjectTextarea.value = subject;
-          confirmBodyTextarea.value = body;
-
-          toast.success(msgs.changesSaved, {
-            description: "Email signature has been updated successfully.",
-          });
-
-        } catch (error) {
-          console.error("[settings-script] Failed to save confirm mail:", error);
-          toast.error(msgs.failedToSave, {
-            description: error instanceof Error ? error.message : "An unexpected error occurred.",
-          });
-        } finally {
-          // Re-enable button
-          saveConfirmationMailButton.removeAttribute("disabled");
-          saveConfirmationMailButton.innerHTML = `
-            <svg class='mr-2 h-4 w-4' xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='1.5' stroke='currentColor'>
-              <path stroke-linecap='round' stroke-linejoin='round' d='M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z' />
-            </svg>
-            ${msgs.commonSaveChanges}
-          `;
-        }
-      })
-    } else {
-      console.error("[settings-script] Save confirm mail button or textarea not found");
-    }
 
     //handler for the auto assign employees on send email toggle
     window.addEventListener('auto-assign-employee-on-send-toggle', async (event) => {

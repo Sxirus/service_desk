@@ -47,6 +47,86 @@ router.get('/getGroups',
 );
 
 /**
+ * Get all groups with their members for authenticated user's client
+ * GET /api/groups/getGroupsWithMembers
+ * 
+ * Authentication: Required
+ * Authorization: Automatically filtered by user's client_id
+ * Returns groups with nested employee arrays
+ */
+router.get('/getGroupsWithMembers',
+  authenticate,
+  async (req, res) => {
+    try {
+      const client_id = req.user.client_id;
+
+      console.log('[GROUPS] Fetching groups with members for client:', client_id);
+
+      // Fetch all groups
+      const { data: groups, error: groupsError } = await supabase
+        .from("employee_groups")
+        .select("id, name, description")
+        .eq("client_id", client_id)
+        .order("name");
+
+      if (groupsError) {
+        console.error('[GROUPS] Supabase error fetching groups:', groupsError.message);
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      if (!groups || groups.length === 0) {
+        console.log('[GROUPS] No groups found');
+        return res.json({ success: true, data: [] });
+      }
+
+      // Fetch all memberships for these groups in one query
+      const groupIds = groups.map(g => g.id);
+      const { data: memberships, error: membersError } = await supabase
+        .from('employee_group_members')
+        .select(`
+          group_id,
+          employee_id,
+          employees (
+            id,
+            name
+          )
+        `)
+        .in('group_id', groupIds);
+
+      if (membersError) {
+        console.error('[GROUPS] Supabase error fetching members:', membersError.message);
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      // Map memberships to groups
+      const membersByGroup = {};
+      (memberships || []).forEach(m => {
+        if (!membersByGroup[m.group_id]) {
+          membersByGroup[m.group_id] = [];
+        }
+        if (m.employees) {
+          membersByGroup[m.group_id].push({
+            employee_id: m.employee_id,
+            name: m.employees.name
+          });
+        }
+      });
+
+      const result = groups.map(g => ({
+        ...g,
+        members: membersByGroup[g.id] || []
+      }));
+
+      console.log('[GROUPS] Fetched', result.length, 'groups with members');
+      res.json({ success: true, data: result });
+    } catch (err) {
+      console.error('[GROUPS] Server error:', err.message);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
+/**
  * Get group members (employees in a group)
  * GET /api/groups/getGroupMembers?group_id=123
  * 

@@ -514,6 +514,54 @@ router.post('/addInternalNote',
 );
 
 /**
+ * Update ticket subject for a customer
+ * POST /api/emails/updateSubject?customerId=123
+ * Body: { subject: string }
+ * 
+ * Updates the subject on all incoming emails for this customer.
+ * Authentication: Required
+ * Authorization: Customer must belong to user's client
+ */
+router.post('/updateSubject',
+  authenticate,
+  validateId('customerId'),
+  authorizeCustomerAccess,
+  async (req, res) => {
+    try {
+      const customerId = req.sanitized.customerId;
+      const { subject } = req.body;
+
+      if (!subject || typeof subject !== 'string' || subject.trim().length === 0) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Subject is required and must be a non-empty string' 
+        });
+      }
+
+      const sanitizedSubject = subject.trim().slice(0, 500);
+
+      console.log('[EMAILS] Updating subject for customer:', customerId, 'to:', sanitizedSubject);
+
+      const { data, error } = await supabase
+        .from('incoming-mails')
+        .update({ subject: sanitizedSubject })
+        .eq('customer_id', customerId);
+
+      if (error) {
+        console.error('[EMAILS] Supabase error:', error.message);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+
+      console.log('[EMAILS] Subject updated successfully');
+      res.json({ success: true, subject: sanitizedSubject });
+    } catch (err) {
+      console.error('[EMAILS] Server error:', err.message);
+      res.status(500).json({ success: false, error: 'Server error' });
+    }
+  }
+);
+
+/**
  * Update ticket status for a customer
  * POST /api/emails/updateStatus?customerId=123
  * Body: { status: 'new' | 'open' | 'waiting' | 'resolved' }
@@ -926,7 +974,7 @@ router.post('/getSignedUrl',
     }
 
     // Validate allowed storage locations
-    const allowedLocations = ['attachments', 'avatars'];
+    const allowedLocations = ['attachments', 'avatars', 'macro-attachments'];
     if (!location || !allowedLocations.includes(location)) {
       return res.status(400).json({ error: 'Invalid storage location' });
     }

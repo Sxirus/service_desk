@@ -404,5 +404,6 @@ module.exports = {
   sendEmail,
   updateTicketStatus,
   bulkUpdateTicketStatus,
-  getMailsByCustomerIds
+  getMailsByCustomerIds,
+  getClientSmtpConfig
 };

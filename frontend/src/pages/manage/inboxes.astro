@@ -72,6 +72,18 @@ try {
     clientId={sidebarData.clientId}
     subscriptionTier={sidebarData.subscriptionTier}
   >
-    <InboxManagementPanel client:load groups={groups} />
+    <div class="space-y-8">
+      <!-- Page Header -->
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div class="space-y-1 mt-2">
+          <h1 class="text-2xl font-semibold tracking-tight">{t('pages.inboxes.heading')}</h1>
+          <p class="text-sm text-muted-foreground">
+            {t('pages.inboxes.description')}
+          </p>
+        </div>
+      </div>
+
+      <InboxManagementPanel client:load groups={groups} />
+    </div>
   </AdminShell>
 </BaseLayout>

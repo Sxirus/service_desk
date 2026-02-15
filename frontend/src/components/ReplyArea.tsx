@@ -135,7 +135,7 @@ const AttachmentPreviewItem: React.FC<AttachmentPreviewItemProps> = ({
  */
 export const ReplyArea: React.FC<ReplyAreaProps> = ({
   emailAddress,
-  subject,
+  subject: initialSubject,
   customerId,
   signature,
   threadEmailAddress,
@@ -148,6 +148,21 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<RichTextEditorRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Subject state - updates when the editable subject header changes
+  const [subject, setSubject] = useState(initialSubject);
+
+  useEffect(() => {
+    const handleSubjectChange = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.subject) {
+        // Use the agent-edited subject as-is (no RE: prefix added)
+        setSubject(detail.subject);
+      }
+    };
+    window.addEventListener('ticket-subject-changed', handleSubjectChange);
+    return () => window.removeEventListener('ticket-subject-changed', handleSubjectChange);
+  }, []);
   const uploadManagerRef = useRef<FileUploadManager>(new FileUploadManager());
   const rafIdRef = useRef<number | null>(null);
 
@@ -502,8 +517,9 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       let fullBodyHtml = replyHtml;
       let fullBodyText = plainText;
       if (signature && signature.trim() !== '') {
-        fullBodyHtml += `<br><br>${signature.replace(/\n/g, '<br>')}`;
-        fullBodyText += `\n\n${signature}`;
+        // Signature is stored as HTML from the TipTap editor
+        fullBodyHtml += `<br><br>${signature}`;
+        fullBodyText += `\n\n${signature.replace(/<[^>]*>/g, '')}`;
       }
 
       // Create FormData for attachments

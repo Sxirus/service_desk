@@ -6,6 +6,7 @@
 const supabase = require('../config/supabase');  // Supabase client for database operations
 const { storeIncomingAttachmentInDB } = require('./attachments/incoming');
 const nodemailer = require('nodemailer');
+const { getClientSmtpConfig } = require('./emailService');
 
 /**
  * Save a parsed email to the database with customer association
@@ -142,10 +143,16 @@ async function saveEmail(parsedEmail, clientId, InboxEmail, confirmation) {
     }
 
     //sending confirmation email
-    if (confirmation[0].confirm_mail == null || confirmation[0].confirm_mail == '' || confirmation[0].confirmation_mail_subject == null || confirmation[0].confirmation_mail_subject == '') {
+    const confirmMode = confirmation[0].confirmation_mail_mode || 'all';
+
+    if (confirmMode === 'disabled') {
+        console.log(`[${InboxEmail}] Confirmation mail is disabled for this client`);
+    } else if (confirmation[0].confirm_mail == null || confirmation[0].confirm_mail == '' || confirmation[0].confirmation_mail_subject == null || confirmation[0].confirmation_mail_subject == '') {
         console.log('Client set no confirmation mail');
+    } else if (confirmMode === 'new_only' && initialStatus !== 'new') {
+        console.log(`[${InboxEmail}] Confirmation mail mode is 'new_only' but ticket status is '${initialStatus}', skipping`);
     } else {
-        sendConfirmation(senderEmailAddress, confirmation[0]);
+        sendConfirmation(senderEmailAddress, confirmation[0], clientId, InboxEmail);
     }
 
     console.log(`[${InboxEmail}] New Email processed and saved successfully with ID:`, email.id);
@@ -246,7 +253,7 @@ async function getCustomerIdByEmail(email) {
 async function getConfirmation(clientId) {
     const {data, error} = await supabase
       .from('clients')
-      .select('confirm_mail, confirmation_mail_subject')
+      .select('confirm_mail, confirmation_mail_subject, confirmation_mail_mode')
       .eq('id', clientId)
       .limit(1)
 
@@ -259,35 +266,37 @@ async function getConfirmation(clientId) {
 }
 
 //sending a confirmation mail
-async function sendConfirmation(customerEmail, confirmation) {
+async function sendConfirmation(customerEmail, confirmation, clientId, inboxEmail) {
   try {
-    const to  = customerEmail
-    const subject = confirmation.confirmation_mail_subject
-    const text = confirmation.confirm_mail
-    
-    // Create transporter
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT),
-      secure: false,
-      auth: {
-        user: process.env.IMAP_USER,
-        pass: process.env.IMAP_PASS,
-      },
-    });
+    const to = customerEmail;
+    const subject = confirmation.confirmation_mail_subject;
+    const htmlBody = confirmation.confirm_mail;
+    // Strip HTML tags for plain text fallback
+    const textBody = htmlBody ? htmlBody.replace(/<[^>]*>/g, '') : '';
 
-    // Send email
+    // Get the client's SMTP config (prefer the inbox that received the email)
+    const smtpConfig = await getClientSmtpConfig(clientId, inboxEmail);
+    if (!smtpConfig) {
+      console.error(`[CONFIRMATION] No SMTP configuration found for client ${clientId}`);
+      return;
+    }
+
+    // Create transporter using the client's email account
+    const transporter = nodemailer.createTransport(smtpConfig);
+
+    // Send email with both HTML and plain text
     const info = await transporter.sendMail({
-      from: `"Service Desk" <${process.env.MAIL_USER}>`,
+      from: `"Service Desk" <${smtpConfig.auth.user}>`,
       to,
       subject,
-      text,
+      text: textBody,
+      html: htmlBody,
     });
 
-    console.log('[EMAILS] Email sent:', info.messageId);
+    console.log('[CONFIRMATION] Confirmation email sent:', info.messageId);
 
   } catch (err) {
-    console.error('[EMAILS] Send error:', err);
+    console.error('[CONFIRMATION] Send error:', err);
   }
 }
 

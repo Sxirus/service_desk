@@ -239,7 +239,38 @@
     "allTickets": "Alle Tickets",
     "unassignedOnly": "Nur nicht zugewiesene",
     "specificGroups": "Bestimmte Gruppen",
-    "selectInboxOrCreate": "Wählen Sie einen Posteingang aus, um Details anzuzeigen, oder erstellen Sie einen neuen"
+    "selectInboxOrCreate": "Wählen Sie einen Posteingang aus, um Details anzuzeigen, oder erstellen Sie einen neuen",
+    "manageInboxDescription": "Tickets mit eigenen Posteingängen und Filtern organisieren",
+    "createToGetStarted": "Erstellen Sie einen Posteingang, um loszulegen",
+    "ticketStatus": "Ticketstatus",
+    "visibilityLabel": "Sichtbarkeit",
+    "visibilityDescription": "Wählen Sie, welche Mitarbeitergruppen diesen Posteingang in ihrer Seitenleiste sehen können",
+    "visibilityHint": "Mitglieder dieser Gruppen sehen diesen Posteingang in ihrer Seitenleiste",
+    "ticketFiltersLabel": "Ticket-Filter",
+    "ticketFiltersDescription": "Bestimmen Sie, welche Tickets in diesem Posteingang angezeigt werden",
+    "statusSectionLabel": "Nach Status",
+    "statusHint": "Wählen Sie einen oder mehrere Status aus. Wenn keiner ausgewählt ist, werden alle Tickets angezeigt.",
+    "noStatusFilterHint": "Kein Filter — alle Status werden angezeigt",
+    "statusNames": {
+      "new": "Neu",
+      "open": "Offen",
+      "waiting": "Wartend",
+      "resolved": "Gelöst"
+    },
+    "assignmentSectionLabel": "Nach Zuweisung",
+    "assignmentHint": "Tickets nach zugewiesenem Team filtern",
+    "assignmentAll": "Beliebige Zuweisung",
+    "assignmentUnassigned": "Nur nicht zugewiesene Tickets",
+    "assignmentByGroup": "Bestimmten Gruppen zugewiesen",
+    "assignmentGroupsHint": "Tickets anzeigen, die diesen Gruppen zugewiesen sind",
+    "previewLabel": "Vorschau",
+    "whatThisInboxShows": "Was dieser Posteingang anzeigt",
+    "summaryStatus": "Status: {{statuses}}",
+    "summaryUnassigned": "Nur nicht zugewiesene Tickets",
+    "summaryAssignedTo": "Zugewiesen an: {{groups}}",
+    "summaryAllTickets": "Alle Tickets (keine Filter aktiv)",
+    "allStatuses": "Alle Status",
+    "allAssignments": "Beliebige Zuweisung"
   },
   "macros": {
     "title": "Makroverwaltung",
@@ -300,8 +331,7 @@
       "placeholder": "Makros suchen...",
       "allRoot": "Alle (Root)",
       "back": "Zurück",
-      "noResults": "Keine Treffer gefunden",
-      "helpText": "Tippen zum Suchen. Ohne Eingabe: Gruppen & Makros durchsuchen. ↑/↓ zum Navigieren, Enter zum Auswählen."
+      "noResults": "Keine Treffer gefunden"
     }
   },
   "settings": {
@@ -388,6 +418,15 @@
     "emailBodyPlaceholder": "Geben Sie hier Ihren E-Mail-Text ein...",
     "emailBodyHint": "Dies ist der Text der automatisch gesendeten Bestätigungsmail",
     "saveConfirmationEmail": "Bestätigungsmail speichern",
+    "confirmMailMode": "Bestätigungsmail-Verhalten",
+    "confirmMailModeDescription": "Wählen Sie, wann eine Bestätigungsmail an den Kunden gesendet werden soll.",
+    "confirmMailModeAll": "Bei jeder eingehenden E-Mail",
+    "confirmMailModeAllDescription": "Für jede empfangene E-Mail eines Kunden eine Bestätigung senden.",
+    "confirmMailModeNewOnly": "Nur neue Tickets",
+    "confirmMailModeNewOnlyDescription": "Nur eine Bestätigung senden, wenn der Kunde keine offenen, wartenden oder neuen Tickets hat.",
+    "confirmMailModeDisabled": "Deaktiviert",
+    "confirmMailModeDisabledDescription": "Niemals Bestätigungsmails senden.",
+    "confirmMailModeSaved": "Bestätigungsmail-Verhalten wurde aktualisiert.",
     "additionalSettings": "Zusätzliche Einstellungen",
     "additionalSettingsDescription": "Konfigurieren Sie allgemeine Einstellungen, die für alle Ihre Mitarbeiter gelten",
     "autoAssignEmployeeOnSend": "Automatisch einen Mitarbeiter zuweisen, wenn er eine Antwort sendet",
@@ -778,11 +817,18 @@
     },
     "inboxes": {
       "pageTitle": "Posteingangs-Verwaltung",
-      "heading": "Posteingangs-Verwaltung"
+      "heading": "Posteingangs-Verwaltung",
+      "description": "Erstellen und konfigurieren Sie benutzerdefinierte Posteingänge mit Filtern und Gruppenzugriff."
+    },
+    "emails": {
+      "pageTitle": "E-Mail-Konten",
+      "heading": "E-Mail-Konten",
+      "description": "Verwalten Sie Ihre IMAP- und SMTP-Konfigurationen für den Empfang und Versand von E-Mails."
     },
     "analytics": {
       "pageTitle": "Analyse-Dashboard",
-      "heading": "Analyse-Dashboard"
+      "heading": "Analyse-Dashboard",
+      "description": "Überwachen Sie E-Mail-Volumen, Antwortzeiten und Teamleistung."
     },
     "client": {
       "pageTitle": "Unternehmenseinstellungen",
@@ -796,7 +842,8 @@
     },
     "subscription": {
       "pageTitle": "Abonnement-Verwaltung",
-      "heading": "Abonnement-Verwaltung"
+      "heading": "Abonnement-Verwaltung",
+      "description": "Anzeigen und verwalten Sie Ihren aktuellen Plan, Nutzung und Abrechnung."
     }
   }
 }

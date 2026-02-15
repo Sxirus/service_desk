@@ -239,7 +239,38 @@
     "allTickets": "All tickets",
     "unassignedOnly": "Unassigned only",
     "specificGroups": "Specific groups",
-    "selectInboxOrCreate": "Select an inbox to view details or create a new one"
+    "selectInboxOrCreate": "Select an inbox to view details or create a new one",
+    "manageInboxDescription": "Organize tickets with custom inboxes and filters",
+    "createToGetStarted": "Create an inbox to get started",
+    "ticketStatus": "Ticket Status",
+    "visibilityLabel": "Visibility",
+    "visibilityDescription": "Select which employee groups can see this inbox in their sidebar",
+    "visibilityHint": "Members of these groups will see this inbox in their sidebar",
+    "ticketFiltersLabel": "Ticket Filters",
+    "ticketFiltersDescription": "Define which tickets appear in this inbox",
+    "statusSectionLabel": "By Status",
+    "statusHint": "Select one or more statuses. If none are selected, all tickets are shown.",
+    "noStatusFilterHint": "No filter — all statuses will be shown",
+    "statusNames": {
+      "new": "New",
+      "open": "Open",
+      "waiting": "Waiting",
+      "resolved": "Resolved"
+    },
+    "assignmentSectionLabel": "By Assignment",
+    "assignmentHint": "Filter tickets based on which team they are assigned to",
+    "assignmentAll": "Any assignment",
+    "assignmentUnassigned": "Unassigned tickets only",
+    "assignmentByGroup": "Assigned to specific groups",
+    "assignmentGroupsHint": "Show tickets assigned to these groups",
+    "previewLabel": "Preview",
+    "whatThisInboxShows": "What this inbox shows",
+    "summaryStatus": "Status: {{statuses}}",
+    "summaryUnassigned": "Unassigned tickets only",
+    "summaryAssignedTo": "Assigned to: {{groups}}",
+    "summaryAllTickets": "All tickets (no filters applied)",
+    "allStatuses": "All statuses",
+    "allAssignments": "Any assignment"
   },
   "macros": {
     "title": "Macro Management",
@@ -300,8 +331,7 @@
       "placeholder": "Search macros...",
       "allRoot": "All (Root)",
       "back": "Back",
-      "noResults": "No results found",
-      "helpText": "Type to search. Without input: browse groups & macros. ↑/↓ to navigate, Enter to select."
+      "noResults": "No results found"
     }
   },
   "settings": {
@@ -388,6 +418,15 @@
     "emailBodyPlaceholder": "Enter your email body here...",
     "emailBodyHint": "This is the body of the auto send confirmation mail",
     "saveConfirmationEmail": "Save Confirmation Email",
+    "confirmMailMode": "Confirmation Email Behavior",
+    "confirmMailModeDescription": "Choose when a confirmation email should be sent to the customer.",
+    "confirmMailModeAll": "Every incoming email",
+    "confirmMailModeAllDescription": "Send a confirmation for every email received from a customer.",
+    "confirmMailModeNewOnly": "New tickets only",
+    "confirmMailModeNewOnlyDescription": "Only send a confirmation when a customer has no existing open, waiting, or new tickets.",
+    "confirmMailModeDisabled": "Disabled",
+    "confirmMailModeDisabledDescription": "Never send confirmation emails.",
+    "confirmMailModeSaved": "Confirmation email behavior has been updated.",
     "additionalSettings": "Additional Settings",
     "additionalSettingsDescription": "Configure General settings that apply to all of your employees",
     "autoAssignEmployeeOnSend": "Auto assign an employee when he sends an answer",
@@ -778,11 +817,18 @@
     },
     "inboxes": {
       "pageTitle": "Inbox Management",
-      "heading": "Inbox Management"
+      "heading": "Inbox Management",
+      "description": "Create and configure custom inboxes with filters and group access."
+    },
+    "emails": {
+      "pageTitle": "Email Accounts",
+      "heading": "Email Accounts",
+      "description": "Manage your IMAP and SMTP configurations for receiving and sending emails."
     },
     "analytics": {
       "pageTitle": "Analytics Dashboard",
-      "heading": "Analytics Dashboard"
+      "heading": "Analytics Dashboard",
+      "description": "Monitor email volume, response times, and team performance."
     },
     "client": {
       "pageTitle": "Company Settings",
@@ -796,7 +842,8 @@
     },
     "subscription": {
       "pageTitle": "Subscription Management",
-      "heading": "Subscription Management"
+      "heading": "Subscription Management",
+      "description": "View and manage your current plan, usage, and billing."
     }
   }
 }
