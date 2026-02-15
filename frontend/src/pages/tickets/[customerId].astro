@@ -320,6 +320,8 @@ perf.end(errorCheckTimer);
 
 const processingTimer = perf.start('page-load', 'data-processing');
 
+console.log(macroArray);
+
 // Build employee lookup map for quick access to agent names/avatars
 const employeeMap = new Map<string, { name: string; avatar_url: string | null }>();
 (employeeArray || []).forEach((emp: any) => {
@@ -360,7 +362,6 @@ const emailArray: ThreadEmail[] = [
 ].sort((a, b) => new Date(a.send_at).getTime() - new Date(b.send_at).getTime());
 
 log.info("Emails loaded:", emailArray.length);
-log.info("EmailArray Content:", emailArray);
 
 let lastMail = incomingMails && incomingMails.length > 0 
   ? incomingMails[incomingMails.length - 1] 

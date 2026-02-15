@@ -370,6 +370,57 @@ router.post('/sendMail',
         }))
       };
 
+      // Handle macro attachments
+      const macroFiles = [];
+      const macroAttachmentsRaw = req.body.macroAttachments;
+      if (macroAttachmentsRaw) {
+        try {
+          const parsedMacros = JSON.parse(macroAttachmentsRaw);
+          console.log('[EMAILS] Processing macro attachments:', parsedMacros.length);
+          
+          for (const m of parsedMacros) {
+            console.log('[EMAILS] Downloading macro attachment:', m.filename, m.path);
+            const { data, error } = await supabase.storage
+              .from('macro-attachments')
+              .download(m.path);
+            
+            if (error || !data) {
+              console.error('[EMAILS] Failed to download macro attachment:', m.path, error?.message);
+              continue;
+            }
+
+            // Convert Blob to Buffer safely
+            let buffer;
+            try {
+              if (typeof data.arrayBuffer === 'function') {
+                buffer = Buffer.from(await data.arrayBuffer());
+              } else {
+                buffer = Buffer.from(data);
+              }
+            } catch (convErr) {
+              console.error('[EMAILS] Buffer conversion failed for macro attachment:', convErr);
+              continue;
+            }
+
+            const file = {
+              originalname: m.filename,
+              buffer: buffer,
+              mimetype: m.mime_type || 'application/octet-stream',
+              size: buffer.length
+            };
+            
+            macroFiles.push(file);
+            mailOptions.attachments.push({
+              filename: file.originalname,
+              content: file.buffer,
+              contentType: file.mimetype
+            });
+          }
+        } catch (err) {
+          console.error('[EMAILS] Error parsing macro attachments JSON:', err);
+        }
+      }
+
       // Include HTML body when rich-text content is provided
       if (html) {
         mailOptions.html = html;
@@ -427,8 +478,10 @@ router.post('/sendMail',
         console.log('[EMAILS] Ticket status updated to:', finalStatus);
       }
       
-      if (attachments.length > 0) {
-        storeOutgoingAttachmentsInDB(attachments, client_id, data.id);
+      const allFiles = [...attachments, ...macroFiles];
+      if (allFiles.length > 0) {
+        console.log('[EMAILS] Storing', allFiles.length, 'total attachments in DB (including', macroFiles.length, 'macro files)');
+        storeOutgoingAttachmentsInDB(allFiles, client_id, data.id);
       } else {
         console.log('[Email] No attachments, procceding');
       }
@@ -981,7 +1034,8 @@ router.post('/getSignedUrl',
     }
 
     // Validate allowed storage locations
-    const allowedLocations = ['attachments', 'avatars', 'macro-attachments'];
+    const allowedLocations = ['attachments', 'avatars', 'macro-attachments', 'sent-attachments', 'mail-attachments'];
+    console.log(location);
     if (!location || !allowedLocations.includes(location)) {
       return res.status(400).json({ error: 'Invalid storage location' });
     }
