@@ -665,8 +665,8 @@ export const EmailThread: React.FC<EmailThreadProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
             </svg>
           </div>
-          <h3 className="text-lg font-medium text-gray-900">New Conversation</h3>
-          <p className="text-gray-500 mt-1">Compose your first message to {customer.name} below.</p>
+          <h3 className="text-lg font-medium text-gray-900">{t('tickets.newConversationTitle')}</h3>
+          <p className="text-gray-500 mt-1">{t('tickets.newConversationDescription', { name: customer.name })}</p>
         </div>
       </div>
     );

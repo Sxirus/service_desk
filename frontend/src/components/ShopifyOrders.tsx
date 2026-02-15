@@ -735,7 +735,7 @@ export const ShopifyOrders: React.FC<ShopifyOrdersProps> = ({ shopifyConfig }) =
           <div className="pt-3 text-center p-6 rounded-md bg-destructive/5 border border-destructive/20">
             <AlertCircle className="h-6 w-6 text-destructive mx-auto mb-2" />
             <p className="text-xs text-destructive mb-2">{t('shopify.errorLoadingOrders')}</p>
-            <Button variant="outline" size="sm" onClick={load}>{t('common.tryAgain')}</Button>
+            <Button variant="outline" size="sm" onClick={load}>{t('common:tryAgain')}</Button>
           </div>
         )}
 

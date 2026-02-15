@@ -175,6 +175,8 @@
     "showHtmlVersion": "Show HTML Version",
     "htmlVersionOfEmail": "HTML version of email",
     "noMessagesFound": "No messages found in this conversation.",
+    "newConversationTitle": "New Conversation",
+    "newConversationDescription": "Compose your first message to {{name}} below.",
     "emailConversationThread": "Email conversation thread",
     "conversationWith": "Conversation with",
     "oneNewMessage": "1 new message",
