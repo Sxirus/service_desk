@@ -44,92 +44,23 @@ import type {
   ActivityCategory,
 } from "@/types/activity-log.types";
 
-/* ---------- Action display mapping ---------- */
+/* ---------- Category keys (for iteration) ---------- */
 
-const ACTION_LABELS: Record<string, string> = {
-  // Email
-  "email.sent": "Email Sent",
-  "email.internal_note_added": "Internal Note Added",
-  // Ticket
-  "ticket.status_changed": "Ticket Status Changed",
-  "ticket.subject_changed": "Ticket Subject Changed",
-  "ticket.bulk_status_changed": "Bulk Status Changed",
-  // Customer
-  "customer.merged": "Customer Merged",
-  // Assignment
-  "assignment.employee_assigned": "Employee Assigned",
-  "assignment.group_assigned": "Group Assigned",
-  "assignment.unassigned": "Unassigned",
-  "assignment.bulk_assigned": "Bulk Assigned",
-  "assignment.bulk_unassigned": "Bulk Unassigned",
-  "assignment.bulk_reassigned": "Bulk Reassigned",
-  // Shopify
-  "shopify.connected": "Shopify Connected",
-  "shopify.disconnected": "Shopify Disconnected",
-  "shopify.refund_created": "Shopify Refund Created",
-  "shopify.order_cancelled": "Shopify Order Cancelled",
-  // Settings
-  "settings.signature_updated": "Signature Updated",
-  "settings.email_config_updated": "Email Config Updated",
-  "settings.confirm_mail_updated": "Confirmation Email Updated",
-  "settings.tracking_updated": "Tracking Settings Updated",
-  "settings.general_updated": "General Settings Updated",
-  "settings.confirm_mail_mode_updated": "Confirm Mail Mode Updated",
-  "settings.auto_assign_toggle": "Auto-Assign Toggled",
-  // Employee
-  "employee.created": "Employee Created",
-  "employee.updated": "Employee Updated",
-  "employee.deleted": "Employee Deleted",
-  "employee.disabled": "Employee Disabled",
-  "employee.enabled": "Employee Enabled",
-  "employee.profile_updated": "Profile Updated",
-  // Company
-  "company.updated": "Company Updated",
-  // Macros
-  "macro.created": "Macro Created",
-  "macro.updated": "Macro Updated",
-  "macro.deleted": "Macro Deleted",
-  "macro.group_deleted": "Macro Group Deleted",
-  // Groups
-  "group.created": "Group Created",
-  "group.updated": "Group Updated",
-  "group.deleted": "Group Deleted",
-  "group.member_added": "Group Member Added",
-  "group.member_removed": "Group Member Removed",
-  // Inboxes
-  "inbox.created": "Inbox Created",
-  "inbox.updated": "Inbox Updated",
-  "inbox.deleted": "Inbox Deleted",
-  "inbox.group_added": "Inbox Group Added",
-  "inbox.group_removed": "Inbox Group Removed",
-  "inbox.filters_set": "Inbox Filters Set",
-  // Email accounts
-  "email_account.added": "Email Account Added",
-  "email_account.updated": "Email Account Updated",
-  "email_account.deleted": "Email Account Deleted",
-  // Billing
-  "billing.checkout_created": "Checkout Created",
-  "billing.subscription_completed": "Subscription Completed",
-  // Auth
-  "auth.signed_in": "Signed In",
-  "auth.signed_out": "Signed Out",
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  email: "Email",
-  ticket: "Ticket",
-  customer: "Customer",
-  assignment: "Assignment",
-  shopify: "Shopify",
-  settings: "Settings",
-  employee_mgmt: "Employees",
-  macro: "Macros",
-  group: "Groups",
-  inbox: "Inboxes",
-  email_account: "Email Accounts",
-  billing: "Billing",
-  auth: "Auth",
-};
+const CATEGORY_KEYS = [
+  "email",
+  "ticket",
+  "customer",
+  "assignment",
+  "shopify",
+  "settings",
+  "employee_mgmt",
+  "macro",
+  "group",
+  "inbox",
+  "email_account",
+  "billing",
+  "auth",
+] as const;
 
 const CATEGORY_COLORS: Record<string, string> = {
   email: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -154,7 +85,6 @@ function renderDetails(details: Record<string, any> | null): string {
   const parts: string[] = [];
   for (const [key, value] of Object.entries(details)) {
     if (value === null || value === undefined) continue;
-    // Clean up key name for display
     const label = key
       .replace(/([A-Z])/g, " $1")
       .replace(/_/g, " ")
@@ -165,28 +95,6 @@ function renderDetails(details: Record<string, any> | null): string {
   return parts.join(" · ") || "—";
 }
 
-/* ---------- formatRelativeTime ---------- */
-
-function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHour = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHour / 24);
-
-  if (diffSec < 60) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  if (diffHour < 24) return `${diffHour}h ago`;
-  if (diffDay < 7) return `${diffDay}d ago`;
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
-  });
-}
-
 /* ---------- Component ---------- */
 
 interface ActivityLogProps {
@@ -195,6 +103,30 @@ interface ActivityLogProps {
 
 export function ActivityLog(_props: ActivityLogProps) {
   const { t } = useTranslation("manage");
+
+  /* ---------- formatRelativeTime (uses t) ---------- */
+  const formatRelativeTime = useCallback(
+    (dateStr: string): string => {
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffSec = Math.floor(diffMs / 1000);
+      const diffMin = Math.floor(diffSec / 60);
+      const diffHour = Math.floor(diffMin / 60);
+      const diffDay = Math.floor(diffHour / 24);
+
+      if (diffSec < 60) return t("activityLog.justNow");
+      if (diffMin < 60) return t("activityLog.minutesAgo", { count: diffMin });
+      if (diffHour < 24) return t("activityLog.hoursAgo", { count: diffHour });
+      if (diffDay < 7) return t("activityLog.daysAgo", { count: diffDay });
+      return date.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
+      });
+    },
+    [t]
+  );
 
   const [entries, setEntries] = useState<ActivityLogEntry[]>([]);
   const [pagination, setPagination] = useState<ActivityLogPagination>({
@@ -230,7 +162,7 @@ export function ActivityLog(_props: ActivityLogProps) {
           if (debouncedSearch) {
             const q = debouncedSearch.toLowerCase();
             filtered = filtered.filter((e) => {
-              const label = (ACTION_LABELS[e.action] || e.action).toLowerCase();
+              const label = t(`activityLog.actions.${e.action}`, { defaultValue: e.action }).toLowerCase();
               const empName = e.employees?.name?.toLowerCase() || "";
               const details = e.details ? JSON.stringify(e.details).toLowerCase() : "";
               return label.includes(q) || empName.includes(q) || details.includes(q);
@@ -245,7 +177,7 @@ export function ActivityLog(_props: ActivityLogProps) {
         setLoading(false);
       }
     },
-    [category, debouncedSearch]
+    [category, debouncedSearch, t]
   );
 
   useEffect(() => {
@@ -261,9 +193,9 @@ export function ActivityLog(_props: ActivityLogProps) {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-2xl font-bold tracking-tight">Activity Log</h2>
+        <h2 className="text-2xl font-bold tracking-tight">{t("activityLog.title")}</h2>
         <p className="text-muted-foreground">
-          A chronological record of all actions performed in your workspace.
+          {t("activityLog.description")}
         </p>
       </div>
 
@@ -272,7 +204,7 @@ export function ActivityLog(_props: ActivityLogProps) {
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search actions, employees, details…"
+            placeholder={t("activityLog.searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -281,13 +213,13 @@ export function ActivityLog(_props: ActivityLogProps) {
 
         <Select value={category} onValueChange={(v) => setCategory(v)}>
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="All Categories" />
+            <SelectValue placeholder={t("activityLog.allCategories")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Categories</SelectItem>
-            {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+            <SelectItem value="all">{t("activityLog.allCategories")}</SelectItem>
+            {CATEGORY_KEYS.map((key) => (
               <SelectItem key={key} value={key}>
-                {label}
+                {t(`activityLog.categories.${key}`)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -297,7 +229,7 @@ export function ActivityLog(_props: ActivityLogProps) {
           variant="outline"
           size="icon"
           onClick={() => fetchLogs(pagination.page)}
-          title="Refresh"
+          title={t("activityLog.refresh")}
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
         </Button>
@@ -308,16 +240,15 @@ export function ActivityLog(_props: ActivityLogProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[180px]">Time</TableHead>
-              <TableHead className="w-[140px]">Employee</TableHead>
-              <TableHead className="w-[120px]">Category</TableHead>
-              <TableHead className="w-[200px]">Action</TableHead>
-              <TableHead>Details</TableHead>
+              <TableHead className="w-[180px]">{t("activityLog.columns.time")}</TableHead>
+              <TableHead className="w-[140px]">{t("activityLog.columns.employee")}</TableHead>
+              <TableHead className="w-[120px]">{t("activityLog.columns.category")}</TableHead>
+              <TableHead className="w-[200px]">{t("activityLog.columns.action")}</TableHead>
+              <TableHead>{t("activityLog.columns.details")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
-              // Skeleton rows
               Array.from({ length: 8 }).map((_, i) => (
                 <TableRow key={i}>
                   {Array.from({ length: 5 }).map((_, j) => (
@@ -330,7 +261,7 @@ export function ActivityLog(_props: ActivityLogProps) {
             ) : entries.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
-                  No activity log entries found.
+                  {t("activityLog.noEntries")}
                 </TableCell>
               </TableRow>
             ) : (
@@ -344,7 +275,7 @@ export function ActivityLog(_props: ActivityLogProps) {
                   </TableCell>
                   <TableCell className="font-medium text-sm">
                     {entry.employees?.name || (
-                      <span className="text-muted-foreground italic">System</span>
+                      <span className="text-muted-foreground italic">{t("activityLog.system")}</span>
                     )}
                   </TableCell>
                   <TableCell>
@@ -354,11 +285,11 @@ export function ActivityLog(_props: ActivityLogProps) {
                         CATEGORY_COLORS[entry.category] || ""
                       }`}
                     >
-                      {CATEGORY_LABELS[entry.category] || entry.category}
+                      {t(`activityLog.categories.${entry.category}`, { defaultValue: entry.category })}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm">
-                    {ACTION_LABELS[entry.action] || entry.action}
+                    {t(`activityLog.actions.${entry.action}`, { defaultValue: entry.action })}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground max-w-[350px] truncate">
                     {renderDetails(entry.details)}
@@ -374,7 +305,11 @@ export function ActivityLog(_props: ActivityLogProps) {
       {pagination.totalPages > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            Page {pagination.page} of {pagination.totalPages} ({pagination.total} total entries)
+            {t("activityLog.pagination", {
+              page: pagination.page,
+              totalPages: pagination.totalPages,
+              total: pagination.total,
+            })}
           </p>
           <div className="flex items-center gap-1">
             <Button
