@@ -293,7 +293,7 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
 
   return (
     <aside 
-      className="w-[22rem] shrink-0 border-l bg-muted/30 flex flex-col overflow-hidden"
+      className="w-88 shrink-0 border-l bg-muted/30 flex flex-col overflow-hidden"
       role="complementary"
       aria-label={t('tickets.ticketInfoSidebar')}
     >

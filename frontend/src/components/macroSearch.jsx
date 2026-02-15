@@ -171,8 +171,9 @@ export function MacroSearch({
 
   const fireMacro = useCallback((macro) => {
     let text = macro.text && String(macro.text).length > 0 ? String(macro.text) : macro.title;
+    let macroAttachments = macro.attachments;
     text = interpreter(text, ctx);
-    window.dispatchEvent(new CustomEvent(eventName, { detail: { text } }));
+    window.dispatchEvent(new CustomEvent(eventName, { detail: { text, macroAttachments} }));
   }, [ctx, eventName]);
 
   const select = useCallback((idx) => {

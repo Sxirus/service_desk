@@ -14,9 +14,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { apiClient } from '@/utils/api';
-import { FileUploadManager } from '@/utils/attachmentManager';
+import { FileUploadManager, getAttachmentSignedUrl } from '@/utils/attachmentManager';
 import type { ReplyAreaProps, FileUploadState } from '@/types/ticket.types';
 import { Button } from '@/components/ui/button';
+
+interface MacroAttachmentState {
+  id?: string;
+  filename: string;
+  object_path: string;
+  objectURL?: string;
+  mime_type?: string;
+}
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import {
@@ -173,6 +181,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<FileUploadState[]>([]);
+  const [macroAttachments, setMacroAttachments] = useState<MacroAttachmentState[]>([]);
   const [postSendBehavior, setPostSendBehavior] = useState<PostSendBehavior>('back');
   const [ticketStatus, setTicketStatus] = useState<TicketStatus>('resolved'); // Default to resolved
   const [isInternalNote, setIsInternalNote] = useState(false); // Toggle between public reply and internal note
@@ -235,11 +244,14 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
    * Listen for macro selection events
    */
   useEffect(() => {
-    const handleMacroChosen = (e: Event) => {
+    const handleMacroChosen = async (e: Event) => {
       const customEvent = e as CustomEvent;
       const text = customEvent?.detail?.text || '';
+      const macroAttachmentsData = customEvent.detail?.macroAttachments || null;
 
-      if (!text) return;
+      console.log("Macro Attachments", macroAttachmentsData);
+
+      if (!text && (!macroAttachmentsData || macroAttachmentsData.length === 0)) return;
 
       // If reply area is collapsed, expand it first so the editor is mounted.
       setIsCollapsed(false);
@@ -247,16 +259,39 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
 
       // Insert macro text into the rich text editor via ref.
       // Use a short delay to ensure the editor is mounted after expanding.
-      setTimeout(() => {
-        if (editorRef.current) {
-          // Check if the macro text is already HTML (contains HTML tags)
-          const hasHtmlTags = /<[^>]+>/.test(text);
-          const macroHtml = hasHtmlTags 
-            ? text  // Use as-is if already HTML
-            : `<p>${text.replace(/\n/g, '<br>')}</p>`;  // Convert plain text to HTML
-          editorRef.current.insertContent(macroHtml);
+      if (text) {
+        setTimeout(() => {
+          if (editorRef.current) {
+            // Check if the macro text is already HTML (contains HTML tags)
+            const hasHtmlTags = /<[^>]+>/.test(text);
+            const macroHtml = hasHtmlTags 
+              ? text  // Use as-is if already HTML
+              : `<p>${text.replace(/\n/g, '<br>')}</p>`;  // Convert plain text to HTML
+            editorRef.current.insertContent(macroHtml);
+          }
+        }, 50);
+      }
+
+      // Handle macro attachments
+      if (macroAttachmentsData && Array.isArray(macroAttachmentsData)) {
+        try {
+          const signedAttachments = await Promise.all(
+            macroAttachmentsData.map(async (att: any) => {
+              if (att.objectURL) return att;
+              try {
+                const url = await getAttachmentSignedUrl(att.object_path, 'macro-attachments');
+                return { ...att, objectURL: url };
+              } catch (err) {
+                console.error('Failed to sign macro attachment URL:', err);
+                return att;
+              }
+            })
+          );
+          setMacroAttachments(prev => [...prev, ...signedAttachments]);
+        } catch (err) {
+          console.error('Error processing macro attachments:', err);
         }
-      }, 50);
+      }
     };
 
     window.addEventListener('MacroChoosen', handleMacroChosen);
@@ -394,6 +429,13 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
   }, []);
 
   /**
+   * Remove macro attachment
+   */
+  const handleRemoveMacroAttachment = useCallback((index: number) => {
+    setMacroAttachments(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  /**
    * Send email
    */
   const handleSend = async () => {
@@ -408,7 +450,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       const files = uploadManagerRef.current.getFiles();
 
       // If no content and no attachments, just update the status without sending an email
-      if (plainText === '' && files.length === 0) {
+      if (plainText === '' && files.length === 0 && macroAttachments.length === 0) {
         await apiClient.post(`/emails/updateStatus?customerId=${customerId}`, {
           status: ticketStatus
         });
@@ -531,6 +573,16 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       formData.append('threadEmailAddress', threadEmailAddress || '');
       formData.append('ticketStatus', ticketStatus); // Include status to set after sending
 
+      // Add macro attachments
+      if (macroAttachments.length > 0) {
+        formData.append('macroAttachments', JSON.stringify(macroAttachments.map(a => ({
+          path: a.object_path,
+          filename: a.filename,
+          mime_type: a.mime_type
+        }))));
+      }
+
+      // Add regular attachments
       files.forEach(file => {
         formData.append('attachments', file);
       });
@@ -558,6 +610,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       // Clear state only on success
       uploadManagerRef.current.clear();
       setAttachments([]);
+      setMacroAttachments([]);
       setReplyHtml('');
       setTicketStatus('resolved'); // Reset to default for next reply
       
@@ -714,7 +767,7 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
             </Alert>
           )}
 
-          <div className="flex gap-3 items-end h-full">
+          <div className="flex gap-3 items-end flex-1 min-h-0">
             <div className={`flex-1 h-full relative rounded-md transition-colors duration-200 ${
               isInternalNote ? 'ring-2 ring-amber-300 bg-amber-50/50' : ''
             }`}>
@@ -864,13 +917,20 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
           </div>
 
           {/* File Upload Section - Attachments List */}
-          {attachments.length > 0 && (
-            <div className="mt-3">
+          {(attachments.length > 0 || macroAttachments.length > 0) && (
+            <div className="mt-3 p-3 bg-muted/30 rounded-lg border border-dashed border-border/50">
+              <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 2 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+                {t('tickets.attachments')} ({attachments.length + macroAttachments.length})
+              </div>
               <div 
                 className="flex gap-3 flex-wrap"
                 role="list"
                 aria-label={t('tickets.selectedAttachments')}
               >
+                {/* Regular Attachments */}
                 {attachments.map((fileState, index) => (
                   <AttachmentPreviewItem
                     key={fileState.objectURL}
@@ -878,6 +938,40 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
                     index={index}
                     onRemove={handleRemoveAttachment}
                   />
+                ))}
+                
+                {/* Macro Attachments */}
+                {macroAttachments.map((att, index) => (
+                  <div 
+                    key={att.object_path + index}
+                    className="border rounded p-2 w-32 text-xs flex flex-col gap-1 bg-amber-50/50 border-amber-200/50 group relative hover:border-amber-300 transition-colors"
+                    role="listitem"
+                  >
+                    <div className="flex items-start justify-between gap-1">
+                      <a
+                        href={att.objectURL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 underline truncate hover:text-blue-800 flex-1"
+                        title={att.filename}
+                      >
+                        {att.filename}
+                      </a>
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleRemoveMacroAttachment(index);
+                        }}
+                        className="text-red-500 hover:text-red-700 font-bold shrink-0 text-[10px]"
+                        aria-label={`${t('tickets.removeAttachment')} ${att.filename}`}
+                        type="button"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="text-[9px] text-amber-600/70 font-medium uppercase mt-auto">Macro</div>
+                  </div>
                 ))}
               </div>
             </div>
