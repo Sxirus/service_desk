@@ -1027,7 +1027,8 @@ router.post('/getSignedUrl',
     }
 
     // Validate allowed storage locations
-    const allowedLocations = ['attachments', 'avatars', 'macro-attachments'];
+    const allowedLocations = ['attachments', 'avatars', 'macro-attachments', 'sent-attachments', 'mail-attachments'];
+    console.log(location);
     if (!location || !allowedLocations.includes(location)) {
       return res.status(400).json({ error: 'Invalid storage location' });
     }
