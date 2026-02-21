@@ -96,6 +96,8 @@ router.post('/unassign',
 /**
  * Bulk assign employee or group to multiple customers
  */
+const MAX_BULK_SIZE = 100;
+
 router.post('/bulkAssign',
   authenticate,
   async (req, res) => {
@@ -108,6 +110,13 @@ router.post('/bulkAssign',
       }
       if (!employeeId && !groupId) {
         return res.status(400).json({ success: false, error: 'Provide either employeeId or groupId' });
+      }
+
+      if (customerIds.length > MAX_BULK_SIZE) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `Maximum ${MAX_BULK_SIZE} items allowed per request` 
+        });
       }
 
       const result = await clientService.bulkAssign(req.user.client_id, {

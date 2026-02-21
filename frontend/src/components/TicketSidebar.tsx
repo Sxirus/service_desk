@@ -131,7 +131,9 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
           setGroups(response.data || []);
         }
       } catch (error) {
-        console.error('[TicketSidebar] Failed to load groups:', error);
+        if (import.meta.env.DEV) {
+          console.error('[TicketSidebar] Failed to load groups:', error);
+        }
       }
     };
     
@@ -146,19 +148,12 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
         const assignedGroup = groups.find(g => g.id === customer.group_id);
         if (assignedGroup) {
           setAssignedName(`👥 ${assignedGroup.name}`);
-          console.log('[TicketSidebar] Assigned group found:', assignedGroup.name);
-        } else {
-          console.warn('[TicketSidebar] Group ID', customer.group_id, 'not found in groups list');
         }
-      } else {
-        console.log('[TicketSidebar] Groups not yet loaded, waiting...');
       }
     } else if (assignedEmployeeName) {
       setAssignedName(`👤 ${assignedEmployeeName}`);
-      console.log('[TicketSidebar] Assigned employee found:', assignedEmployeeName);
     } else {
       setAssignedName(null);
-      console.log('[TicketSidebar] No assignment found');
     }
   }, [groups, customer.group_id, assignedEmployeeName]);
 
@@ -189,7 +184,6 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
       const assignmentValue = customEvent?.detail?.text;
 
       if (assignmentValue === undefined || assignmentValue === null) {
-        console.log('[TicketSidebar] Missing assignment value in event');
         return;
       }
 
@@ -197,8 +191,6 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
       const [type, id] = assignmentValue.split(':');
       
       if (type === 'employee') {
-        console.log('[TicketSidebar] Assigning employee:', id, 'to customer:', customer.id);
-        
         try {
           const response = await apiClient.post('/client/assignEmployee', {
             employee_id: id,
@@ -206,7 +198,6 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
           });
           
           if (response.success) {
-            console.log('[TicketSidebar] Employee assigned successfully');
             // Update local state
             // Try flexible comparison (string/number) against employees list
             const assignedEmp = employees.find(e => String(e.text) === String(id));
@@ -232,16 +223,18 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
               toast.success(t('tickets.employeeAssignedSuccess'));
             }
           } else {
-            console.error('[TicketSidebar] Employee assignment failed:', response.error);
+            if (import.meta.env.DEV) {
+              console.error('[TicketSidebar] Employee assignment failed:', response.error);
+            }
             toast.error(t('tickets.failedToAssignEmployee'));
           }
         } catch (error) {
-          console.error('[TicketSidebar] Failed to assign employee:', error);
+          if (import.meta.env.DEV) {
+            console.error('[TicketSidebar] Failed to assign employee:', error);
+          }
           toast.error(t('tickets.failedToAssignEmployee'));
         }
       } else if (type === 'group') {
-        console.log('[TicketSidebar] Assigning group:', id, 'to customer:', customer.id);
-        
         try {
           const response = await apiClient.post('/client/assignGroup', {
             group_id: id,
@@ -249,7 +242,6 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
           });
           
           if (response.success) {
-            console.log('[TicketSidebar] Group assigned successfully');
             // Update local state
             const assignedGroup = groups.find(g => g.id === parseInt(id));
             if (assignedGroup) {
@@ -257,31 +249,36 @@ export const TicketSidebar: React.FC<TicketSidebarProps> = ({
             }
             toast.success(assignedGroup ? t('tickets.assignedToGroup', { name: assignedGroup.name }) : t('tickets.groupAssignedSuccess'));
           } else {
-            console.error('[TicketSidebar] Group assignment failed:', response.error);
+            if (import.meta.env.DEV) {
+              console.error('[TicketSidebar] Group assignment failed:', response.error);
+            }
             toast.error(t('tickets.failedToAssignGroup'));
           }
         } catch (error) {
-          console.error('[TicketSidebar] Failed to assign group:', error);
+          if (import.meta.env.DEV) {
+            console.error('[TicketSidebar] Failed to assign group:', error);
+          }
           toast.error(t('tickets.failedToAssignGroup'));
         }
       } else if (type === 'unassign') {
-        console.log('[TicketSidebar] Unassigning customer:', customer.id);
-        
         try {
           const response = await apiClient.post('/client/unassign', {
             customer_id: customer.id
           });
           
           if (response.success) {
-            console.log('[TicketSidebar] Unassigned successfully');
             setAssignedName(null);
             toast.success(t('tickets.assignmentRemoved'));
           } else {
-            console.error('[TicketSidebar] Unassign failed:', response.error);
+            if (import.meta.env.DEV) {
+              console.error('[TicketSidebar] Unassign failed:', response.error);
+            }
             toast.error(t('tickets.failedToRemoveAssignment'));
           }
         } catch (error) {
-          console.error('[TicketSidebar] Failed to unassign:', error);
+          if (import.meta.env.DEV) {
+            console.error('[TicketSidebar] Failed to unassign:', error);
+          }
           toast.error(t('tickets.failedToRemoveAssignment'));
         }
       }

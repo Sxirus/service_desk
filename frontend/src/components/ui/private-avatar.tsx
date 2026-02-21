@@ -6,10 +6,8 @@
  * - New private storage paths (resolved via signed URLs)
  */
 
-import React from 'react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useAvatarUrl } from '@/hooks/use-avatar'
-import { cn } from '@/lib/utils'
 
 interface PrivateAvatarProps {
   /** The avatar path or URL (can be a storage path or a full URL) */

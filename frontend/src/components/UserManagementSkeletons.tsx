@@ -3,7 +3,6 @@
  * Provides consistent loading states for users table and groups panel
  */
 
-import React from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 /**

@@ -4,6 +4,7 @@ import { createClient as createSSR } from "../lib/supabase.ts";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { encrypt } from "../utils/encryption";
 import { getApiUrl } from "../lib/api-config";
+import { logger } from "../utils/logger";
 
 /**
  * Fire-and-forget activity logging from frontend actions.
@@ -28,7 +29,7 @@ function logActivityFromAction(
     },
     body: JSON.stringify(data),
   }).catch((err) => {
-    console.warn('[activityLog] failed to log:', err?.message);
+    logger.warn('activityLog', 'failed to log:', err?.message);
   });
 }
 
@@ -50,14 +51,14 @@ const emailSignIn = async (
   },
   context: ActionAPIContext
 ) => {
-  console.log("[actions.signIn] start");
+  logger.debug("actions.signIn", "start");
   try {
     // Create Supabase client with SSR context
     const supabase = createSSR({
       request: context.request,
       cookies: context.cookies,
     });
-    console.log("[actions.signIn] Supabase client created");
+    logger.debug("actions.signIn", "Supabase client created");
 
     // Attempt to sign in with email, password, and CAPTCHA token
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -65,15 +66,15 @@ const emailSignIn = async (
       password,
       options: { captchaToken },
     });
-    console.log("[actions.signIn] Sign-in attempt completed");
+    logger.debug("actions.signIn", "Sign-in attempt completed");
 
     // Handle sign-in errors
     if (error) {
-      console.error("[actions.signIn] error:", error);
+      logger.error("actions.signIn", "error:", error);
       return { success: false, message: error.message };
     }
 
-    console.log("[actions.signIn] ok:", data?.user?.id);
+    logger.info("actions.signIn", "ok:", data?.user?.id);
 
     // Log activity
     if (data.session?.access_token) {
@@ -86,7 +87,7 @@ const emailSignIn = async (
     return { success: true, message: "Successfully logged in" };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[actions.signIn] unexpected:", message);
+    logger.error("actions.signIn", "unexpected:", message);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -107,14 +108,14 @@ const passwordReset = async (
   },
   context: ActionAPIContext
 ) => {
-  console.log("[actions.resetPassword] start");
+  logger.debug("actions.resetPassword", "start");
   try {
     // Create Supabase client with SSR context
     const supabase = createSSR({
       request: context.request,
       cookies: context.cookies,
     });
-    console.log("[actions.resetPassword] Supabase client created");
+    logger.debug("actions.resetPassword", "Supabase client created");
 
     // Send password reset email with redirect URL
     const baseUrl = import.meta.env.PUBLIC_SITE_URL || 'http://localhost:4321';
@@ -122,19 +123,19 @@ const passwordReset = async (
       captchaToken,
       redirectTo: `${baseUrl}/update-password`,
     });
-    console.log("[actions.resetPassword] Password reset email attempt completed");
+    logger.debug("actions.resetPassword", "Password reset email attempt completed");
 
     // Handle reset email errors
     if (error) {
-      console.error("[actions.resetPassword] error:", error);
+      logger.error("actions.resetPassword", "error:", error);
       return { success: false, message: error.message };
     }
 
-    console.log("[actions.resetPassword] ok:", data);
+    logger.info("actions.resetPassword", "ok:", data);
     return { success: true, message: "Password reset email sent" };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[actions.resetPassword] unexpected:", message);
+    logger.error("actions.resetPassword", "unexpected:", message);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -158,19 +159,19 @@ const updateMyProfile = async (
   { name, avatarBase64 }: UpdateMyProfileInput,
   context: ActionAPIContext
 ) => {
-  console.log("[actions.updateMyProfile] start");
-  console.log("[actions.updateMyProfile] Input received - name:", name, "hasAvatar:", !!avatarBase64);
+  logger.debug("actions.updateMyProfile", "start");
+  logger.debug("actions.updateMyProfile", `Input received - name: ${name}, hasAvatar: ${!!avatarBase64}`);
   try {
     // 1) Verify the current user is authenticated
     const ssr = createSSR({ request: context.request, cookies: context.cookies });
-    console.log("[actions.updateMyProfile] SSR client created");
+    logger.debug("actions.updateMyProfile", "SSR client created");
     
     const { data: { user }, error: userErr } = await ssr.auth.getUser();
     if (userErr || !user) {
-      console.error("[actions.updateMyProfile] getUser error:", userErr?.message);
+      logger.error("actions.updateMyProfile", "getUser error:", userErr?.message);
       return { success: false, message: "Unauthorized" };
     }
-    console.log("[actions.updateMyProfile] User authenticated:", user.id);
+    logger.debug("actions.updateMyProfile", "User authenticated:", user.id);
 
     // 2) Get current employee record
     const { data: me, error: meErr } = await ssr
@@ -180,10 +181,10 @@ const updateMyProfile = async (
       .single();
 
     if (meErr || !me) {
-      console.error("[actions.updateMyProfile] employee lookup:", meErr?.message);
+      logger.error("actions.updateMyProfile", "employee lookup:", meErr?.message);
       return { success: false, message: "Employee not found" };
     }
-    console.log("[actions.updateMyProfile] Employee found:", me.id);
+    logger.debug("actions.updateMyProfile", "Employee found:", me.id);
 
     // 3) Use admin client to bypass RLS for storage and database updates
     const admin = createAdmin(
@@ -203,7 +204,7 @@ const updateMyProfile = async (
         // Generate file path: {client_id}/{employee_id}/avatar.webp
         const filePath = `${me.client_id}/${me.id}/avatar.webp`;
         
-        console.log("[actions.updateMyProfile] Uploading avatar to:", filePath);
+        logger.debug("actions.updateMyProfile", "Uploading avatar to:", filePath);
         
         const { error: uploadError } = await admin.storage
           .from("avatars")
@@ -213,16 +214,16 @@ const updateMyProfile = async (
           });
 
         if (uploadError) {
-          console.error("[actions.updateMyProfile] Avatar upload error:", uploadError.message);
+          logger.error("actions.updateMyProfile", "Avatar upload error:", uploadError.message);
           return { success: false, message: "Failed to upload avatar: " + uploadError.message };
         }
 
         // Store the path (not public URL) - avatars bucket is private
         // Signed URLs will be generated on-demand when displaying avatars
         avatarPath = filePath;
-        console.log("[actions.updateMyProfile] Avatar uploaded, path stored:", avatarPath);
+        logger.debug("actions.updateMyProfile", "Avatar uploaded, path stored:", avatarPath);
       } catch (uploadErr: any) {
-        console.error("[actions.updateMyProfile] Avatar processing error:", uploadErr?.message);
+        logger.error("actions.updateMyProfile", "Avatar processing error:", uploadErr?.message);
         return { success: false, message: "Failed to process avatar" };
       }
     }
@@ -232,7 +233,7 @@ const updateMyProfile = async (
     if (avatarPath) {
       updateData.avatar_url = avatarPath;
     }
-    console.log("[actions.updateMyProfile] Update data:", JSON.stringify(updateData));
+    logger.debug("actions.updateMyProfile", "Update data:", JSON.stringify(updateData));
 
     const { data: updateResult, error: updateErr } = await admin
       .from("employees")
@@ -241,11 +242,11 @@ const updateMyProfile = async (
       .select();
 
     if (updateErr) {
-      console.error("[actions.updateMyProfile] update error:", updateErr.message);
+      logger.error("actions.updateMyProfile", "update error:", updateErr.message);
       return { success: false, message: "Failed to update profile" };
     }
-    console.log("[actions.updateMyProfile] Update result:", JSON.stringify(updateResult));
-    console.log("[actions.updateMyProfile] Profile updated successfully");
+    logger.debug("actions.updateMyProfile", "Update result:", JSON.stringify(updateResult));
+    logger.info("actions.updateMyProfile", "Profile updated successfully");
 
     // Log activity
     try {
@@ -264,7 +265,7 @@ const updateMyProfile = async (
     return { success: true, message: "Profile updated successfully" };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[actions.updateMyProfile] unexpected:", message);
+    logger.error("actions.updateMyProfile", "unexpected:", message);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -279,17 +280,17 @@ const sendPasswordResetEmail = async (
   _input: {},
   context: ActionAPIContext
 ) => {
-  console.log("[actions.sendPasswordResetEmail] start");
+  logger.debug("actions.sendPasswordResetEmail", "start");
   try {
     // 1) Verify the current user is authenticated
     const ssr = createSSR({ request: context.request, cookies: context.cookies });
     
     const { data: { user }, error: userErr } = await ssr.auth.getUser();
     if (userErr || !user || !user.email) {
-      console.error("[actions.sendPasswordResetEmail] getUser error:", userErr?.message);
+      logger.error("actions.sendPasswordResetEmail", "getUser error:", userErr?.message);
       return { success: false, message: "Unauthorized" };
     }
-    console.log("[actions.sendPasswordResetEmail] User authenticated:", user.id);
+    logger.debug("actions.sendPasswordResetEmail", "User authenticated:", user.id);
 
     // 2) Send password reset email
     const baseUrl = import.meta.env.PUBLIC_SITE_URL || 'http://localhost:4321';
@@ -298,15 +299,15 @@ const sendPasswordResetEmail = async (
     });
 
     if (error) {
-      console.error("[actions.sendPasswordResetEmail] error:", error.message);
+      logger.error("actions.sendPasswordResetEmail", "error:", error.message);
       return { success: false, message: error.message };
     }
 
-    console.log("[actions.sendPasswordResetEmail] Email sent to:", user.email);
+    logger.info("actions.sendPasswordResetEmail", "Email sent to:", user.email);
     return { success: true, message: "Password reset email sent" };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[actions.sendPasswordResetEmail] unexpected:", message);
+    logger.error("actions.sendPasswordResetEmail", "unexpected:", message);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -333,18 +334,18 @@ const createEmployee = async (
   { email, name, role_id }: CreateEmployeeInput,
   context: ActionAPIContext
 ) => {
-  console.log("[actions.createEmployee] start");
+  logger.debug("actions.createEmployee", "start");
   try {
     // 1) Verify the current user is authenticated
     const ssr = createSSR({ request: context.request, cookies: context.cookies });
-    console.log("[actions.createEmployee] SSR client created");
+    logger.debug("actions.createEmployee", "SSR client created");
     
     const { data: { user }, error: userErr } = await ssr.auth.getUser();
     if (userErr || !user) {
-      console.error("[actions.createEmployee] getUser error:", userErr?.message);
+      logger.error("actions.createEmployee", "getUser error:", userErr?.message);
       return { success: false, message: "Unauthorized" };
     }
-    console.log("[actions.createEmployee] User authenticated:", user.id);
+    logger.debug("actions.createEmployee", `User authenticated: ${user.id}`);
   
     // 2) Get current employee record and client ID
     const { data: me, error: meErr } = await ssr
@@ -354,10 +355,10 @@ const createEmployee = async (
       .single();
 
     if (meErr || !me) {
-      console.error("[actions.createEmployee] employees lookup:", meErr?.message);
+      logger.error("actions.createEmployee", "employees lookup:", meErr?.message);
       return { success: false, message: "Forbidden" };
     }
-    console.log("[actions.createEmployee] Current employee found:", me.id, "client:", me.client_id);
+    logger.debug("actions.createEmployee", `Current employee found: ${me.id}, client: ${me.client_id}`);
 
     // 3) Check if current user has admin role (role_id = 1)
     const { data: myRoles, error: rolesErr } = await ssr
@@ -366,18 +367,18 @@ const createEmployee = async (
       .eq("employee_id", me.id);
 
     if (rolesErr) {
-      console.error("[actions.createEmployee] roles lookup:", rolesErr.message);
+      logger.error("actions.createEmployee", "roles lookup:", rolesErr.message);
       return { success: false, message: "Forbidden" };
     }
-    console.log("[actions.createEmployee] User roles:", myRoles);
+    logger.debug("actions.createEmployee", "User roles:", myRoles);
 
     // Verify admin permissions
     const amIAdmin = !!myRoles?.some((r) => r.role_id === 1);
     if (!amIAdmin) {
-      console.error("[actions.createEmployee] User is not admin");
+      logger.error("actions.createEmployee", "User is not admin");
       return { success: false, message: "Forbidden" };
     }
-    console.log("[actions.createEmployee] Admin permissions verified");
+    logger.debug("actions.createEmployee", "Admin permissions verified");
 
     // 4) Create admin client using service role key (server-side only!)
     const admin = createAdmin(
@@ -385,7 +386,7 @@ const createEmployee = async (
       import.meta.env.SUPABASE_KEY!,
       { auth: { persistSession: false } }
     );
-    console.log("[actions.createEmployee] Admin client created");
+    logger.debug("actions.createEmployee", "Admin client created");
 
     // 5) Create new user in auth.users table
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
@@ -394,10 +395,10 @@ const createEmployee = async (
       user_metadata: { name },
     });
     if (createErr) {
-      console.error("[actions.createEmployee] createUser:", createErr.message);
+      logger.error("actions.createEmployee", "createUser:", createErr.message);
       return { success: false, message: createErr.message };
     }
-    console.log("[actions.createEmployee] User created in auth:", created.user.id);
+    logger.debug("actions.createEmployee", `User created in auth: ${created.user.id}`);
 
     // 6) Create employee record in same client/organization
     const { data: empRow, error: empErr } = await admin
@@ -406,26 +407,26 @@ const createEmployee = async (
       .select("id")
       .single();
     if (empErr) {
-      console.error("[actions.createEmployee] insert employees:", empErr.message);
+      logger.error("actions.createEmployee", "insert employees:", empErr.message);
       return { success: false, message: empErr.message };
     }
-    console.log("[actions.createEmployee] Employee record created:", empRow.id);
+    logger.debug("actions.createEmployee", `Employee record created: ${empRow.id}`);
 
     // 7) Assign role to the new employee
     const { error: relErr } = await admin
       .from("roles-employees")
       .insert({ role_id, employee_id: empRow.id });
     if (relErr) {
-      console.error("[actions.createEmployee] insert roles-employees:", relErr.message);
+      logger.error("actions.createEmployee", "insert roles-employees:", relErr.message);
       return { success: false, message: relErr.message };
     }
-    console.log("[actions.createEmployee] Role assigned:", role_id);
+    logger.debug("actions.createEmployee", `Role assigned: ${role_id}`);
 
     // 8) Send password reset email as account activation
     await admin.auth.resetPasswordForEmail(email, {
       redirectTo: new URL("/update-password", context.request.url).toString(),
     });
-    console.log("[actions.createEmployee] Activation email sent");
+    logger.debug("actions.createEmployee", "Activation email sent");
 
     // 9) Update Stripe subscription quantity (if on paid plan)
     try {
@@ -437,7 +438,7 @@ const createEmployee = async (
         .or("disabled.is.null,disabled.eq.false"); // Only count non-disabled users
 
       const newQuantity = employeeCount || 1;
-      console.log("[actions.createEmployee] Updating subscription quantity to:", newQuantity);
+      logger.debug("actions.createEmployee", `Updating subscription quantity to: ${newQuantity}`);
 
       // Call backend to update Stripe subscription
       const apiUrl = getApiUrl('/api');
@@ -455,17 +456,17 @@ const createEmployee = async (
 
         const result = await response.json();
         if (result.success) {
-          console.log("[actions.createEmployee] Subscription quantity updated");
+          logger.debug("actions.createEmployee", "Subscription quantity updated");
         } else {
-          console.warn("[actions.createEmployee] Failed to update subscription:", result.error);
+          logger.warn("actions.createEmployee", "Failed to update subscription:", result.error);
         }
       }
     } catch (stripeErr: any) {
-      console.warn("[actions.createEmployee] Stripe update warning:", stripeErr?.message);
+      logger.warn("actions.createEmployee", "Stripe update warning:", stripeErr?.message);
       // Don't fail the entire operation if subscription update fails
     }
 
-    console.log("[actions.createEmployee] ok");
+    logger.info("actions.createEmployee", "ok");
 
     // Log activity
     try {
@@ -483,7 +484,7 @@ const createEmployee = async (
 
     return { success: true, message: "Employee created and invite sent" };
   } catch (e: any) {
-    console.error("[actions.createEmployee] unexpected:", e?.message ?? e);
+    logger.error("actions.createEmployee", "unexpected:", e?.message ?? e);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -510,18 +511,18 @@ const updateEmployee = async (
   { id, email, name, role_id }: UpdateEmployeeInput,
   context: ActionAPIContext
 ) => {
-  console.log("[actions.updateEmployee] start for employee:", id);
+  logger.debug("actions.updateEmployee", `start for employee: ${id}`);
   try {
     // 1) Verify the current user is authenticated
     const ssr = createSSR({ request: context.request, cookies: context.cookies });
-    console.log("[actions.updateEmployee] SSR client created");
+    logger.debug("actions.updateEmployee", "SSR client created");
     
     const { data: { user }, error: userErr } = await ssr.auth.getUser();
     if (userErr || !user) {
-      console.error("[actions.updateEmployee] getUser error:", userErr?.message);
+      logger.error("actions.updateEmployee", "getUser error:", userErr?.message);
       return { success: false, message: "Unauthorized" };
     }
-    console.log("[actions.updateEmployee] User authenticated:", user.id);
+    logger.debug("actions.updateEmployee", `User authenticated: ${user.id}`);
   
     // 2) Get current employee record and client ID
     const { data: me, error: meErr } = await ssr
@@ -531,10 +532,10 @@ const updateEmployee = async (
       .single();
 
     if (meErr || !me) {
-      console.error("[actions.updateEmployee] employees lookup:", meErr?.message);
+      logger.error("actions.updateEmployee", "employees lookup:", meErr?.message);
       return { success: false, message: "Forbidden" };
     }
-    console.log("[actions.updateEmployee] Current employee found:", me.id, "client:", me.client_id);
+    logger.debug("actions.updateEmployee", `Current employee found: ${me.id}, client: ${me.client_id}`);
 
     // 3) Check if current user has admin role (role_id = 1)
     const { data: myRoles, error: rolesErr } = await ssr
@@ -543,18 +544,18 @@ const updateEmployee = async (
       .eq("employee_id", me.id);
 
     if (rolesErr) {
-      console.error("[actions.updateEmployee] roles lookup:", rolesErr.message);
+      logger.error("actions.updateEmployee", "roles lookup:", rolesErr.message);
       return { success: false, message: "Forbidden" };
     }
-    console.log("[actions.updateEmployee] User roles:", myRoles);
+    logger.debug("actions.updateEmployee", "User roles:", myRoles);
 
     // Verify admin permissions
     const amIAdmin = !!myRoles?.some((r) => r.role_id === 1);
     if (!amIAdmin) {
-      console.error("[actions.updateEmployee] User is not admin");
+      logger.error("actions.updateEmployee", "User is not admin");
       return { success: false, message: "Forbidden" };
     }
-    console.log("[actions.updateEmployee] Admin permissions verified");
+    logger.debug("actions.updateEmployee", "Admin permissions verified");
 
     // 4) Verify target employee belongs to same client
     const { data: targetEmployee, error: targetErr } = await ssr
@@ -564,16 +565,16 @@ const updateEmployee = async (
       .single();
 
     if (targetErr || !targetEmployee) {
-      console.error("[actions.updateEmployee] target employee lookup:", targetErr?.message);
+      logger.error("actions.updateEmployee", "target employee lookup:", targetErr?.message);
       return { success: false, message: "Employee not found" };
     }
-    console.log("[actions.updateEmployee] Target employee found:", targetEmployee.user_id, "client:", targetEmployee.client_id);
+    logger.debug("actions.updateEmployee", `Target employee found: ${targetEmployee.user_id}, client: ${targetEmployee.client_id}`);
 
     if (targetEmployee.client_id !== me.client_id) {
-      console.error("[actions.updateEmployee] cross-client update attempt");
+      logger.error("actions.updateEmployee", "cross-client update attempt");
       return { success: false, message: "Forbidden: Different client" };
     }
-    console.log("[actions.updateEmployee] Client verification passed");
+    logger.debug("actions.updateEmployee", "Client verification passed");
 
     // 5) Create admin client using service role key
     const admin = createAdmin(
@@ -581,7 +582,7 @@ const updateEmployee = async (
       import.meta.env.SUPABASE_KEY!,
       { auth: { persistSession: false } }
     );
-    console.log("[actions.updateEmployee] Admin client created");
+    logger.debug("actions.updateEmployee", "Admin client created");
 
     // 6) Update user email and metadata in auth.users
     const { error: authUpdateErr } = await admin.auth.admin.updateUserById(
@@ -592,10 +593,10 @@ const updateEmployee = async (
       }
     );
     if (authUpdateErr) {
-      console.error("[actions.updateEmployee] auth update error:", authUpdateErr.message);
+      logger.error("actions.updateEmployee", "auth update error:", authUpdateErr.message);
       return { success: false, message: "Failed to update user auth data" };
     }
-    console.log("[actions.updateEmployee] Auth data updated");
+    logger.debug("actions.updateEmployee", "Auth data updated");
 
     // 7) Update employee name
     const { error: empUpdateErr } = await admin
@@ -604,10 +605,10 @@ const updateEmployee = async (
       .eq("id", id);
 
     if (empUpdateErr) {
-      console.error("[actions.updateEmployee] employee update error:", empUpdateErr.message);
+      logger.error("actions.updateEmployee", "employee update error:", empUpdateErr.message);
       return { success: false, message: "Failed to update employee data" };
     }
-    console.log("[actions.updateEmployee] Employee data updated");
+    logger.debug("actions.updateEmployee", "Employee data updated");
 
     // 8) Update role assignment
     // First delete existing role assignments for this employee
@@ -617,10 +618,10 @@ const updateEmployee = async (
       .eq("employee_id", id);
 
     if (deleteRoleErr) {
-      console.error("[actions.updateEmployee] role deletion error:", deleteRoleErr.message);
+      logger.error("actions.updateEmployee", "role deletion error:", deleteRoleErr.message);
       return { success: false, message: "Failed to update role assignments" };
     }
-    console.log("[actions.updateEmployee] Old roles deleted");
+    logger.debug("actions.updateEmployee", "Old roles deleted");
 
     // Then insert new role
     const { error: insertRoleErr } = await admin
@@ -628,12 +629,12 @@ const updateEmployee = async (
       .insert({ role_id, employee_id: id });
 
     if (insertRoleErr) {
-      console.error("[actions.updateEmployee] role insertion error:", insertRoleErr.message);
+      logger.error("actions.updateEmployee", "role insertion error:", insertRoleErr.message);
       return { success: false, message: "Failed to assign new role" };
     }
-    console.log("[actions.updateEmployee] New role assigned:", role_id);
+    logger.debug("actions.updateEmployee", `New role assigned: ${role_id}`);
 
-    console.log("[actions.updateEmployee] ok");
+    logger.info("actions.updateEmployee", "ok");
 
     // Log activity
     try {
@@ -651,7 +652,7 @@ const updateEmployee = async (
 
     return { success: true, message: "Employee updated successfully" };
   } catch (e: any) {
-    console.error("[actions.updateEmployee] unexpected:", e?.message ?? e);
+    logger.error("actions.updateEmployee", "unexpected:", e?.message ?? e);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -673,18 +674,18 @@ const deleteEmployee = async (
   { id }: DeleteEmployeeInput,
   context: ActionAPIContext
 ) => {
-  console.log("[actions.deleteEmployee] start for employee:", id);
+  logger.debug("actions.deleteEmployee", `start for employee: ${id}`);
   try {
     // 1) Verify the current user is authenticated
     const ssr = createSSR({ request: context.request, cookies: context.cookies });
-    console.log("[actions.deleteEmployee] SSR client created");
+    logger.debug("actions.deleteEmployee", "SSR client created");
     
     const { data: { user }, error: userErr } = await ssr.auth.getUser();
     if (userErr || !user) {
-      console.error("[actions.deleteEmployee] getUser error:", userErr?.message);
+      logger.error("actions.deleteEmployee", "getUser error:", userErr?.message);
       return { success: false, message: "Unauthorized" };
     }
-    console.log("[actions.deleteEmployee] User authenticated:", user.id);
+    logger.debug("actions.deleteEmployee", `User authenticated: ${user.id}`);
   
     // 2) Get current employee record and client ID
     const { data: me, error: meErr } = await ssr
@@ -694,10 +695,10 @@ const deleteEmployee = async (
       .single();
 
     if (meErr || !me) {
-      console.error("[actions.deleteEmployee] employees lookup:", meErr?.message);
+      logger.error("actions.deleteEmployee", "employees lookup:", meErr?.message);
       return { success: false, message: "Forbidden" };
     }
-    console.log("[actions.deleteEmployee] Current employee found:", me.id, "client:", me.client_id);
+    logger.debug("actions.deleteEmployee", `Current employee found: ${me.id}, client: ${me.client_id}`);
 
     // 3) Check if current user has admin role (role_id = 1)
     const { data: myRoles, error: rolesErr } = await ssr
@@ -706,25 +707,25 @@ const deleteEmployee = async (
       .eq("employee_id", me.id);
 
     if (rolesErr) {
-      console.error("[actions.deleteEmployee] roles lookup:", rolesErr.message);
+      logger.error("actions.deleteEmployee", "roles lookup:", rolesErr.message);
       return { success: false, message: "Forbidden" };
     }
-    console.log("[actions.deleteEmployee] User roles:", myRoles);
+    logger.debug("actions.deleteEmployee", "User roles:", myRoles);
 
     // Verify admin permissions
     const amIAdmin = !!myRoles?.some((r) => r.role_id === 1);
     if (!amIAdmin) {
-      console.error("[actions.deleteEmployee] User is not admin");
+      logger.error("actions.deleteEmployee", "User is not admin");
       return { success: false, message: "Forbidden" };
     }
-    console.log("[actions.deleteEmployee] Admin permissions verified");
+    logger.debug("actions.deleteEmployee", "Admin permissions verified");
 
     // 4) Prevent self-deletion
     if (id === me.id) {
-      console.error("[actions.deleteEmployee] self-deletion attempt");
+      logger.error("actions.deleteEmployee", "self-deletion attempt");
       return { success: false, message: "Cannot delete your own account" };
     }
-    console.log("[actions.deleteEmployee] Self-deletion check passed");
+    logger.debug("actions.deleteEmployee", "Self-deletion check passed");
 
     // 5) Verify target employee belongs to same client
     const { data: targetEmployee, error: targetErr } = await ssr
@@ -734,16 +735,16 @@ const deleteEmployee = async (
       .single();
 
     if (targetErr || !targetEmployee) {
-      console.error("[actions.deleteEmployee] target employee lookup:", targetErr?.message);
+      logger.error("actions.deleteEmployee", "target employee lookup:", targetErr?.message);
       return { success: false, message: "Employee not found" };
     }
-    console.log("[actions.deleteEmployee] Target employee found:", targetEmployee.user_id, "client:", targetEmployee.client_id);
+    logger.debug("actions.deleteEmployee", `Target employee found: ${targetEmployee.user_id}, client: ${targetEmployee.client_id}`);
 
     if (targetEmployee.client_id !== me.client_id) {
-      console.error("[actions.deleteEmployee] cross-client deletion attempt");
+      logger.error("actions.deleteEmployee", "cross-client deletion attempt");
       return { success: false, message: "Forbidden: Different client" };
     }
-    console.log("[actions.deleteEmployee] Client verification passed");
+    logger.debug("actions.deleteEmployee", "Client verification passed");
 
     // 6) Create admin client using service role key
     const admin = createAdmin(
@@ -751,7 +752,7 @@ const deleteEmployee = async (
       import.meta.env.SUPABASE_KEY!,
       { auth: { persistSession: false } }
     );
-    console.log("[actions.deleteEmployee] Admin client created");
+    logger.debug("actions.deleteEmployee", "Admin client created");
 
     // 7) Delete role assignments first (foreign key constraint)
     const { error: deleteRoleErr } = await admin
@@ -760,10 +761,10 @@ const deleteEmployee = async (
       .eq("employee_id", id);
 
     if (deleteRoleErr) {
-      console.error("[actions.deleteEmployee] role deletion error:", deleteRoleErr.message);
+      logger.error("actions.deleteEmployee", "role deletion error:", deleteRoleErr.message);
       return { success: false, message: "Failed to remove role assignments" };
     }
-    console.log("[actions.deleteEmployee] Role assignments deleted");
+    logger.debug("actions.deleteEmployee", "Role assignments deleted");
 
     // 8) Delete employee record
     const { error: empDeleteErr } = await admin
@@ -772,18 +773,18 @@ const deleteEmployee = async (
       .eq("id", id);
 
     if (empDeleteErr) {
-      console.error("[actions.deleteEmployee] employee deletion error:", empDeleteErr.message);
+      logger.error("actions.deleteEmployee", "employee deletion error:", empDeleteErr.message);
       return { success: false, message: "Failed to delete employee" };
     }
-    console.log("[actions.deleteEmployee] Employee record deleted");
+    logger.debug("actions.deleteEmployee", "Employee record deleted");
 
     // 9) Delete user from auth.users (optional - you might want to keep auth records)
     const { error: authDeleteErr } = await admin.auth.admin.deleteUser(targetEmployee.user_id);
     if (authDeleteErr) {
-      console.warn("[actions.deleteEmployee] auth deletion warning:", authDeleteErr.message);
+      logger.warn("actions.deleteEmployee", "auth deletion warning:", authDeleteErr.message);
       // Don't fail the entire operation if auth deletion fails
     } else {
-      console.log("[actions.deleteEmployee] Auth user deleted");
+      logger.debug("actions.deleteEmployee", "Auth user deleted");
     }
 
     // 10) Update Stripe subscription quantity (if on paid plan)
@@ -796,7 +797,7 @@ const deleteEmployee = async (
         .or("disabled.is.null,disabled.eq.false"); // Only count non-disabled users
 
       const newQuantity = Math.max(employeeCount || 1, 1); // Minimum 1 user
-      console.log("[actions.deleteEmployee] Updating subscription quantity to:", newQuantity);
+      logger.debug("actions.deleteEmployee", `Updating subscription quantity to: ${newQuantity}`);
 
       // Call backend to update Stripe subscription
       const apiUrl = getApiUrl('/api');
@@ -814,17 +815,17 @@ const deleteEmployee = async (
 
         const result = await response.json();
         if (result.success) {
-          console.log("[actions.deleteEmployee] Subscription quantity updated");
+          logger.debug("actions.deleteEmployee", "Subscription quantity updated");
         } else {
-          console.warn("[actions.deleteEmployee] Failed to update subscription:", result.error);
+          logger.warn("actions.deleteEmployee", "Failed to update subscription:", result.error);
         }
       }
     } catch (stripeErr: any) {
-      console.warn("[actions.deleteEmployee] Stripe update warning:", stripeErr?.message);
+      logger.warn("actions.deleteEmployee", "Stripe update warning:", stripeErr?.message);
       // Don't fail the entire operation if subscription update fails
     }
 
-    console.log("[actions.deleteEmployee] ok");
+    logger.info("actions.deleteEmployee", "ok");
 
     // Log activity
     try {
@@ -841,7 +842,7 @@ const deleteEmployee = async (
 
     return { success: true, message: "Employee deleted successfully" };
   } catch (e: any) {
-    console.error("[actions.deleteEmployee] unexpected:", e?.message ?? e);
+    logger.error("actions.deleteEmployee", "unexpected:", e?.message ?? e);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -862,7 +863,7 @@ const disableEmployee = async (
   { id }: DisableEmployeeInput,
   context: ActionAPIContext
 ) => {
-  console.log("[actions.disableEmployee] start for employee:", id);
+  logger.debug("actions.disableEmployee", `start for employee: ${id}`);
   try {
     const ssr = createSSR({ request: context.request, cookies: context.cookies });
     const { data: { user }, error: userErr } = await ssr.auth.getUser();
@@ -916,7 +917,7 @@ const disableEmployee = async (
       .eq("id", id);
 
     if (updateErr) {
-      console.error("[actions.disableEmployee] update error:", updateErr.message);
+      logger.error("actions.disableEmployee", "update error:", updateErr.message);
       return { success: false, message: "Failed to disable employee" };
     }
 
@@ -927,7 +928,7 @@ const disableEmployee = async (
     );
 
     if (banErr) {
-      console.warn("[actions.disableEmployee] ban error:", banErr.message);
+      logger.warn("actions.disableEmployee", "ban error:", banErr.message);
     }
 
     // Update subscription quantity (exclude disabled users)
@@ -953,7 +954,7 @@ const disableEmployee = async (
         });
       }
     } catch (stripeErr: any) {
-      console.warn("[actions.disableEmployee] Stripe update warning:", stripeErr?.message);
+      logger.warn("actions.disableEmployee", "Stripe update warning:", stripeErr?.message);
     }
 
     // Log activity
@@ -971,7 +972,7 @@ const disableEmployee = async (
 
     return { success: true, message: "Employee disabled successfully" };
   } catch (e: any) {
-    console.error("[actions.disableEmployee] unexpected:", e?.message ?? e);
+    logger.error("actions.disableEmployee", "unexpected:", e?.message ?? e);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -991,7 +992,7 @@ const enableEmployee = async (
   { id }: EnableEmployeeInput,
   context: ActionAPIContext
 ) => {
-  console.log("[actions.enableEmployee] start for employee:", id);
+  logger.debug("actions.enableEmployee", `start for employee: ${id}`);
   try {
     const ssr = createSSR({ request: context.request, cookies: context.cookies });
     const { data: { user }, error: userErr } = await ssr.auth.getUser();
@@ -1041,7 +1042,7 @@ const enableEmployee = async (
       .eq("id", id);
 
     if (updateErr) {
-      console.error("[actions.enableEmployee] update error:", updateErr.message);
+      logger.error("actions.enableEmployee", "update error:", updateErr.message);
       return { success: false, message: "Failed to enable employee" };
     }
 
@@ -1052,7 +1053,7 @@ const enableEmployee = async (
     );
 
     if (unbanErr) {
-      console.warn("[actions.enableEmployee] unban error:", unbanErr.message);
+      logger.warn("actions.enableEmployee", "unban error:", unbanErr.message);
     }
 
     // Update subscription quantity (include newly enabled user)
@@ -1078,7 +1079,7 @@ const enableEmployee = async (
         });
       }
     } catch (stripeErr: any) {
-      console.warn("[actions.enableEmployee] Stripe update warning:", stripeErr?.message);
+      logger.warn("actions.enableEmployee", "Stripe update warning:", stripeErr?.message);
     }
 
     // Log activity
@@ -1096,7 +1097,7 @@ const enableEmployee = async (
 
     return { success: true, message: "Employee enabled successfully" };
   } catch (e: any) {
-    console.error("[actions.enableEmployee] unexpected:", e?.message ?? e);
+    logger.error("actions.enableEmployee", "unexpected:", e?.message ?? e);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -1141,21 +1142,21 @@ const updateCompany = async (
   }: UpdateCompanyInput,
   context: ActionAPIContext
 ) => {
-  console.log("[actions.updateCompany] start for company:", id);
+  logger.debug("actions.updateCompany", `start for company: ${id}`);
   try {
     // 1) User prüfen
     const ssr = createSSR({ request: context.request, cookies: context.cookies });
-    console.log("[actions.updateCompany] SSR client created");
+    logger.debug("actions.updateCompany", "SSR client created");
     
     const {
       data: { user },
       error: userErr,
     } = await ssr.auth.getUser();
     if (userErr || !user) {
-      console.error("[actions.updateCompany] getUser error:", userErr?.message);
+      logger.error("actions.updateCompany", "getUser error:", userErr?.message);
       return { success: false, message: "Unauthorized" };
     }
-    console.log("[actions.updateCompany] User authenticated:", user.id);
+    logger.debug("actions.updateCompany", `User authenticated: ${user.id}`);
 
     // 2) Employee und client_id ermitteln
     let me: { id: number; client_id: number } | null = null;
@@ -1163,10 +1164,10 @@ const updateCompany = async (
       const rpc = await ssr.rpc("get_my_employee").single();
       if (!rpc.error) {
         me = rpc.data as any;
-        console.log("[actions.updateCompany] Employee found via RPC:", me);
+        logger.debug("actions.updateCompany", "Employee found via RPC:", me);
       }
     } catch (e) {
-      console.log("[actions.updateCompany] RPC fallback failed, trying direct query");
+      logger.debug("actions.updateCompany", "RPC fallback failed, trying direct query");
     }
 
     if (!me) {
@@ -1177,10 +1178,10 @@ const updateCompany = async (
         .single();
       me = empData as any;
       if (meErr || !me) {
-        console.error("[actions.updateCompany] employees lookup:", meErr?.message);
+        logger.error("actions.updateCompany", "employees lookup:", meErr?.message);
         return { success: false, message: "Unauthorized" };
       }
-      console.log("[actions.updateCompany] Employee found via direct query:", me);
+      logger.debug("actions.updateCompany", "Employee found via direct query:", me);
     }
 
     // 3) Rollen prüfen
@@ -1190,24 +1191,24 @@ const updateCompany = async (
       .eq("employee_id", me.id);
 
     if (rolesErr) {
-      console.error("[actions.updateCompany] roles lookup:", rolesErr.message);
+      logger.error("actions.updateCompany", "roles lookup:", rolesErr.message);
       return { success: false, message: "Forbidden" };
     }
-    console.log("[actions.updateCompany] User roles:", myRoles);
+    logger.debug("actions.updateCompany", "User roles:", myRoles);
 
     const amIAdmin = !!myRoles?.some((r) => r.role_id === 1);
     if (!amIAdmin) {
-      console.error("[actions.updateCompany] User is not admin");
+      logger.error("actions.updateCompany", "User is not admin");
       return { success: false, message: "Forbidden: Admin role required" };
     }
-    console.log("[actions.updateCompany] Admin permissions verified");
+    logger.debug("actions.updateCompany", "Admin permissions verified");
 
     // 4) Nur die eigene Firma darf aktualisiert werden
     if (me.client_id !== id) {
-      console.error("[actions.updateCompany] client mismatch", { mine: me.client_id, target: id });
+      logger.error("actions.updateCompany", `client mismatch - mine: ${me.client_id}, target: ${id}`);
       return { success: false, message: "Forbidden: Wrong company" };
     }
-    console.log("[actions.updateCompany] Company ownership verified");
+    logger.debug("actions.updateCompany", "Company ownership verified");
 
     // 5) Service-Role Client (Server-side)
     const admin = createAdmin(
@@ -1215,7 +1216,7 @@ const updateCompany = async (
       import.meta.env.SUPABASE_KEY!,
       { auth: { persistSession: false } }
     );
-    console.log("[actions.updateCompany] Admin client created");
+    logger.debug("actions.updateCompany", "Admin client created");
 
     // 5.5) Get current client data for Stripe sync
     const { data: currentClient } = await admin
@@ -1239,7 +1240,7 @@ const updateCompany = async (
     if (typeof isActive === "boolean") {
       payload.isActive = isActive;
     }
-    console.log("[actions.updateCompany] Update payload prepared:", payload);
+    logger.debug("actions.updateCompany", "Update payload prepared:", payload);
 
     // 7) Update ausführen
     const { data, error } = await admin
@@ -1252,15 +1253,15 @@ const updateCompany = async (
       .single();
 
     if (error) {
-      console.error("[actions.updateCompany] update error:", error.message);
+      logger.error("actions.updateCompany", "update error:", error.message);
       return { success: false, message: `Database error: ${error.message}` };
     }
 
     if (!data) {
-      console.error("[actions.updateCompany] No data returned from update");
+      logger.error("actions.updateCompany", "No data returned from update");
       return { success: false, message: "Company not found or update failed" };
     }
-    console.log("[actions.updateCompany] Company updated:", data);
+    logger.debug("actions.updateCompany", "Company updated:", data);
 
     // 8) Sync changes to Stripe customer profile
     if (currentClient?.stripe_customer_id) {
@@ -1279,7 +1280,7 @@ const updateCompany = async (
             country: address_country ?? currentClient.address_country ?? ''
           };
 
-          console.log("[actions.updateCompany] Syncing to Stripe:", stripeUpdates);
+          logger.debug("actions.updateCompany", "Syncing to Stripe:", stripeUpdates);
           
           const response = await fetch(`${apiUrl}/client/sync-stripe-customer`, {
             method: 'POST',
@@ -1292,18 +1293,18 @@ const updateCompany = async (
 
           const result = await response.json();
           if (result.success) {
-            console.log("[actions.updateCompany] Stripe customer synced");
+            logger.debug("actions.updateCompany", "Stripe customer synced");
           } else {
-            console.warn("[actions.updateCompany] Failed to sync Stripe:", result.error);
+            logger.warn("actions.updateCompany", "Failed to sync Stripe:", result.error);
           }
         }
       } catch (stripeErr: any) {
-        console.warn("[actions.updateCompany] Stripe sync warning:", stripeErr?.message);
+        logger.warn("actions.updateCompany", "Stripe sync warning:", stripeErr?.message);
         // Don't fail the entire operation if Stripe sync fails
       }
     }
 
-    console.log("[actions.updateCompany] ok");
+    logger.info("actions.updateCompany", "ok");
 
     // Log activity
     try {
@@ -1325,7 +1326,7 @@ const updateCompany = async (
       data,
     };
   } catch (e: any) {
-    console.error("[actions.updateCompany] unexpected:", e?.message ?? e);
+    logger.error("actions.updateCompany", "unexpected:", e?.message ?? e);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -1344,23 +1345,23 @@ const saveRegistrationProgress = async (
   { reg_nonce, step, payload }: z.infer<typeof saveRegistrationProgressSchema>,
   context: ActionAPIContext
 ) => {
-  console.log("[actions.saveRegistrationProgress] start", { reg_nonce, step });
+  logger.debug("actions.saveRegistrationProgress", "start", { reg_nonce, step });
   try {
     const ssr = createSSR({ request: context.request, cookies: context.cookies });
-    console.log("[actions.saveRegistrationProgress] SSR client created");
+    logger.debug("actions.saveRegistrationProgress", "SSR client created");
     
     const { data: { user } } = await ssr.auth.getUser();
     if (!user) {
-      console.error("[actions.saveRegistrationProgress] No authenticated user");
+      logger.error("actions.saveRegistrationProgress", "No authenticated user");
       // Allow anonymous draft sessions if you prefer. For now, require auth.
       return { success: false, message: "Unauthorized" };
     }
-    console.log("[actions.saveRegistrationProgress] User authenticated:", user.id);
+    logger.debug("actions.saveRegistrationProgress", `User authenticated: ${user.id}`);
 
     const admin = createAdmin(import.meta.env.SUPABASE_URL!, import.meta.env.SUPABASE_KEY!, {
       auth: { persistSession: false },
     });
-    console.log("[actions.saveRegistrationProgress] Admin client created");
+    logger.debug("actions.saveRegistrationProgress", "Admin client created");
 
     // Security check: Verify nonce ownership before upsert
     // Fetch existing session for this nonce
@@ -1372,11 +1373,7 @@ const saveRegistrationProgress = async (
 
     // If session exists and user_id doesn't match the current authenticated user, abort
     if (existingSession && existingSession.user_id !== user.id) {
-      console.error("[actions.saveRegistrationProgress] Security violation: IDOR attempt on reg_nonce", {
-        nonce: reg_nonce,
-        owner: existingSession.user_id,
-        requester: user.id
-      });
+      logger.error("actions.saveRegistrationProgress", `Security violation: IDOR attempt on reg_nonce - nonce: ${reg_nonce}, owner: ${existingSession.user_id}, requester: ${user.id}`);
       return { success: false, message: "Invalid session" };
     }
 
@@ -1395,14 +1392,14 @@ const saveRegistrationProgress = async (
       );
 
     if (error) {
-      console.error("[actions.saveRegistrationProgress] upsert error:", error.message);
+      logger.error("actions.saveRegistrationProgress", "upsert error:", error.message);
       return { success: false, message: error.message };
     }
     
-    console.log("[actions.saveRegistrationProgress] Registration progress saved");
+    logger.debug("actions.saveRegistrationProgress", "Registration progress saved");
     return { success: true };
   } catch (e: any) {
-    console.error("[actions.saveRegistrationProgress] unexpected:", e?.message ?? e);
+    logger.error("actions.saveRegistrationProgress", "unexpected:", e?.message ?? e);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -1423,9 +1420,9 @@ const registerCreateAccount = async (
   { reg_nonce, first_name, last_name, email, password, captchaToken }: z.infer<typeof registerCreateAccountSchema>,
   context: ActionAPIContext
 ) => {
-  console.log("[actions.registerCreateAccount] start", { reg_nonce, email });
+  logger.debug("actions.registerCreateAccount", "start", { reg_nonce, email });
   const ssr = createSSR({ request: context.request, cookies: context.cookies });
-  console.log("[actions.registerCreateAccount] SSR client created");
+  logger.debug("actions.registerCreateAccount", "SSR client created");
 
   // 1) Try sign up
   const signUpRes = await ssr.auth.signUp({
@@ -1437,11 +1434,11 @@ const registerCreateAccount = async (
       emailRedirectTo: undefined, // no verification now
     },
   });
-  console.log("[actions.registerCreateAccount] Sign up attempt completed");
+  logger.debug("actions.registerCreateAccount", "Sign up attempt completed");
 
   // 2) Handle signup errors
   if (signUpRes.error) {
-    console.error("[actions.registerCreateAccount] Signup error:", signUpRes.error.message);
+    logger.error("actions.registerCreateAccount", "Signup error:", signUpRes.error.message);
     // If user already exists, return specific error
     if (signUpRes.error.message.includes("already registered") || signUpRes.error.message.includes("already exists")) {
       return { success: false, message: "An account with this email already exists. Please sign in instead." };
@@ -1451,18 +1448,18 @@ const registerCreateAccount = async (
 
   // 3) If no session was created, something went wrong
   if (!signUpRes.data.session && !signUpRes.data.user) {
-    console.error("[actions.registerCreateAccount] No session or user created");
+    logger.error("actions.registerCreateAccount", "No session or user created");
     return { success: false, message: "Failed to create account. Please try again." };
   }
 
-  console.log("[actions.registerCreateAccount] Account created successfully");
+  logger.debug("actions.registerCreateAccount", "Account created successfully");
 
   // 3) Persist registration session progress
   try {
     const admin = createAdmin(import.meta.env.SUPABASE_URL!, import.meta.env.SUPABASE_KEY!, {
       auth: { persistSession: false },
     });
-    console.log("[actions.registerCreateAccount] Admin client created for session persistence");
+    logger.debug("actions.registerCreateAccount", "Admin client created for session persistence");
     
     await admin
       .from("registration_sessions")
@@ -1476,12 +1473,12 @@ const registerCreateAccount = async (
         },
         { onConflict: "reg_nonce" }
       );
-    console.log("[actions.registerCreateAccount] Registration session persisted");
+    logger.debug("actions.registerCreateAccount", "Registration session persisted");
   } catch (e: any) {
-    console.warn("[actions.registerCreateAccount] Session persistence failed:", e?.message);
+    logger.warn("actions.registerCreateAccount", "Session persistence failed:", e?.message);
   }
 
-  console.log("[actions.registerCreateAccount] ok");
+  logger.info("actions.registerCreateAccount", "ok");
   return { success: true, nextStep: 2 };
 };
 
@@ -1514,16 +1511,16 @@ const registerCreateCompany = async (
   }: z.infer<typeof registerCreateCompanySchema>,
   context: ActionAPIContext
 ) => {
-  console.log("[actions.registerCreateCompany] start", { reg_nonce, name });
+  logger.debug("actions.registerCreateCompany", "start", { reg_nonce, name });
   const ssr = createSSR({ request: context.request, cookies: context.cookies });
-  console.log("[actions.registerCreateCompany] SSR client created");
+  logger.debug("actions.registerCreateCompany", "SSR client created");
   
   const { data: { user } } = await ssr.auth.getUser();
   if (!user) {
-    console.error("[actions.registerCreateCompany] No authenticated user");
+    logger.error("actions.registerCreateCompany", "No authenticated user");
     return { success: false, message: "Unauthorized" };
   }
-  console.log("[actions.registerCreateCompany] User authenticated:", user.id);
+  logger.debug("actions.registerCreateCompany", `User authenticated: ${user.id}`);
 
   // 1) Try SECURITY DEFINER RPC first
   try {
@@ -1536,30 +1533,30 @@ const registerCreateCompany = async (
       website: website ?? null,
       vat: vat ?? null,
     };
-    console.log("[actions.registerCreateCompany] Attempting RPC with payload:", payload);
+    logger.debug("actions.registerCreateCompany", "Attempting RPC with payload:", payload);
     
     const rpc = await ssr.rpc("register_client_and_owner", { payload }).single();
     if (!rpc.error && rpc.data) {
       const clientData = rpc.data as { id: number; name: string };
-      console.log("[actions.registerCreateCompany] RPC successful, client created:", clientData);
+      logger.debug("actions.registerCreateCompany", "RPC successful, client created:", clientData);
       
       await upsertRegSession(reg_nonce, user.id, 2, {
         company: { id: clientData.id, name: clientData.name },
       });
-      console.log("[actions.registerCreateCompany] Registration session updated via RPC path");
+      logger.debug("actions.registerCreateCompany", "Registration session updated via RPC path");
       
       return { success: true, client_id: clientData.id };
     }
     
     // If RPC fails, return error immediately - do NOT attempt fallback
-    console.error("[actions.registerCreateCompany] RPC failed:", rpc.error);
+    logger.error("actions.registerCreateCompany", "RPC failed:", rpc.error);
     return { 
       success: false, 
       message: "Failed to create company. Please try again or contact support." 
     };
 
   } catch (e: any) {
-    console.error("[actions.registerCreateCompany] RPC exception:", e?.message);
+    logger.error("actions.registerCreateCompany", "RPC exception:", e?.message);
     return { success: false, message: "Unexpected error during registration" };
   }
 };
@@ -1568,7 +1565,7 @@ const registerCreateCompany = async (
  * HELPER: Upsert Registration Session
  */
 async function upsertRegSession(reg_nonce: string, user_id: string, last_step: number, extra: Record<string, any>) {
-  console.log("[upsertRegSession] start", { reg_nonce, user_id, last_step });
+  logger.debug("upsertRegSession", "start", { reg_nonce, user_id, last_step });
   try {
     const admin = createAdmin(import.meta.env.SUPABASE_URL!, import.meta.env.SUPABASE_KEY!, {
       auth: { persistSession: false },
@@ -1585,9 +1582,9 @@ async function upsertRegSession(reg_nonce: string, user_id: string, last_step: n
         },
         { onConflict: "reg_nonce" }
       );
-    console.log("[upsertRegSession] Registration session upserted successfully");
+    logger.debug("upsertRegSession", "Registration session upserted successfully");
   } catch (e: any) {
-    console.error("[upsertRegSession] Failed to upsert registration session:", e?.message);
+    logger.error("upsertRegSession", "Failed to upsert registration session:", e?.message);
   }
 }
 
@@ -1604,11 +1601,11 @@ async function createStripeCustomerForClient(
     vat?: string;
   }
 ) {
-  console.log("[createStripeCustomerForClient] start", { client_id, name: clientData.name });
+  logger.debug("createStripeCustomerForClient", "start", { client_id, name: clientData.name });
   
   // Only attempt Stripe creation if API key is configured
   if (!import.meta.env.STRIPE_SECRET_KEY) {
-    console.warn("[createStripeCustomerForClient] Stripe secret key not configured, skipping");
+    logger.warn("createStripeCustomerForClient", "Stripe secret key not configured, skipping");
     return;
   }
 
@@ -1659,7 +1656,7 @@ async function createStripeCustomerForClient(
     }
 
     const customer = await stripe.customers.create(customerData);
-    console.log("[createStripeCustomerForClient] Stripe customer created:", customer.id);
+    logger.debug("createStripeCustomerForClient", `Stripe customer created: ${customer.id}`);
 
     // Update client record with Stripe customer ID
     const admin = createAdmin(import.meta.env.SUPABASE_URL!, import.meta.env.SUPABASE_KEY!, {
@@ -1672,16 +1669,16 @@ async function createStripeCustomerForClient(
       .eq('id', client_id);
 
     if (updateError) {
-      console.error("[createStripeCustomerForClient] Failed to save Stripe ID to database:", updateError.message);
+      logger.error("createStripeCustomerForClient", "Failed to save Stripe ID to database:", updateError.message);
       // Stripe customer was created but we couldn't save the ID
       // This should be handled manually later
     } else {
-      console.log("[createStripeCustomerForClient] Stripe customer ID saved to database");
+      logger.debug("createStripeCustomerForClient", "Stripe customer ID saved to database");
     }
 
-    console.log("[createStripeCustomerForClient] Stripe customer created:", customer.id);
+    logger.debug("createStripeCustomerForClient", `Stripe customer created: ${customer.id}`);
   } catch (e: any) {
-    console.error("[createStripeCustomerForClient] Error creating Stripe customer:", e?.message);
+    logger.error("createStripeCustomerForClient", "Error creating Stripe customer:", e?.message);
     // Don't fail registration if Stripe integration fails
   }
 }
@@ -1756,7 +1753,7 @@ const registerCreateSupportMailbox = async (
       client_email_id: result.data.id 
     };
   } catch (e: any) {
-    console.error("[actions.registerCreateSupportMailbox] Error:", e);
+    logger.error("actions.registerCreateSupportMailbox", "Error:", e);
     return { success: false, message: e.message };
   }
 };
@@ -1778,7 +1775,7 @@ const registerTestSupportMailbox = async (
   input: z.infer<typeof registerTestSupportMailboxSchema>,
   context: ActionAPIContext
 ) => {
-  console.log("[actions.registerTestSupportMailbox] Testing mailbox connection for:", input.email_address);
+  logger.debug("actions.registerTestSupportMailbox", `Testing mailbox connection for: ${input.email_address}`);
   
   try {
     // Get authenticated user session
@@ -1810,7 +1807,7 @@ const registerTestSupportMailbox = async (
     const result = await response.json();
     
     if (!response.ok || !result.success) {
-      console.error("[actions.registerTestSupportMailbox] Backend test failed:", result);
+      logger.error("actions.registerTestSupportMailbox", "Backend test failed:", result);
       return {
         success: false,
         message: result.message || 'Connection test failed',
@@ -1819,14 +1816,14 @@ const registerTestSupportMailbox = async (
       };
     }
     
-    console.log("[actions.registerTestSupportMailbox] Backend test successful");
+    logger.debug("actions.registerTestSupportMailbox", "Backend test successful");
     return {
       success: true,
       message: result.message,
       details: result.details,
     };
   } catch (e: any) {
-    console.error("[actions.registerTestSupportMailbox] Unexpected error:", e);
+    logger.error("actions.registerTestSupportMailbox", "Unexpected error:", e);
     return { 
       success: false, 
       message: "Connection test failed: " + (e?.message || "Unknown error") 
@@ -1854,13 +1851,13 @@ const unassignAllTickets = async (
   { employeeId }: UnassignAllTicketsInput,
   context: ActionAPIContext
 ) => {
-  console.log("[actions.unassignAllTickets] start, employeeId:", employeeId);
+  logger.debug("actions.unassignAllTickets", `start, employeeId: ${employeeId}`);
   try {
     // 1) Verify the current user is authenticated
     const ssr = createSSR({ request: context.request, cookies: context.cookies });
     const { data: { user }, error: userErr } = await ssr.auth.getUser();
     if (userErr || !user) {
-      console.error("[actions.unassignAllTickets] getUser error:", userErr?.message);
+      logger.error("actions.unassignAllTickets", "getUser error:", userErr?.message);
       return { success: false, message: "Unauthorized" };
     }
 
@@ -1872,7 +1869,7 @@ const unassignAllTickets = async (
       .single();
 
     if (meErr || !me) {
-      console.error("[actions.unassignAllTickets] employee lookup:", meErr?.message);
+      logger.error("actions.unassignAllTickets", "employee lookup:", meErr?.message);
       return { success: false, message: "Employee not found" };
     }
 
@@ -1883,7 +1880,7 @@ const unassignAllTickets = async (
 
     const amIAdmin = roles?.some((r) => r.role_id === 1);
     if (!amIAdmin) {
-      console.error("[actions.unassignAllTickets] User is not admin");
+      logger.error("actions.unassignAllTickets", "User is not admin");
       return { success: false, message: "Forbidden" };
     }
 
@@ -1901,12 +1898,12 @@ const unassignAllTickets = async (
       .single();
 
     if (targetErr || !targetEmployee) {
-      console.error("[actions.unassignAllTickets] target lookup:", targetErr?.message);
+      logger.error("actions.unassignAllTickets", "target lookup:", targetErr?.message);
       return { success: false, message: "Target employee not found" };
     }
 
     if (targetEmployee.client_id !== me.client_id) {
-      console.error("[actions.unassignAllTickets] Client mismatch");
+      logger.error("actions.unassignAllTickets", "Client mismatch");
       return { success: false, message: "Cannot modify employees from other clients" };
     }
 
@@ -1925,11 +1922,11 @@ const unassignAllTickets = async (
       .eq("client_id", me.client_id);
 
     if (updateErr) {
-      console.error("[actions.unassignAllTickets] update error:", updateErr.message);
+      logger.error("actions.unassignAllTickets", "update error:", updateErr.message);
       return { success: false, message: "Failed to unassign tickets" };
     }
 
-    console.log("[actions.unassignAllTickets] Unassigned", affectedCount, "customers from employee", employeeId);
+    logger.info("actions.unassignAllTickets", `Unassigned ${affectedCount} customers from employee ${employeeId}`);
 
     // Log activity
     try {
@@ -1952,7 +1949,7 @@ const unassignAllTickets = async (
     };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[actions.unassignAllTickets] unexpected:", message);
+    logger.error("actions.unassignAllTickets", "unexpected:", message);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -1974,13 +1971,13 @@ const reassignAllTickets = async (
   { fromEmployeeId, toEmployeeId }: ReassignAllTicketsInput,
   context: ActionAPIContext
 ) => {
-  console.log("[actions.reassignAllTickets] start, from:", fromEmployeeId, "to:", toEmployeeId);
+  logger.debug("actions.reassignAllTickets", `start, from: ${fromEmployeeId}, to: ${toEmployeeId}`);
   try {
     // 1) Verify the current user is authenticated
     const ssr = createSSR({ request: context.request, cookies: context.cookies });
     const { data: { user }, error: userErr } = await ssr.auth.getUser();
     if (userErr || !user) {
-      console.error("[actions.reassignAllTickets] getUser error:", userErr?.message);
+      logger.error("actions.reassignAllTickets", "getUser error:", userErr?.message);
       return { success: false, message: "Unauthorized" };
     }
 
@@ -1992,7 +1989,7 @@ const reassignAllTickets = async (
       .single();
 
     if (meErr || !me) {
-      console.error("[actions.reassignAllTickets] employee lookup:", meErr?.message);
+      logger.error("actions.reassignAllTickets", "employee lookup:", meErr?.message);
       return { success: false, message: "Employee not found" };
     }
 
@@ -2003,7 +2000,7 @@ const reassignAllTickets = async (
 
     const amIAdmin = roles?.some((r) => r.role_id === 1);
     if (!amIAdmin) {
-      console.error("[actions.reassignAllTickets] User is not admin");
+      logger.error("actions.reassignAllTickets", "User is not admin");
       return { success: false, message: "Forbidden" };
     }
 
@@ -2022,7 +2019,7 @@ const reassignAllTickets = async (
       .single();
 
     if (fromErr || !fromEmployee || fromEmployee.client_id !== me.client_id) {
-      console.error("[actions.reassignAllTickets] from employee invalid");
+      logger.error("actions.reassignAllTickets", "from employee invalid");
       return { success: false, message: "Source employee not found or access denied" };
     }
 
@@ -2033,7 +2030,7 @@ const reassignAllTickets = async (
       .single();
 
     if (toErr || !toEmployee || toEmployee.client_id !== me.client_id) {
-      console.error("[actions.reassignAllTickets] to employee invalid");
+      logger.error("actions.reassignAllTickets", "to employee invalid");
       return { success: false, message: "Target employee not found or access denied" };
     }
 
@@ -2052,11 +2049,11 @@ const reassignAllTickets = async (
       .eq("client_id", me.client_id);
 
     if (updateErr) {
-      console.error("[actions.reassignAllTickets] update error:", updateErr.message);
+      logger.error("actions.reassignAllTickets", "update error:", updateErr.message);
       return { success: false, message: "Failed to reassign tickets" };
     }
 
-    console.log("[actions.reassignAllTickets] Reassigned", affectedCount, "customers from", fromEmployeeId, "to", toEmployeeId);
+    logger.info("actions.reassignAllTickets", `Reassigned ${affectedCount} customers from ${fromEmployeeId} to ${toEmployeeId}`);
 
     // Log activity
     try {
@@ -2079,7 +2076,7 @@ const reassignAllTickets = async (
     };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[actions.reassignAllTickets] unexpected:", message);
+    logger.error("actions.reassignAllTickets", "unexpected:", message);
     return { success: false, message: "Unexpected error" };
   }
 };
@@ -2093,7 +2090,7 @@ const getEmployeesForReassignment = async (
   _input: {},
   context: ActionAPIContext
 ) => {
-  console.log("[actions.getEmployeesForReassignment] start");
+  logger.debug("actions.getEmployeesForReassignment", "start");
   try {
     const ssr = createSSR({ request: context.request, cookies: context.cookies });
     const { data: { user }, error: userErr } = await ssr.auth.getUser();
@@ -2124,7 +2121,7 @@ const getEmployeesForReassignment = async (
     };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[actions.getEmployeesForReassignment] error:", message);
+    logger.error("actions.getEmployeesForReassignment", "error:", message);
     return { success: false, message: "Unexpected error", employees: [] };
   }
 };
@@ -2144,16 +2141,16 @@ export const server = {
   // User sign-out - clears session cookies
   signOut: defineAction({
     handler: async (_input, context) => {
-      console.log("[actions.signOut] start");
+      logger.debug("actions.signOut", "start");
       const supabase = createSSR({ request: context.request, cookies: context.cookies });
-      console.log("[actions.signOut] SSR client created");
+      logger.debug("actions.signOut", "SSR client created");
       
       // Save session for activity logging before sign-out destroys it
       const { data: { session: preSignOutSession } } = await supabase.auth.getSession();
       
       const { error } = await supabase.auth.signOut();
       if (error) {
-        console.error("[actions.signOut] error:", error);
+        logger.error("actions.signOut", "error:", error);
         return { success: false, message: error.message };
       }
 
@@ -2165,7 +2162,7 @@ export const server = {
         });
       }
 
-      console.log("[actions.signOut] ok");
+      logger.info("actions.signOut", "ok");
       return { success: true, message: "Successfully signed out" };
     },
   }),

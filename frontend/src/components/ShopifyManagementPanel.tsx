@@ -74,7 +74,6 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
   initialData,
 }) => {
   const { t } = useTranslation('manage');
-  console.log('[SHOPIFY_PANEL] Component mounted with data:', { clientId, initialData });
 
   // Connection state - tracks whether Shopify is currently connected
   const [isConnected, setIsConnected] = useState(initialData.shopifyConnected);
@@ -111,8 +110,6 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
     
     // Handle success
     if (params.get('shopify') === 'connected') {
-      console.log('[SHOPIFY_PANEL] OAuth connection successful');
-      
       // Show success notification
       toast.success(t('shopify.oauthConnectedTitle'), {
         description: t('shopify.oauthConnectedDescription')
@@ -131,7 +128,9 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
     const status = params.get('status');
     const message = params.get('message');
     if (status === 'error') {
-      console.error('[SHOPIFY_PANEL] OAuth connection failed:', message);
+      if (import.meta.env.DEV) {
+        console.error('[SHOPIFY_PANEL] OAuth connection failed:', message);
+      }
       
       toast.error(t('shopify.connectionTestFailed'), {
         description: message || t('shopify.unknownError')
@@ -147,7 +146,6 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
    * Resets the form state before opening
    */
   const handleOpenConnectDialog = () => {
-    console.log('[SHOPIFY_PANEL] Opening connect dialog');
     setShopName('');
     setShopNameError('');
     setIsConnectDialogOpen(true);
@@ -165,8 +163,6 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
    * @returns true if valid, false otherwise
    */
   const validateShopName = (name: string): boolean => {
-    console.log('[SHOPIFY_PANEL] Validating shop name:', name);
-    
     // Check for empty input
     if (!name || name.trim() === '') {
       setShopNameError(t('shopify.storeNameRequired'));
@@ -200,15 +196,11 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
    */
   const handleConnectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('[SHOPIFY_PANEL] Connect form submitted');
 
     // Validate shop name before proceeding
     if (!validateShopName(shopName)) {
-      console.log('[SHOPIFY_PANEL] Validation failed');
       return;
     }
-
-    console.log('[SHOPIFY_PANEL] Validation passed, redirecting to OAuth');
 
     // Close the dialog
     setIsConnectDialogOpen(false);
@@ -223,20 +215,23 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
       const data = await apiClient.get(`/shopify/install?shop=${encodeURIComponent(shopName.trim())}`);
 
       if (data.success && data.redirectUrl) {
-        console.log('[SHOPIFY_PANEL] Redirecting to Shopify:', data.redirectUrl);
         // Redirect browser to the Shopify OAuth URL
         if (typeof window !== 'undefined') {
           window.location.href = data.redirectUrl;
         }
       } else {
-        console.error('[SHOPIFY_PANEL] Install failed:', data);
+        if (import.meta.env.DEV) {
+          console.error('[SHOPIFY_PANEL] Install failed:', data);
+        }
         toast.dismiss();
         toast.error(t('shopify.connectionTestFailed'), { // Generic error or add a new key
           description: data.message || 'Failed to initiate connection'
         });
       }
     } catch (err) {
-      console.error('[SHOPIFY_PANEL] Install error:', err);
+      if (import.meta.env.DEV) {
+        console.error('[SHOPIFY_PANEL] Install error:', err);
+      }
       toast.dismiss();
       toast.error(t('shopify.unknownError'), {
         description: err instanceof Error ? err.message : 'Network error'
@@ -255,7 +250,6 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
    * Displays results including product and order counts
    */
   const handleTestConnection = async () => {
-    console.log('[SHOPIFY_PANEL] Test connection button clicked');
     setIsTesting(true);
     setTestResult(null);
 
@@ -263,27 +257,23 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
     const toastId = toast.loading(t('shopify.testingConnection'));
 
     try {
-      console.log('[SHOPIFY_PANEL] Sending test request for client:', clientId);
-      
       // ✅ FIXED: apiClient.get() returns JSON already, no need to call .json()
       // ✅ FIXED: Auth token automatically added by apiClient
       const data = await apiClient.get('/shopify/test');
-
-      console.log('[SHOPIFY_PANEL] Test response received:', data);
 
       // Store test results for display
       setTestResult(data);
 
       if (data.success) {
-        console.log('[SHOPIFY_PANEL] Connection test successful');
-        
         // Update loading toast to success with data
         toast.success(t('shopify.connectionSuccessful'), {
           id: toastId,
           description: t('shopify.connectionSuccessCount', { products: data.productsCount || 0, orders: data.ordersCount || 0 })
         });
       } else {
-        console.error('[SHOPIFY_PANEL] Connection test failed:', data.error);
+        if (import.meta.env.DEV) {
+          console.error('[SHOPIFY_PANEL] Connection test failed:', data.error);
+        }
         
         // Update loading toast to error
         toast.error(t('shopify.connectionTestFailed'), {
@@ -292,7 +282,9 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
         });
       }
     } catch (err) {
-      console.error('[SHOPIFY_PANEL] Exception during connection test:', err);
+      if (import.meta.env.DEV) {
+        console.error('[SHOPIFY_PANEL] Exception during connection test:', err);
+      }
       
       // Handle network or other errors
       toast.error(t('shopify.connectionTestFailed'), {
@@ -301,7 +293,6 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
       });
     } finally {
       setIsTesting(false);
-      console.log('[SHOPIFY_PANEL] Test connection completed');
     }
   };
 
@@ -309,7 +300,6 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
    * Opens the disconnect confirmation dialog
    */
   const handleOpenDisconnectDialog = () => {
-    console.log('[SHOPIFY_PANEL] Opening disconnect confirmation dialog');
     setIsDisconnectDialogOpen(true);
   };
 
@@ -322,7 +312,6 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
    * - Remove the connection for all customer tickets
    */
   const handleDisconnectConfirm = async () => {
-    console.log('[SHOPIFY_PANEL] User confirmed disconnect');
     setIsDisconnecting(true);
     setIsDisconnectDialogOpen(false);
 
@@ -330,18 +319,12 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
     const toastId = toast.loading(t('shopify.disconnecting'));
 
     try {
-      console.log('[SHOPIFY_PANEL] Sending disconnect request for client:', clientId);
-
       // ✅ FIXED: Remove clientId from body - comes from auth token
       // ✅ FIXED: apiClient.post() returns JSON already, no need to call .json()
       const data = await apiClient.post('/shopify/disconnect');
 
-      console.log('[SHOPIFY_PANEL] Disconnect response:', data);
-
       // ✅ FIXED: Check data.success instead of response.ok (apiClient throws on !ok)
       if (data.success) {
-        console.log('[SHOPIFY_PANEL] Successfully disconnected');
-        
         // Update loading toast to success
         toast.success(t('shopify.disconnectSuccess'), {
           id: toastId,
@@ -355,12 +338,13 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
         setTestResult(null);
         
         // Reload page to refresh all data from database
-        console.log('[SHOPIFY_PANEL] Reloading page');
         setTimeout(() => {
           window.location.reload();
         }, 1000);
       } else {
-        console.error('[SHOPIFY_PANEL] Disconnect failed:', data);
+        if (import.meta.env.DEV) {
+          console.error('[SHOPIFY_PANEL] Disconnect failed:', data);
+        }
         
         // Show error toast
         toast.error(t('shopify.disconnectFailed'), {
@@ -369,7 +353,9 @@ const ShopifyManagementPanel: React.FC<ShopifyManagementPanelProps> = ({
         });
       }
     } catch (err) {
-      console.error('[SHOPIFY_PANEL] Exception during disconnect:', err);
+      if (import.meta.env.DEV) {
+        console.error('[SHOPIFY_PANEL] Exception during disconnect:', err);
+      }
       
       // Handle network or other errors
       toast.error(t('shopify.disconnectFailed'), {

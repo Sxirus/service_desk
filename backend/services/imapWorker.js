@@ -112,7 +112,7 @@ async function pollNewEmailsSinceLast(config, confirmation) {
             authTimeout: 15000,
             connTimeout: 30000,
             tlsOptions: {
-                rejectUnauthorized: false,
+                rejectUnauthorized: process.env.NODE_ENV === 'production'
             }
         });
 

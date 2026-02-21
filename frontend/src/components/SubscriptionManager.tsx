@@ -65,19 +65,20 @@ export default function SubscriptionManager() {
       if (params.get('upgrade') === 'success' && sessionId) {
         // Complete the subscription in the database
         try {
-          console.log('[SubscriptionManager] Completing subscription with session:', sessionId);
           const completeResponse = await apiClient.post('/client/complete-subscription', {
             sessionId
           });
 
           if (!completeResponse.success) {
-            console.error('[SubscriptionManager] Failed to complete subscription:', completeResponse.error);
+            if (import.meta.env.DEV) {
+              console.error('[SubscriptionManager] Failed to complete subscription:', completeResponse.error);
+            }
             setError(completeResponse.error || 'Failed to complete subscription');
-          } else {
-            console.log('[SubscriptionManager] Subscription completed successfully');
           }
         } catch (e: any) {
-          console.error('[SubscriptionManager] Error completing subscription:', e);
+          if (import.meta.env.DEV) {
+            console.error('[SubscriptionManager] Error completing subscription:', e);
+          }
           setError(e?.message || 'Failed to complete subscription');
         }
         
@@ -99,30 +100,24 @@ export default function SubscriptionManager() {
     setError(null);
     try {
       const response = await apiClient.get('/client/subscription');
-      console.log('[SubscriptionManager] Received data:', response);
-      if (response.subscription) {
-        console.log('[SubscriptionManager] Period dates:', {
-          start: response.subscription.currentPeriodStart,
-          end: response.subscription.currentPeriodEnd,
-          startType: typeof response.subscription.currentPeriodStart,
-          endType: typeof response.subscription.currentPeriodEnd
-        });
-      }
       setData(response);
 
       // Fetch usage stats if on free tier
       if (response.tier === 'free') {
         try {
           const statsResponse = await apiClient.get('/client/usage-stats');
-          console.log('[SubscriptionManager] Usage stats:', statsResponse);
           setUsageStats(statsResponse);
         } catch (statsErr: any) {
-          console.error('[SubscriptionManager] Failed to fetch usage stats:', statsErr);
+          if (import.meta.env.DEV) {
+            console.error('[SubscriptionManager] Failed to fetch usage stats:', statsErr);
+          }
           // Don't fail the whole component if stats fail
         }
       }
     } catch (e: any) {
-      console.error('[SubscriptionManager] Error:', e);
+      if (import.meta.env.DEV) {
+        console.error('[SubscriptionManager] Error:', e);
+      }
       setError(e?.message || t('subscription.failedToLoadSubscriptionData'));
     } finally {
       setLoading(false);

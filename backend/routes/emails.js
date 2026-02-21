@@ -497,10 +497,10 @@ router.post('/sendMail',
         insertedData: data
       });
     } catch (err) {
-      console.error('[EMAILS] Send error:', err);
+      logger.error('Email send failed:', err);
       res.status(500).json({ 
         success: false, 
-        error: 'Email konnte nicht gesendet werden: ' + err.message 
+        error: 'Failed to send email. Please try again later.', 
       });
     }
   }
@@ -675,12 +675,21 @@ router.post('/updateStatus',
  * Authentication: Required
  * Authorization: All customers must belong to user's client
  */
+const MAX_BULK_SIZE = 100;
+
 router.post('/bulkUpdateStatus',
   authenticate,
   async (req, res) => {
     try {
       const client_id = req.user.client_id;
       const { customerIds, status } = req.body;
+
+      if (customerIds.length > MAX_BULK_SIZE) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `Maximum ${MAX_BULK_SIZE} items allowed per request` 
+        });
+      }
 
       // Validate status value
       const validStatuses = ['new', 'open', 'waiting', 'resolved'];
@@ -740,44 +749,6 @@ router.post('/bulkUpdateStatus',
       console.error('[EMAILS] Server error:', err.message);
       res.status(500).json({ success: false, error: 'Server error' });
     }
-  }
-);
-
-/**
- * @deprecated Use updateStatus instead. Kept for backwards compatibility.
- * Mark all emails from a customer as read (sets status to 'resolved')
- * POST /api/emails/makeRead?customerId=123
- * 
- * Authentication: Required
- * Authorization: Customer must belong to user's client
- */
-router.post('/makeRead', 
-  authenticate,
-  validateId('customerId'),
-  authorizeCustomerAccess,
-  async (req, res) => {
-    try {
-      const customerId = req.sanitized.customerId;
-
-      console.log('[EMAILS] [DEPRECATED] Marking emails as read for customer:', customerId);
-
-      // Update both read flag (for backwards compat) and new status
-      const { data, error } = await supabase
-        .from('incoming-mails')
-        .update({ read: true, status: 'resolved' })
-        .eq('customer_id', customerId);
-
-      if (error) {
-        console.error('[EMAILS] Supabase error:', error.message);
-        return res.status(500).json({ success: false, error: error.message });
-      }
-
-      console.log('[EMAILS] Emails marked as read (status: resolved)');
-      res.json({ success: true });
-    } catch (err) {
-      console.error('[EMAILS] Server error:', err.message);
-      res.status(500).json({ success: false, error: 'Servererror' });
-    } 
   }
 );
 
@@ -982,44 +953,6 @@ async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
   }
 }
 
-// In emails.js - Temporäre Debug-Route
-router.get('/debug-client-emails', 
-  authenticate,
-  async (req, res) => {
-    try {
-      const client_id = req.user.client_id;
-      
-      const { data, error } = await supabase
-        .from('client-emails')
-        .select(`
-          id,
-          email_address,
-          client_id,
-          active,
-          provider_id,
-          "email-provider" (
-            name,
-            smtp,
-            smtp_port
-          )
-        `)
-        .eq('client_id', client_id)
-        .eq('active', true);
-
-      console.log('[DEBUG] Client emails for client_id:', client_id, data);
-
-      res.json({
-        success: true,
-        client_id,
-        emails: data,
-        count: data?.length || 0
-      });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  }
-);
-
 //getting a signed url for an attachment
 router.post('/getSignedUrl',
   authenticate,
@@ -1118,7 +1051,7 @@ router.post('/test-mailbox',
             host: imap,
             port: imap_port,
             tls: imap_port === 993,
-            tlsOptions: { rejectUnauthorized: false },
+            tlsOptions: { rejectUnauthorized: process.env.NODE_ENV !== 'production' },
             connTimeout: 10000,
             authTimeout: 10000,
           });
@@ -1159,7 +1092,7 @@ router.post('/test-mailbox',
             pass: password,
           },
           tls: {
-            rejectUnauthorized: false,
+            rejectUnauthorized: process.env.NODE_ENV !== 'production',
           },
           connectionTimeout: 10000,
           greetingTimeout: 10000,

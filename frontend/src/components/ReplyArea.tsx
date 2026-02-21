@@ -603,7 +603,6 @@ export const ReplyArea: React.FC<ReplyAreaProps> = ({
       }
 
       // Status is now updated as part of sendMail endpoint
-      // No need for separate makeRead call
 
       toast.success(t('tickets.emailSentSuccess'));
 
