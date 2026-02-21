@@ -5,25 +5,27 @@
  * Provides XSS protection and input sanitization
  */
 
+import DOMPurify from 'isomorphic-dompurify';
+
 /**
  * Sanitize HTML to prevent XSS attacks
- * Removes dangerous tags and attributes
+ * Uses DOMPurify instead of regex (S3 fix: regex-based sanitization is inherently bypassable)
  */
 export function sanitizeHtml(input: string): string {
-  // Remove script tags
-  let sanitized = input.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-  
-  // Remove event handlers (onclick, onerror, etc.)
-  sanitized = sanitized.replace(/on\w+\s*=\s*["'][^"']*["']/gi, '');
-  sanitized = sanitized.replace(/on\w+\s*=\s*[^\s>]*/gi, '');
-  
-  // Remove javascript: protocol
-  sanitized = sanitized.replace(/javascript:/gi, '');
-  
-  // Remove data: protocol (can be used for XSS)
-  sanitized = sanitized.replace(/data:text\/html/gi, '');
-  
-  return sanitized;
+  return DOMPurify.sanitize(input, {
+    ALLOWED_TAGS: [
+      'p', 'br', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'del',
+      'ul', 'ol', 'li', 'blockquote', 'a', 'hr', 'span', 'div',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'pre', 'code',
+      'table', 'thead', 'tbody', 'tr', 'th', 'td',
+      'img',
+    ],
+    ALLOWED_ATTR: [
+      'href', 'target', 'rel', 'style', 'class',
+      'src', 'alt', 'width', 'height',
+    ],
+    ALLOW_DATA_ATTR: false,
+  });
 }
 
 /**

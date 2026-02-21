@@ -26,6 +26,11 @@ if (!pageContext) {
 
 const { authContext, sidebarData } = pageContext;
 
+// Admin gate – subscription management is admin-only
+if (!authContext.isAdmin) {
+  return new Response('Forbidden', { status: 403 });
+}
+
 // Get session for API calls
 const { data: { session } } = await supabase.auth.getSession();
 if (!session) return Astro.redirect("/");

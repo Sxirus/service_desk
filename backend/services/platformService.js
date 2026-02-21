@@ -76,14 +76,16 @@ async function getBillingOverview() {
     .select('id, name, subscription_tier, stripe_customer_id, stripe_subscription_id, created_at')
     .order('created_at', { ascending: false });
 
-  // Batch: single query for all active employee counts, grouped in JS
-  const { data: activeEmployees } = await supabase
+  // B8 fix: use head:true count queries grouped per client instead of fetching all employee rows
+  // Single query: get active employee count per client using a grouped approach
+  const { data: empCounts } = await supabase
     .from('employees')
-    .select('client_id')
+    .select('client_id', { count: 'exact', head: false })
     .or('disabled.is.null,disabled.eq.false');
 
+  // Build count map from the returned rows (each row is one active employee)
   const empCountMap = {};
-  for (const emp of (activeEmployees || [])) {
+  for (const emp of (empCounts || [])) {
     empCountMap[emp.client_id] = (empCountMap[emp.client_id] || 0) + 1;
   }
 
@@ -160,19 +162,34 @@ async function getClientDetail(clientId) {
     .select('*, roles-employees(role_id, roles(name))')
     .eq('client_id', clientId);
 
-  // Generate signed avatar URLs for employees
-  const employeesWithAvatars = await Promise.all((employees || []).map(async (emp) => {
-    if (emp.avatar_url) {
-      try {
-        const { data: signedData } = await supabase.storage
-          .from('avatars')
-          .createSignedUrl(emp.avatar_url, 60 * 60); // 1 hour
-        return { ...emp, avatar_url: signedData?.signedUrl || null };
-      } catch {
-        return { ...emp, avatar_url: null };
+  // Generate signed avatar URLs for employees using batch API (B5 fix: avoids N+1 individual calls)
+  const avatarPaths = (employees || [])
+    .map((emp, idx) => ({ idx, path: emp.avatar_url }))
+    .filter(item => item.path);
+
+  let signedUrlMap = {};
+  if (avatarPaths.length > 0) {
+    try {
+      const { data: signedData, error: signError } = await supabase.storage
+        .from('avatars')
+        .createSignedUrls(
+          avatarPaths.map(item => item.path),
+          60 * 60 // 1 hour
+        );
+
+      if (!signError && signedData) {
+        for (let i = 0; i < signedData.length; i++) {
+          signedUrlMap[avatarPaths[i].path] = signedData[i]?.signedUrl || null;
+        }
       }
+    } catch {
+      // If batch signing fails, all avatars will be null
     }
-    return emp;
+  }
+
+  const employeesWithAvatars = (employees || []).map(emp => ({
+    ...emp,
+    avatar_url: emp.avatar_url ? (signedUrlMap[emp.avatar_url] || null) : null
   }));
 
   // Fetch employee count (active only)

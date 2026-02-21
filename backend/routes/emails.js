@@ -14,7 +14,27 @@ const { authorizeCustomerAccess } = require('../middleware/authorization');
 const { validateId, sanitizeText, sanitizeHtmlField } = require('../middleware/validation');
 const multer = require('multer');
 const { logFromReq, ACTIONS } = require('../services/activityLogger');
-const upload = multer();
+// S11 fix: add file type filter to reject dangerous executables
+const ALLOWED_MIME_TYPES = [
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+  'application/pdf',
+  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain', 'text/csv', 'text/html',
+  'application/zip', 'application/x-zip-compressed',
+  'message/rfc822', 'application/octet-stream'
+];
+const upload = multer({
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`File type ${file.mimetype} is not allowed`));
+    }
+  }
+});
 const { storeOutgoingAttachmentsInDB } = require('../services/attachments/outgoing');
 const encryption = require('../utils/encryption');
 const logger = require('../utils/logger');

@@ -9,6 +9,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require("../config/supabase");
 const { authenticate } = require('../middleware/auth');
+const { authorizeAdmin } = require('../middleware/authorization');
 const { validateId } = require('../middleware/validation');
 const { logFromReq, ACTIONS } = require('../services/activityLogger');
 const logger = require('../utils/logger');
@@ -288,6 +289,7 @@ router.get('/getInboxEmails',
  */
 router.post('/createInbox',
   authenticate,
+  authorizeAdmin,
   async (req, res) => {
     try {
       const { name, description } = req.body;
@@ -336,6 +338,7 @@ router.post('/createInbox',
  */
 router.put('/updateInbox',
   authenticate,
+  authorizeAdmin,
   validateId('inbox_id'),
   async (req, res) => {
     try {
@@ -400,6 +403,7 @@ router.put('/updateInbox',
  */
 router.delete('/deleteInbox',
   authenticate,
+  authorizeAdmin,
   validateId('inbox_id'),
   async (req, res) => {
     try {
@@ -452,6 +456,7 @@ router.delete('/deleteInbox',
  */
 router.post('/addGroup',
   authenticate,
+  authorizeAdmin,
   validateId('inbox_id'),
   validateId('group_id'),
   async (req, res) => {
@@ -500,6 +505,7 @@ router.post('/addGroup',
  */
 router.delete('/removeGroup',
   authenticate,
+  authorizeAdmin,
   validateId('inbox_id'),
   validateId('group_id'),
   async (req, res) => {
@@ -546,6 +552,7 @@ router.delete('/removeGroup',
  */
 router.post('/setFilters',
   authenticate,
+  authorizeAdmin,
   validateId('inbox_id'),
   async (req, res) => {
     try {

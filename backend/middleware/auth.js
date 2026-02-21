@@ -62,7 +62,7 @@ async function authenticate(req, res, next) {
       client_id: employee.client_id
     };
 
-    logger.info('[AUTH] User authenticated', {
+    logger.debug('[AUTH] User authenticated', {
       employee_id: employee.id,
       client_id: employee.client_id,
       email: user.email

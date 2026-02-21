@@ -10,6 +10,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require("../config/supabase");
 const { authenticate } = require('../middleware/auth');
+const { authorizeAdmin } = require('../middleware/authorization');
 const logger = require('../utils/logger');
 
 /**
@@ -34,6 +35,7 @@ const logger = require('../utils/logger');
  */
 router.get('/email-stats', 
   authenticate,
+  authorizeAdmin,
   async (req, res) => {
     try {
       const client_id = req.user.client_id;
@@ -77,127 +79,50 @@ router.get('/email-stats',
 
       logger.info('[ANALYTICS] Fetching email stats for client', { client_id, from, to });
 
-      // Get customer IDs for this client with a reasonable limit
-      // For very large clients, we use direct client_id filtering on incoming-mails
-      const MAX_CUSTOMER_IDS = 10000;
-      const { data: clientCustomers, error: customersError } = await supabase
-        .from('customers')
-        .select('id')
-        .eq('client_id', client_id)
-        .limit(MAX_CUSTOMER_IDS);
+      // Use database-level aggregation via RPC (B4 fix: avoids loading all rows into JS)
+      const { data: dailyRows, error: rpcError } = await supabase
+        .rpc('get_daily_email_stats', {
+          p_client_id: client_id,
+          p_from: from,
+          p_to: to
+        });
 
-      if (customersError) {
-        logger.error('[ANALYTICS] Error fetching customer IDs', { error: customersError.message });
+      if (rpcError) {
+        logger.error('[ANALYTICS] RPC error fetching email stats', { error: rpcError.message });
         return res.status(500).json({ 
           error: 'Database Error',
-          message: 'Failed to fetch customer data' 
+          message: 'Failed to fetch email statistics' 
         });
       }
 
-      const customerIds = (clientCustomers || []).map(c => c.id);
-
-      // Handle case where client has no customers
-      if (customerIds.length === 0) {
-        logger.info('[ANALYTICS] No customers found for client', { client_id });
-        return res.json({
-          totalIncoming: 0,
-          totalSent: 0,
-          averageIncomingPerDay: 0,
-          averageSentPerDay: 0,
-          dailyStats: []
-        });
+      // Build a map from RPC results for quick lookup
+      const rpcMap = new Map();
+      for (const row of (dailyRows || [])) {
+        rpcMap.set(row.day, { incoming: Number(row.incoming), sent: Number(row.sent) });
       }
 
-      // Fetch email data in parallel
-      const [
-        { data: incomingEmails, error: incomingError },
-        { data: sentEmails, error: sentError }
-      ] = await Promise.all([
-        // Incoming emails
-        supabase
-          .from('incoming-mails')
-          .select('send_at')
-          .eq('client_id', client_id)
-          .gte('send_at', from)
-          .lte('send_at', to)
-          .order('send_at', { ascending: true }),
-        
-        // Sent emails (filtered by customer IDs)
-        supabase
-          .from('sent-mail')
-          .select('send_at, customer_id')
-          .in('customer_id', customerIds)
-          .gte('send_at', from)
-          .lte('send_at', to)
-          .order('send_at', { ascending: true })
-      ]);
+      // Initialize all dates in range with zero counts, then overlay RPC data
+      const dailyStats = [];
+      let totalIncoming = 0;
+      let totalSent = 0;
 
-      if (incomingError) {
-        logger.error('[ANALYTICS] Error fetching incoming emails', { error: incomingError.message });
-        return res.status(500).json({ 
-          error: 'Database Error',
-          message: 'Failed to fetch incoming emails' 
-        });
-      }
-
-      if (sentError) {
-        logger.error('[ANALYTICS] Error fetching sent emails', { error: sentError.message });
-        return res.status(500).json({ 
-          error: 'Database Error',
-          message: 'Failed to fetch sent emails' 
-        });
-      }
-
-      // Process data
-      const totalIncoming = incomingEmails?.length ?? 0;
-      const totalSent = sentEmails?.length ?? 0;
-
-      // Create daily stats map
-      const dailyStatsMap = new Map();
-
-      // Initialize all dates in range with zero counts
       for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
         const dateKey = d.toISOString().split('T')[0];
-        dailyStatsMap.set(dateKey, {
+        const rpcEntry = rpcMap.get(dateKey) || { incoming: 0, sent: 0 };
+        totalIncoming += rpcEntry.incoming;
+        totalSent += rpcEntry.sent;
+        dailyStats.push({
           date: dateKey,
-          incoming: 0,
-          sent: 0
+          incoming: rpcEntry.incoming,
+          sent: rpcEntry.sent
         });
       }
-
-      // Count incoming emails by day
-      if (incomingEmails) {
-        for (const email of incomingEmails) {
-          const dateKey = email.send_at.split('T')[0];
-          const stats = dailyStatsMap.get(dateKey);
-          if (stats) {
-            stats.incoming++;
-          }
-        }
-      }
-
-      // Count sent emails by day
-      if (sentEmails) {
-        for (const email of sentEmails) {
-          const dateKey = email.send_at.split('T')[0];
-          const stats = dailyStatsMap.get(dateKey);
-          if (stats) {
-            stats.sent++;
-          }
-        }
-      }
-
-      // Convert map to sorted array
-      const dailyStats = Array.from(dailyStatsMap.values()).sort(
-        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-      );
 
       // Calculate averages
       const dayCount = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
       const averageIncomingPerDay = dayCount > 0 ? Math.round(totalIncoming / dayCount) : 0;
 
       // Calculate average response time
-      // For simplicity, using a placeholder calculation
       // TODO: Implement proper response time tracking based on ticket creation/first response
       const averageResponseTime = totalSent > 0 ? Math.round(24 / (totalSent / totalIncoming + 1)) : 0;
 
@@ -237,6 +162,7 @@ router.get('/email-stats',
  */
 router.get('/employee-stats',
   authenticate,
+  authorizeAdmin,
   async (req, res) => {
     try {
       const client_id = req.user.client_id;
@@ -263,11 +189,22 @@ router.get('/employee-stats',
 
       logger.info('[ANALYTICS] Fetching employee stats for client', { client_id, from, to });
 
-      // Get all employees for this client
-      const { data: employees, error: employeesError } = await supabase
-        .from('employees')
-        .select('id, name')
-        .eq('client_id', client_id);
+      // Use database-level aggregation via RPC (B4 fix)
+      const [
+        { data: employees, error: employeesError },
+        { data: rpcRows, error: rpcError }
+      ] = await Promise.all([
+        supabase
+          .from('employees')
+          .select('id, name')
+          .eq('client_id', client_id),
+        supabase
+          .rpc('get_employee_email_stats', {
+            p_client_id: client_id,
+            p_from: from,
+            p_to: to
+          })
+      ]);
 
       if (employeesError) {
         logger.error('[ANALYTICS] Error fetching employees', { error: employeesError.message });
@@ -277,61 +214,26 @@ router.get('/employee-stats',
         });
       }
 
-      // Get all customers for this client
-      const { data: customers, error: customersError } = await supabase
-        .from('customers')
-        .select('id')
-        .eq('client_id', client_id);
-
-      if (customersError) {
-        logger.error('[ANALYTICS] Error fetching customers', { error: customersError.message });
+      if (rpcError) {
+        logger.error('[ANALYTICS] RPC error fetching employee stats', { error: rpcError.message });
         return res.status(500).json({ 
           error: 'Database Error',
-          message: 'Failed to fetch customer data' 
+          message: 'Failed to fetch employee email statistics' 
         });
       }
 
-      const customerIds = (customers || []).map(c => c.id);
-
-      if (customerIds.length === 0) {
-        return res.json({ summary: [], daily: [] });
-      }
-
-      // Get sent emails for date range with dates
-      const { data: sentEmails, error: sentError } = await supabase
-        .from('sent-mail')
-        .select('employee_id, customer_id, send_at')
-        .in('customer_id', customerIds)
-        .gte('send_at', from)
-        .lte('send_at', to)
-        .order('send_at', { ascending: true });
-
-      if (sentError) {
-        logger.error('[ANALYTICS] Error fetching sent emails', { error: sentError.message });
-        return res.status(500).json({ 
-          error: 'Database Error',
-          message: 'Failed to fetch sent emails' 
-        });
-      }
-
-      // Build employee map
-      const employeeMap = new Map();
+      // Build summary from RPC results
+      const employeeStatsMap = new Map();
       (employees || []).forEach(emp => {
-        employeeMap.set(emp.id, emp.name || 'Unknown');
-      });
-
-      // Count total emails per employee for summary
-      const employeeStats = new Map();
-      (employees || []).forEach(emp => {
-        employeeStats.set(emp.id, {
+        employeeStatsMap.set(emp.id, {
           employee_id: emp.id,
           employee_name: emp.name || 'Unknown',
           email_count: 0
         });
       });
 
-      // Build daily stats per employee
-      const dailyEmployeeMap = new Map(); // key: "date-employeeId"
+      // Build daily stats from RPC results, also accumulate summary totals
+      const dailyEmployeeMap = new Map();
 
       // Initialize all dates for all employees
       for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
@@ -347,27 +249,28 @@ router.get('/employee-stats',
         });
       }
 
-      // Count emails
-      (sentEmails || []).forEach(email => {
-        if (email.employee_id) {
-          // Update summary
-          const stats = employeeStats.get(email.employee_id);
-          if (stats) {
-            stats.email_count++;
-          }
+      // Populate from RPC rows
+      for (const row of (rpcRows || [])) {
+        const empId = row.employee_id;
+        const dateKey = row.day;
+        const count = Number(row.cnt);
 
-          // Update daily
-          const dateKey = email.send_at.split('T')[0];
-          const key = `${dateKey}-${email.employee_id}`;
-          const dailyStats = dailyEmployeeMap.get(key);
-          if (dailyStats) {
-            dailyStats.count++;
-          }
+        // Update summary
+        const stats = employeeStatsMap.get(empId);
+        if (stats) {
+          stats.email_count += count;
         }
-      });
+
+        // Update daily
+        const key = `${dateKey}-${empId}`;
+        const daily = dailyEmployeeMap.get(key);
+        if (daily) {
+          daily.count = count;
+        }
+      }
 
       // Convert to arrays
-      const summary = Array.from(employeeStats.values())
+      const summary = Array.from(employeeStatsMap.values())
         .sort((a, b) => b.email_count - a.email_count);
 
       const daily = Array.from(dailyEmployeeMap.values())
@@ -398,6 +301,7 @@ router.get('/employee-stats',
  */
 router.get('/response-times',
   authenticate,
+  authorizeAdmin,
   async (req, res) => {
     // TODO: Implement response time analytics
     res.status(501).json({ 
@@ -422,6 +326,7 @@ router.get('/response-times',
  */
 router.get('/status-stats',
   authenticate,
+  authorizeAdmin,
   async (req, res) => {
     try {
       const client_id = req.user.client_id;
@@ -447,32 +352,27 @@ router.get('/status-stats',
 
       logger.info('[ANALYTICS] Fetching status stats for client', { client_id, from, to });
 
-      // Fetch all emails with their current status
-      const { data: emails, error: emailsError } = await supabase
-        .from('incoming-mails')
-        .select('status, send_at')
-        .eq('client_id', client_id)
-        .gte('send_at', from)
-        .lte('send_at', to);
+      // Use database-level aggregation via RPC (B4 fix)
+      const { data: rpcRows, error: rpcError } = await supabase
+        .rpc('get_status_stats', {
+          p_client_id: client_id,
+          p_from: from,
+          p_to: to
+        });
 
-      if (emailsError) {
-        logger.error('[ANALYTICS] Error fetching emails', { error: emailsError.message });
+      if (rpcError) {
+        logger.error('[ANALYTICS] RPC error fetching status stats', { error: rpcError.message });
         return res.status(500).json({ 
           error: 'Database Error',
-          message: 'Failed to fetch email data' 
+          message: 'Failed to fetch status statistics' 
         });
       }
 
-      // Calculate status distribution
-      const statusDistribution = {
-        new: 0,
-        open: 0,
-        waiting: 0,
-        resolved: 0
-      };
-
-      // Initialize daily stats map
+      // Calculate status distribution and daily stats from RPC results
+      const statusDistribution = { new: 0, open: 0, waiting: 0, resolved: 0 };
       const dailyStatusMap = new Map();
+
+      // Initialize all dates in range
       for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
         const dateKey = d.toISOString().split('T')[0];
         dailyStatusMap.set(dateKey, {
@@ -484,19 +384,19 @@ router.get('/status-stats',
         });
       }
 
-      // Process emails
-      if (emails) {
-        for (const email of emails) {
-          const status = email.status || 'new';
-          if (statusDistribution.hasOwnProperty(status)) {
-            statusDistribution[status]++;
-          }
+      // Populate from RPC rows
+      for (const row of (rpcRows || [])) {
+        const status = row.status || 'new';
+        const count = Number(row.cnt);
+        const dateKey = row.day;
 
-          const dateKey = email.send_at.split('T')[0];
-          const dailyStats = dailyStatusMap.get(dateKey);
-          if (dailyStats && dailyStats.hasOwnProperty(status)) {
-            dailyStats[status]++;
-          }
+        if (statusDistribution.hasOwnProperty(status)) {
+          statusDistribution[status] += count;
+        }
+
+        const dailyStats = dailyStatusMap.get(dateKey);
+        if (dailyStats && dailyStats.hasOwnProperty(status)) {
+          dailyStats[status] = count;
         }
       }
 
@@ -525,6 +425,7 @@ router.get('/status-stats',
  */
 router.get('/agent-performance',
   authenticate,
+  authorizeAdmin,
   async (req, res) => {
     // TODO: Implement agent performance analytics
     res.status(501).json({ 

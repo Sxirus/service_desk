@@ -178,7 +178,7 @@ function validateShopifyHMAC(req, res, next) {
     .update(message)
     .digest('hex');
 
-  if (generatedHash !== hmac) {
+  if (!crypto.timingSafeEqual(Buffer.from(generatedHash, 'utf8'), Buffer.from(hmac, 'utf8'))) {
     logger.error('[VALIDATION] HMAC validation failed');
     return res.status(403).json({ 
       error: 'Forbidden',

@@ -172,8 +172,59 @@ async function authorizeEmployeeAccess(req, res, next) {
   }
 }
 
+/**
+ * Verify that the authenticated user has admin role (role_id = 1)
+ * Used to protect admin-only routes (settings, groups, inboxes, email-accounts, analytics)
+ * 
+ * Must be used AFTER the authenticate middleware
+ */
+async function authorizeAdmin(req, res, next) {
+  try {
+    const employeeId = req.user?.employee_id;
+
+    if (!employeeId) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'User not authenticated'
+      });
+    }
+
+    const { data: roles, error } = await supabase
+      .from('roles-employees')
+      .select('role_id')
+      .eq('employee_id', employeeId);
+
+    if (error) {
+      logger.error('[AUTHZ] Admin role check failed', { error: error.message, employee_id: employeeId });
+      return res.status(500).json({
+        error: 'Internal Server Error',
+        message: 'Authorization check failed'
+      });
+    }
+
+    const isAdmin = roles?.some(r => r.role_id === 1);
+
+    if (!isAdmin) {
+      logger.warn('[AUTHZ] Admin access denied', { employee_id: employeeId });
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Admin privileges required'
+      });
+    }
+
+    next();
+  } catch (error) {
+    logger.error('[AUTHZ] Admin authorization error', { error: error.message });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Authorization check failed'
+    });
+  }
+}
+
 module.exports = {
   authorizeClient,
   authorizeCustomerAccess,
-  authorizeEmployeeAccess
+  authorizeEmployeeAccess,
+  authorizeAdmin
 };

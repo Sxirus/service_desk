@@ -9,6 +9,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require("../config/supabase");
 const { authenticate } = require('../middleware/auth');
+const { authorizeAdmin } = require('../middleware/authorization');
 const { validateId } = require('../middleware/validation');
 const { logFromReq, ACTIONS } = require('../services/activityLogger');
 const logger = require('../utils/logger');
@@ -207,6 +208,7 @@ router.get('/getGroupMembers',
  */
 router.post('/createGroup',
   authenticate,
+  authorizeAdmin,
   async (req, res) => {
     try {
       const { name, description } = req.body;
@@ -253,6 +255,7 @@ router.post('/createGroup',
  */
 router.put('/updateGroup',
   authenticate,
+  authorizeAdmin,
   validateId('group_id'),
   async (req, res) => {
     try {
@@ -323,6 +326,7 @@ router.put('/updateGroup',
  */
 router.delete('/deleteGroup',
   authenticate,
+  authorizeAdmin,
   validateId('group_id'),
   async (req, res) => {
     try {
@@ -383,6 +387,7 @@ router.delete('/deleteGroup',
  */
 router.post('/addMember',
   authenticate,
+  authorizeAdmin,
   validateId('group_id'),
   validateId('employee_id'),
   async (req, res) => {
@@ -471,6 +476,7 @@ router.post('/addMember',
  */
 router.delete('/removeMember',
   authenticate,
+  authorizeAdmin,
   validateId('group_id'),
   validateId('employee_id'),
   async (req, res) => {

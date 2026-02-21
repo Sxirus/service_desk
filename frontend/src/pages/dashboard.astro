@@ -1,10 +1,10 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { createClient } from "../lib/supabase.ts";
-import { checkPlatformAdmin } from "../lib/auth-helpers.ts";
+import { getCompletePageContext } from "../lib/auth-helpers.ts";
+import { serverApiCall } from "../utils/api.ts";
 import { NewEmailPopover } from "@/components/NewEmailPopover";
 import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
-import { getApiUrl } from "../lib/api-config";
 
 // Get translations
 const lang = getLanguageFromCookies(Astro.cookies);
@@ -22,195 +22,70 @@ const supabase = createClient({
     cookies: Astro.cookies,
 });
 
-// Get the currently authenticated user
-const { data: { user }, error: userErr } = await supabase.auth.getUser();
-if (userErr || !user) return Astro.redirect("/");
+// Use canonical auth helper instead of inline manual auth (normalised auth pattern)
+const pageContext = await getCompletePageContext(supabase, Astro.cookies);
+if (!pageContext) return Astro.redirect("/");
 
-// Get session for API calls
+const { authContext, sidebarData, isPlatformAdmin } = pageContext;
+
+// Get session for server-side API calls
 const { data: { session } } = await supabase.auth.getSession();
 if (!session) return Astro.redirect("/");
 
-// "me" ermitteln. Erst RPC, sonst Fallback
-let me: { id: number; client_id: number } | null = null;
-
-try {
-  const rpc = await supabase.rpc("get_my_employee").single();
-  if (!rpc.error) me = rpc.data as any;
-} catch {}
-
-if (!me) {
-  const res = await supabase
-    .from("employees")
-    .select("id, client_id")
-    .eq("user_id", user.id)
-    .single();
-  me = res.data as any;
-  if (res.error) {
-    console.error("[dashboard] employees lookup:", res.error.message);
-  }
-}
-
-if (!me) return Astro.redirect("/");
-
-// Fetch emails from the database for the individual employee
-const client_id = me.client_id;
-
-// SERVER-SIDE API CALL with auth token
-// Note: Remove client_id from query - it comes from the auth token now
+// Fetch emails from the API for the individual employee
 let customersJSON: any[] = [];
 let mails: any[] = [];
 
 try {
-  const result_customers = await fetch(getApiUrl(`/api/customers/getAssignedCustomers?employee_id=${me.id}`), {
-    headers: {
-      'Authorization': `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json'
-    }
-  });
-  
-  if (!result_customers.ok) {
-    console.error("[dashboard] Failed to fetch customers:", result_customers.status, await result_customers.text());
-  } else {
-    const customersResponse = await result_customers.json();
-    customersJSON = customersResponse.data || [];
-  }
-} catch (err) {
-  console.error("[dashboard] Error fetching customers:", err);
-}
+  const customersResponse = await serverApiCall(
+    `/customers/getAssignedCustomers?employee_id=${authContext.employee.id}`,
+    session.access_token
+  );
+  customersJSON = customersResponse.data || [];
+} catch { /* no assigned customers */ }
 
 const customers: number[] = customersJSON.map((c: any) => c.id);
 
 if (customers.length > 0) {
   try {
     const qs = customers.map(id => `ids=${encodeURIComponent(id)}`).join("&");
-    
-    const mailresult = await fetch(getApiUrl(`/api/emails/getMailsbyCustomerIds?${qs}`), {
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    if (!mailresult.ok) {
-      console.error("[dashboard] Failed to fetch mails:", mailresult.status, await mailresult.text());
-    } else {
-      const mailResponse = await mailresult.json();
-      mails = (mailResponse.data || []).map((mail: any) => ({
-        ...mail,
-        customer_name: mail.customers?.name || 'Unknown',
-        status: mail.status || 'new' // Fallback for backwards compatibility
-      }));
-    }
-  } catch (err) {
-    console.error("[dashboard] Error fetching mails:", err);
-  }
-}
-
-// Admin Rolle prüfen. Rolle 1 = admin
-const { data: myRoles, error: rolesErr } = await supabase
-  .from("roles-employees")
-  .select("role_id")
-  .eq("employee_id", me.id);
-
-if (rolesErr) {
-  console.error("[dashboard] roles lookup:", rolesErr.message);
-}
-
-const isAdmin = !!myRoles?.some((r) => r.role_id === 1);
-
-// Fetch employee's groups
-const { data: employeeGroupsJunction, error: groupsErr } = await supabase
-  .from('employee_group_members')
-  .select('group_id')
-  .eq('employee_id', me.id);
-
-if (groupsErr) {
-  console.error("[dashboard] groups lookup:", groupsErr.message);
-}
-
-let groupNames = '-';
-if (employeeGroupsJunction && employeeGroupsJunction.length > 0) {
-  const groupIds = employeeGroupsJunction.map(g => g.group_id);
-  const { data: groups } = await supabase
-    .from('employee_groups')
-    .select('name')
-    .in('id', groupIds);
-  groupNames = groups?.map(g => g.name).join(', ') || '-';
-}
-
-// Mitarbeiter-Info für Sidebar
-const { data: employees, error: empsErr } = await supabase
-  .from("employees")
-  .select("id, name, avatar_url")
-  .eq("client_id", me.client_id)
-  .order("name");
-
-if (empsErr) console.error("[dashboard] employees list:", empsErr.message);
-
-// Sidebar Infos
-const myEmployee = employees?.find((e) => e.id === me?.id);
-const meName = myEmployee?.name && myEmployee.name.trim() 
-  ? myEmployee.name 
-  : user?.email ?? t('user');
-const sidebarUser = {
-  name: meName,
-  email: user?.email ?? null,
-  avatarUrl: myEmployee?.avatar_url ?? null,
-};
-
-// Team Eintrag
-let firstTeam = null as null | { name: string; plan?: string | null };
-let subscriptionTier = 'Free Version';
-try {
-  const { data: clientRow, error: clientErr } = await supabase
-    .from("clients")
-    .select("id, name, subscription_tier")
-    .eq("id", me.client_id)
-    .single();
-  
-  console.log("[dashboard] Client query result:", { clientRow, clientErr });
-  
-  if (clientRow?.name) {
-    firstTeam = { name: clientRow.name, plan: "" };
-  }
-  if (clientRow?.subscription_tier) {
-    subscriptionTier = clientRow.subscription_tier;
-  }
-  
-  console.log("[dashboard] subscriptionTier set to:", subscriptionTier);
-} catch (err) {
-  console.error("[dashboard] Client fetch error:", err);
+    const mailResponse = await serverApiCall(
+      `/emails/getMailsbyCustomerIds?${qs}`,
+      session.access_token
+    );
+    mails = (mailResponse.data || []).map((mail: any) => ({
+      ...mail,
+      customer_name: mail.customers?.name || 'Unknown',
+      status: mail.status || 'new'
+    }));
+  } catch { /* no mails */ }
 }
 
 // Current user info for presence tracking
 const currentUserForPresence = {
-  id: String(me.id),
-  name: sidebarUser.name || 'Support Agent',
-  avatar_url: sidebarUser.avatarUrl || null
+  id: String(authContext.employee.id),
+  name: sidebarData.user.name || 'Support Agent',
+  avatar_url: sidebarData.user.avatarUrl || null
 };
-
-// Check if user is a platform admin
-const platformAdminContext = await checkPlatformAdmin(supabase, user.id);
-const isPlatformAdmin = platformAdminContext !== null;
 ---
 
 <BaseLayout title={t('pages.dashboard.pageTitle')}>
   <AdminShell client:load
-    user={sidebarUser}
-    firstTeam={firstTeam ?? undefined}
+    user={sidebarData.user}
+    firstTeam={sidebarData.team ?? undefined}
     crumbParentLabel={t('serviceDesk')}
     crumbParentHref="/"
     crumbCurrent={t('yourAssignedTickets')}
-    isAdmin={isAdmin}
+    isAdmin={authContext.isAdmin}
     isPlatformAdmin={isPlatformAdmin}
     currentPath="/dashboard"
-    employeeId={me.id}
-    clientId={me.client_id}
-    subscriptionTier={subscriptionTier}
+    employeeId={sidebarData.employeeId}
+    clientId={sidebarData.clientId}
+    subscriptionTier={sidebarData.subscriptionTier}
   >
     <div class="space-y-6">
       <!-- Limit Banner -->
-      <LimitBanner client:load tier={subscriptionTier} />
+      <LimitBanner client:load tier={sidebarData.subscriptionTier} />
 
       <!-- My Tickets Section -->
       <div class="bg-white mt-4 rounded-lg shadow-sm border p-6">

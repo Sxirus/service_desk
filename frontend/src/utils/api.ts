@@ -22,7 +22,10 @@ const supabase = createBrowserClient(
 
 /**
  * Get the current Supabase session
- * This is used to get the auth token for API requests
+ * Note: getSession() returns the locally-cached JWT. This is acceptable on the client
+ * side because the backend always verifies the token via supabase.auth.getUser() in the
+ * authenticate middleware. The session here is only used to extract the access_token
+ * for the Authorization header.
  */
 async function getSession() {
   const { data: { session } } = await supabase.auth.getSession();
@@ -54,8 +57,6 @@ export const apiClient = {
       ? endpoint 
       : `${this.baseURL}${endpoint}`;
 
-    console.log(`[apiClient] ${options.method || 'GET'} ${url}`);
-
     // Make request with auth token
     const response = await fetch(url, {
       ...options,
@@ -79,7 +80,6 @@ export const apiClient = {
         // If error response isn't JSON, use default message
       }
 
-      console.error(`[apiClient] Request failed:`, errorMessage);
       throw new Error(errorMessage);
     }
 
@@ -159,8 +159,6 @@ export const apiClient = {
     const url = endpoint.startsWith('http')
       ? endpoint
       : `${this.baseURL}${endpoint}`;
-    
-    console.log(`[apiClient] POST (multipart) ${url}`);
 
     const response = await fetch(url, {
       method: 'POST',
@@ -180,7 +178,6 @@ export const apiClient = {
       } catch {
         // If error response isn't JSON, use default message
       }
-      console.error(`[apiClient] FormData request failed:`, errorMessage);
       throw new Error(errorMessage);
     }
 

@@ -54,8 +54,8 @@ app.use('/api/', (req, res, next) => {
   // Stripe webhooks send raw body and cannot include custom headers
   if (req.originalUrl.startsWith('/api/webhooks/')) return next();
   
-  if (!req.headers['x-requested-with']) {
-    return res.status(403).json({ error: 'Missing CSRF header (X-Requested-With)' });
+  if (!req.headers['x-requested-with'] || req.headers['x-requested-with'] !== 'XMLHttpRequest') {
+    return res.status(403).json({ error: 'Missing or invalid CSRF header (X-Requested-With)' });
   }
   next();
 });
@@ -63,7 +63,7 @@ app.use('/api/', (req, res, next) => {
 // Add rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 1000 // Increased from 100 to 1000 to prevent 429s during active usage
+  max: 300 // Reduced from 1000 to 300 — stricter general rate limit (S5 fix)
 });
 app.use('/api/', limiter);
 

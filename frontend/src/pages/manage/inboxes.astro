@@ -26,9 +26,9 @@ if (!pageContext) {
 
 const { authContext, sidebarData } = pageContext;
 
-// Verify admin role
+// Verify admin role – return 403 instead of silent redirect
 if (!authContext.isAdmin) {
-  return Astro.redirect("/dashboard");
+  return new Response('Forbidden', { status: 403 });
 }
 
 // Get session for API calls

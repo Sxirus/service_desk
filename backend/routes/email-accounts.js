@@ -8,6 +8,7 @@ const router = express.Router();
 const supabase = require("../config/supabase");
 const encryption = require('../utils/encryption');
 const { authenticate } = require('../middleware/auth');
+const { authorizeAdmin } = require('../middleware/authorization');
 const { validateId } = require('../middleware/validation');
 const { stopWorkerById } = require('../services/workerManager');
 const { logFromReq, ACTIONS } = require('../services/activityLogger');
@@ -17,7 +18,7 @@ const logger = require('../utils/logger');
  * GET /api/email-accounts/providers
  * Fetch available email providers
  */
-router.get('/providers', authenticate, async (req, res) => {
+router.get('/providers', authenticate, authorizeAdmin, async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('email-provider')
@@ -36,7 +37,7 @@ router.get('/providers', authenticate, async (req, res) => {
  * GET /api/email-accounts
  * List all email accounts for the client
  */
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authenticate, authorizeAdmin, async (req, res) => {
     try {
         const client_id = req.user.client_id;
 
@@ -71,7 +72,7 @@ router.get('/', authenticate, async (req, res) => {
  * POST /api/email-accounts
  * Add a new email account
  */
-router.post('/', authenticate, async (req, res) => {
+router.post('/', authenticate, authorizeAdmin, async (req, res) => {
     try {
         const client_id = req.user.client_id;
         const { 
@@ -121,7 +122,7 @@ router.post('/', authenticate, async (req, res) => {
  * PATCH /api/email-accounts/:id
  * Update an existing account
  */
-router.patch('/:id', authenticate, validateId('id'), async (req, res) => {
+router.patch('/:id', authenticate, authorizeAdmin, validateId('id'), async (req, res) => {
     try {
         const { id } = req.params;
         const client_id = req.user.client_id;
@@ -169,7 +170,7 @@ router.patch('/:id', authenticate, validateId('id'), async (req, res) => {
  * DELETE /api/email-accounts/:id
  * Remove an account
  */
-router.delete('/:id', authenticate, validateId('id'), async (req, res) => {
+router.delete('/:id', authenticate, authorizeAdmin, validateId('id'), async (req, res) => {
     try {
         const { id } = req.params;
         const client_id = req.user.client_id;

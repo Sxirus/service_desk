@@ -9,6 +9,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require("../config/supabase");
 const { authenticate } = require('../middleware/auth');
+const { authorizeAdmin } = require('../middleware/authorization');
 const { sanitizeText, sanitizeHtmlField } = require('../middleware/validation');
 const { logFromReq, ACTIONS } = require('../services/activityLogger');
 const logger = require('../utils/logger');
@@ -19,6 +20,7 @@ const logger = require('../utils/logger');
  */
 router.post('/updateSignature', 
   authenticate,
+  authorizeAdmin,
   sanitizeHtmlField('signature', { required: false, maxLength: 50000 }),
   async (req, res) => {
     try {
@@ -55,6 +57,7 @@ router.post('/updateSignature',
  */
 router.post('/updateEmailConfig',
   authenticate,
+  authorizeAdmin,
   async (req, res) => {
     try {
       const client_id = req.user.client_id;
@@ -117,6 +120,7 @@ router.post('/updateEmailConfig',
 //updating the confirmation mail sent when a customer sends a mail to the client
 router.post('/updateConfirmMail', 
   authenticate,
+  authorizeAdmin,
   sanitizeText('subject', { required: false, maxLength: 500 }),
   sanitizeHtmlField('body', { required: false, maxLength: 100000 }),
   async (req, res) => {
@@ -153,7 +157,7 @@ router.post('/updateConfirmMail',
  * Get tracking settings
  * GET /api/settings/tracking
  */
-router.get('/tracking', authenticate, async (req, res) => {
+router.get('/tracking', authenticate, authorizeAdmin, async (req, res) => {
   try {
     const client_id = req.user.client_id;
     const { data, error } = await supabase
@@ -181,7 +185,7 @@ router.get('/tracking', authenticate, async (req, res) => {
  * Update tracking settings
  * POST /api/settings/tracking
  */
-router.post('/tracking', authenticate, async (req, res) => {
+router.post('/tracking', authenticate, authorizeAdmin, async (req, res) => {
   try {
     const client_id = req.user.client_id;
     const { providers, customProviders } = req.body;
@@ -217,6 +221,7 @@ router.post('/tracking', authenticate, async (req, res) => {
  */
 router.get('/getAllSettings',
   authenticate,
+  authorizeAdmin,
   async (req, res) => {
     try {
       const client_id = req.user.client_id;
@@ -276,6 +281,7 @@ router.get('/getAllSettings',
  */
 router.put('/updateSettings',
   authenticate,
+  authorizeAdmin,
   async (req, res) => {
     try {
       const client_id = req.user.client_id;
@@ -351,6 +357,7 @@ router.put('/updateSettings',
  */
 router.get('/getShopifyStatus',
   authenticate,
+  authorizeAdmin,
   async (req, res) => {
     try {
       const client_id = req.user.client_id;
@@ -384,6 +391,7 @@ router.get('/getShopifyStatus',
 //updating the confirmation mail mode setting
 router.post('/updateConfirmMailMode',
   authenticate,
+  authorizeAdmin,
   async (req, res) => {
     try {
       const client_id = req.user.client_id;
@@ -419,6 +427,7 @@ router.post('/updateConfirmMailMode',
 //updating the setting auto_assign_employee_on_send
 router.post('/updateAutoAssignEmployeeOnSend',
   authenticate,
+  authorizeAdmin,
   async (req, res) => {
     try {
       const client_id = req.user.client_id;

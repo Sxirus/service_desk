@@ -20,11 +20,16 @@ const supabase = createClient({
 const pageContext = await getCompletePageContext(supabase, Astro.cookies);
 
 if (!pageContext) {
-  console.error("[general-settings] Authentication failed, redirecting to login");
   return Astro.redirect("/");
 }
 
 const { authContext, sidebarData } = pageContext;
+
+// Admin gate – macros are admin-only
+if (!authContext.isAdmin) {
+  return new Response('Forbidden', { status: 403 });
+}
+
 const clientId = authContext.employee.client_id;
 
 //data fetching
