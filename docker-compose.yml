@@ -35,3 +35,24 @@ services:
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_KEY: ${SUPABASE_KEY}
 
+  imap-worker:
+    container_name: imap_worker
+    build:
+      context: ./imap-worker
+      dockerfile: Dockerfile
+    volumes:
+      - ./imap-worker:/app
+      - /app/node_modules
+    working_dir: /app
+    command: node index.js
+    environment:
+      NODE_ENV: development
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_KEY: ${SUPABASE_KEY}
+      ENCRYPTION_SECRET: ${ENCRYPTION_SECRET}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SYNC_INTERVAL_MS: ${SYNC_INTERVAL_MS:-60000}
+    depends_on:
+      - backend
+    restart: unless-stopped
+
