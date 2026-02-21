@@ -20,6 +20,7 @@ const {
   validateShopifyHMAC
 } = require('../middleware/validation');
 const { logActivity, logFromReq, ACTIONS } = require('../services/activityLogger');
+const logger = require('../utils/logger');
 
 /**
  * Initiate Shopify OAuth flow
@@ -39,7 +40,7 @@ router.get('/install',
       const shop = req.sanitized.shop;
       const clientId = req.user.client_id;
 
-      console.log('[SHOPIFY_INSTALL] Initiating OAuth for client:', clientId);
+      logger.info('[SHOPIFY_INSTALL] Initiating OAuth for client', { clientId });
 
       // Get OAuth credentials from environment
       const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID;
@@ -47,7 +48,7 @@ router.get('/install',
       const SCOPES = 'read_orders,read_all_orders,read_customers,read_products';
 
       if (!CLIENT_ID || !REDIRECT_URI) {
-        console.error('[SHOPIFY_INSTALL] Missing Shopify credentials in environment');
+        logger.error('[SHOPIFY_INSTALL] Missing Shopify credentials in environment');
         return res.status(500).json({ 
           error: 'Configuration Error',
           message: 'Shopify integration is not properly configured' 
@@ -62,7 +63,7 @@ router.get('/install',
       };
       const state = Buffer.from(JSON.stringify(stateData)).toString('base64');
 
-      console.log('[SHOPIFY_INSTALL] State created:', {
+      logger.info('[SHOPIFY_INSTALL] State created', {
         nonce: stateData.nonce,
         clientId: clientId
       });
@@ -83,7 +84,7 @@ router.get('/install',
         `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +
         `state=${state}`;
 
-      console.log('[SHOPIFY_INSTALL] Redirecting to Shopify OAuth');
+      logger.info('[SHOPIFY_INSTALL] Redirecting to Shopify OAuth');
 
       // Return redirect URL for client to follow
       res.json({ 
@@ -93,7 +94,7 @@ router.get('/install',
       });
 
     } catch (error) {
-      console.error('[SHOPIFY_INSTALL] Error:', error);
+      logger.error('[SHOPIFY_INSTALL] Error', { error: error.message });
       res.status(500).json({ 
         error: 'Internal Server Error',
         message: 'Failed to initiate OAuth flow' 
@@ -123,7 +124,7 @@ router.get('/callback',
       const { code, shop } = req.query;
       const stateData = req.sanitized.stateData;
 
-      console.log('[SHOPIFY_CALLBACK] Processing OAuth callback:', {
+      logger.info('[SHOPIFY_CALLBACK] Processing OAuth callback', {
         shop: shop,
         clientId: stateData.clientId
       });
@@ -137,7 +138,7 @@ router.get('/callback',
 
       // Validate required environment variables
       if (!process.env.SHOPIFY_CLIENT_ID || !process.env.SHOPIFY_SECRET) {
-        console.error('[SHOPIFY_CALLBACK] Missing Shopify credentials in environment');
+        logger.error('[SHOPIFY_CALLBACK] Missing Shopify credentials in environment');
         return res.status(500).json({ 
           error: 'Configuration Error',
           message: 'Shopify credentials not configured' 
@@ -169,14 +170,14 @@ router.get('/callback',
 
       if (!tokenResponse.ok) {
         const errorText = await tokenResponse.text();
-        console.error('[SHOPIFY_CALLBACK] Token exchange failed:', errorText);
+        logger.error('[SHOPIFY_CALLBACK] Token exchange failed', { error: errorText });
         throw new Error('Failed to exchange authorization code');
       }
 
       const tokenData = await tokenResponse.json();
       const { access_token, scope } = tokenData;
 
-      console.log('[SHOPIFY_CALLBACK] Access token received');
+      logger.info('[SHOPIFY_CALLBACK] Access token received');
 
       // Encrypt the access token before storing
       const encryptedToken = encryption.encrypt(access_token);
@@ -194,11 +195,11 @@ router.get('/callback',
           .eq('id', stateData.clientId);
 
         if (error) {
-          console.error('[SHOPIFY_CALLBACK] Database update failed:', error);
+          logger.error('[SHOPIFY_CALLBACK] Database update failed', { error: error.message });
           throw error;
         }
 
-        console.log('[SHOPIFY_CALLBACK] Shopify connected for client:', stateData.clientId);
+        logger.info('[SHOPIFY_CALLBACK] Shopify connected for client', { clientId: stateData.clientId });
       }
 
       logActivity({ clientId: stateData.clientId, employeeId: null, ...ACTIONS.SHOPIFY_CONNECTED, details: { shop } });
@@ -213,7 +214,7 @@ router.get('/callback',
       res.redirect(redirectUrl);
 
     } catch (error) {
-      console.error('[SHOPIFY_CALLBACK] Error:', error);
+      logger.error('[SHOPIFY_CALLBACK] Error', { error: error.message });
       
       // Clear OAuth state cookie on error
       res.clearCookie('shopify_oauth_state');
@@ -239,7 +240,7 @@ router.get('/test',
     try {
       const clientId = req.user.client_id;
 
-      console.log('[SHOPIFY_TEST] Testing connection for client:', clientId);
+      logger.info('[SHOPIFY_TEST] Testing connection for client', { clientId });
 
             // Fetch client's Shopify credentials
             const { data: client, error } = await supabase
@@ -295,20 +296,20 @@ router.get('/test',
 
       if (!shopifyResponse.ok) {
         const errorText = await shopifyResponse.text();
-        console.error('[SHOPIFY_TEST] API test failed:', errorText);
+        logger.error('[SHOPIFY_TEST] API test failed', { error: errorText });
         throw new Error(`Shopify API error: ${shopifyResponse.status}`);
       }
 
       const responseJson = await shopifyResponse.json();
       
       if (responseJson.errors) {
-        console.error('[SHOPIFY_TEST] GraphQL errors:', responseJson.errors);
+        logger.error('[SHOPIFY_TEST] GraphQL errors', { errors: responseJson.errors });
         throw new Error(`GraphQL error: ${responseJson.errors[0].message}`);
       }
 
       const shopData = responseJson.data;
 
-      console.log('[SHOPIFY_TEST] Connection successful');
+      logger.info('[SHOPIFY_TEST] Connection successful');
 
       res.json({
         success: true,
@@ -321,7 +322,7 @@ router.get('/test',
       });
 
     } catch (error) {
-      console.error('[SHOPIFY_TEST] Error:', error);
+      logger.error('[SHOPIFY_TEST] Error', { error: error.message });
       res.json({
         success: false,
         error: error.message
@@ -343,7 +344,7 @@ router.post('/disconnect',
     try {
       const clientId = req.user.client_id;
 
-      console.log('[SHOPIFY_DISCONNECT] Disconnecting client:', clientId);
+      logger.info('[SHOPIFY_DISCONNECT] Disconnecting client', { clientId });
 
       // Clear Shopify credentials
       const { error } = await supabase
@@ -357,11 +358,11 @@ router.post('/disconnect',
         .eq('id', clientId);
 
       if (error) {
-        console.error('[SHOPIFY_DISCONNECT] Database update failed:', error);
+        logger.error('[SHOPIFY_DISCONNECT] Database update failed', { error: error.message });
         throw error;
       }
 
-      console.log('[SHOPIFY_DISCONNECT] Successfully disconnected');
+      logger.info('[SHOPIFY_DISCONNECT] Successfully disconnected');
 
       logFromReq(req, { ...ACTIONS.SHOPIFY_DISCONNECTED });
 
@@ -371,7 +372,7 @@ router.post('/disconnect',
       });
 
     } catch (error) {
-      console.error('[SHOPIFY_DISCONNECT] Error:', error);
+      logger.error('[SHOPIFY_DISCONNECT] Error', { error: error.message });
       res.status(500).json({ 
         error: 'Internal Server Error',
         message: 'Failed to disconnect Shopify' 
@@ -398,7 +399,7 @@ router.get('/customer',
       const email = req.sanitized.email;
       const clientId = req.user.client_id;
 
-      console.log('[SHOPIFY_CUSTOMER] Fetching customer info:', { email, clientId });
+      logger.info('[SHOPIFY_CUSTOMER] Fetching customer info', { email, clientId });
 
       // Verify email belongs to a customer of this client
       const { data: emailRecord, error: emailError } = await supabase
@@ -429,7 +430,7 @@ router.get('/customer',
       }
 
       if (customer.client_id !== clientId) {
-        console.warn('[SHOPIFY_CUSTOMER] Unauthorized access attempt');
+        logger.warn('[SHOPIFY_CUSTOMER] Unauthorized access attempt');
         return res.status(403).json({ 
           customer: null,
           error: 'Access denied' 
@@ -496,7 +497,7 @@ router.get('/customer',
               }
             `,
             variables: {
-              query: `email:"${email}"`
+              query: `email:"${email.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
             }
           })
         }
@@ -504,14 +505,14 @@ router.get('/customer',
 
       if (!shopifyResponse.ok) {
         const errorText = await shopifyResponse.text();
-        console.error('[SHOPIFY_CUSTOMER] API error:', errorText);
+        logger.error('[SHOPIFY_CUSTOMER] API error', { error: errorText });
         throw new Error(`Shopify API error: ${shopifyResponse.status}`);
       }
 
       const responseJson = await shopifyResponse.json();
       
       if (responseJson.errors) {
-        console.error('[SHOPIFY_CUSTOMER] GraphQL errors:', responseJson.errors);
+        logger.error('[SHOPIFY_CUSTOMER] GraphQL errors', { errors: responseJson.errors });
         throw new Error(`GraphQL error: ${responseJson.errors[0].message}`);
       }
 
@@ -551,7 +552,7 @@ router.get('/customer',
         } : null
       };
 
-      console.log('[SHOPIFY_CUSTOMER] Customer found');
+      logger.info('[SHOPIFY_CUSTOMER] Customer found');
 
       res.json({
         customer: mappedCustomer,
@@ -559,7 +560,7 @@ router.get('/customer',
       });
 
     } catch (error) {
-      console.error('[SHOPIFY_CUSTOMER] Error:', error);
+      logger.error('[SHOPIFY_CUSTOMER] Error', { error: error.message });
       res.json({
         customer: null,
         error: error.message
@@ -715,7 +716,7 @@ router.get('/orders',
               }
             `,
             variables: {
-              query: `email:"${customerEmail}" (status:open OR status:closed OR status:cancelled)`
+              query: `email:"${customerEmail.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}" (status:open OR status:closed OR status:cancelled)`
             }
           })
         }
@@ -797,6 +798,12 @@ router.post('/refund/calculate',
   async (req, res) => {
     try {
       const { orderId, refundLineItems, customAmount = 0 } = req.body;
+
+      // Validate orderId is a valid Shopify GID
+      if (!orderId || typeof orderId !== 'string' || !orderId.match(/^gid:\/\/shopify\/Order\/\d+$/)) {
+        return res.status(400).json({ error: 'Invalid order ID format' });
+      }
+
       const clientId = req.user.client_id;
 
       const { data: client } = await supabase
@@ -862,6 +869,12 @@ router.post('/refund/create',
   async (req, res) => {
     try {
       const { orderId, refundLineItems, notifyCustomer, note, shippingAmount, customAmount = 0 } = req.body;
+
+      // Validate orderId is a valid Shopify GID
+      if (!orderId || typeof orderId !== 'string' || !orderId.match(/^gid:\/\/shopify\/Order\/\d+$/)) {
+        return res.status(400).json({ error: 'Invalid order ID format' });
+      }
+
       const clientId = req.user.client_id;
       const employeeName = req.user.employee_name;
 
@@ -1002,6 +1015,12 @@ router.post('/order/cancel',
   async (req, res) => {
     try {
       const { orderId, reason, notifyCustomer, refundOriginalPaymentMethod, staffNote } = req.body;
+
+      // Validate orderId is a valid Shopify GID
+      if (!orderId || typeof orderId !== 'string' || !orderId.match(/^gid:\/\/shopify\/Order\/\d+$/)) {
+        return res.status(400).json({ error: 'Invalid order ID format' });
+      }
+
       const clientId = req.user.client_id;
 
       const { data: client } = await supabase

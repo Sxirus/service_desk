@@ -14,6 +14,7 @@ const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
 const {storeMacroAttachmentsInDB, deleteAttachmentsFromStorage} = require("../services/attachments/macroAttachments")
 const { logFromReq, ACTIONS } = require('../services/activityLogger');
+const logger = require('../utils/logger');
 
 /**
  * Get all macros for authenticated user's client
@@ -29,7 +30,7 @@ router.get('/getMacros',
       // Use client_id from authenticated user (secure - can't be spoofed)
       const client_id = req.user.client_id;
 
-      console.log('[MACROS] Fetching macros for client:', client_id);
+      logger.info('[MACROS] Fetching macros for client', { client_id });
 
       const { data, error } = await supabase
         .from('macros')
@@ -38,14 +39,14 @@ router.get('/getMacros',
         .order('title');
 
       if (error) {
-        console.error('[MACROS] Supabase error:', error.message);
+        logger.error('[MACROS] Supabase error', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
-      console.log('[MACROS] Fetched', data.length, 'macros');
+      logger.info('[MACROS] Fetched macros', { count: data.length });
       res.json({success: true, data});
     } catch (err) {
-      console.error('[MACROS] Server error:', err.message);
+      logger.error('[MACROS] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -66,7 +67,7 @@ router.get('/getMacro',
       const macroId = req.sanitized.macroId;
       const client_id = req.user.client_id;
 
-      console.log('[MACROS] Fetching macro:', macroId);
+      logger.info('[MACROS] Fetching macro', { macroId });
 
       const { data, error } = await supabase
         .from('macros')
@@ -75,18 +76,18 @@ router.get('/getMacro',
         .single();
 
       if (error) {
-        console.error('[MACROS] Supabase error:', error.message);
+        logger.error('[MACROS] Supabase error', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
       if (!data) {
-        console.warn('[MACROS] Macro not found:', macroId);
+        logger.warn('[MACROS] Macro not found', { macroId });
         return res.status(404).json({ error: 'Macro not found' });
       }
 
       // Verify macro belongs to user's client
       if (data.client_id !== client_id) {
-        console.warn('[MACROS] Unauthorized access attempt:', {
+        logger.warn('[MACROS] Unauthorized access attempt', {
           macro_id: macroId,
           macro_client_id: data.client_id,
           user_client_id: client_id
@@ -94,10 +95,10 @@ router.get('/getMacro',
         return res.status(403).json({ error: 'Access denied to this macro' });
       }
 
-      console.log('[MACROS] Macro fetched successfully');
+      logger.info('[MACROS] Macro fetched successfully');
       res.json({success: true, data});
     } catch (err) {
-      console.error('[MACROS] Server error:', err.message);
+      logger.error('[MACROS] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -120,13 +121,13 @@ router.post('/createMacro',
     try {
       const title = req.sanitized.title;
       const text = req.sanitized.text;
-      console.log(req.body.groupId);
+      logger.info('[MACROS] Group ID from request', { groupId: req.body.groupId });
       const groupId = parseInt(req.body.groupId) || null;
       const client_id = req.user.client_id;
       const attachments = req.files || [];
-      console.log(attachments, title, text, groupId);
+      logger.info('[MACROS] Create macro params', { attachmentCount: attachments.length, title, text, groupId });
 
-      console.log('[MACROS] Creating macro for client:', client_id);
+      logger.info('[MACROS] Creating macro for client', { client_id });
 
       // Validate groupId belongs to client if provided
       if (groupId) {
@@ -157,24 +158,24 @@ router.post('/createMacro',
         .single();
 
       if (error) {
-        console.error('[MACROS] Create macro failed:', error.message);
+        logger.error('[MACROS] Create macro failed', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
       if (attachments.length > 0) {
-        console.log('[MACROS] Saving attachments');
+        logger.info('[MACROS] Saving attachments');
         const updatedMacro = await storeMacroAttachmentsInDB(attachments, client_id, data.id, null, null);
-        console.log('[MACROS] Macro created successfully:', data.id);
+        logger.info('[MACROS] Macro created successfully', { macroId: data.id });
         logFromReq(req, { ...ACTIONS.MACRO_CREATED, targetType: 'macro', targetId: data.id, details: { title } });
         res.json({ success: true, data: updatedMacro || data });
       } else {
-        console.log('[MACROS] No attachments, continue')
-        console.log('[MACROS] Macro created successfully:', data.id);
+        logger.info('[MACROS] No attachments, continue');
+        logger.info('[MACROS] Macro created successfully', { macroId: data.id });
         logFromReq(req, { ...ACTIONS.MACRO_CREATED, targetType: 'macro', targetId: data.id, details: { title } });
         res.json({ success: true, data: data });
       }
     } catch (err) {
-      console.error('[MACROS] Server error:', err.message);
+      logger.error('[MACROS] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -190,7 +191,7 @@ router.post('/createGroup',
       const groupId = req.body.groupId;
       const client_id = req.user.client_id;
 
-      console.log('[MACROS] Creating new group for client:', client_id);
+      logger.info('[MACROS] Creating new group for client', { client_id });
 
       // Validate parent groupId belongs to client if provided
       if (groupId) {
@@ -220,15 +221,15 @@ router.post('/createGroup',
         .single()
 
       if (error) {
-        console.error('[MACROS] Create group failed', error.message);
+        logger.error('[MACROS] Create group failed', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
-      console.log('[MACROS] Group created successfully:', data.id);
+      logger.info('[MACROS] Group created successfully', { groupId: data.id });
       logFromReq(req, { ...ACTIONS.MACRO_CREATED, targetType: 'macro_group', targetId: data.id, details: { name } });
       res.json({ success: true, data: data });
     } catch (err) {
-      console.error('[MACROS] Server error:', err.message);
+      logger.error('[MACROS] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -257,19 +258,19 @@ router.post('/updateMacro',
       try {
         deletedAttachments = req.body.deletedAttachments ? JSON.parse(req.body.deletedAttachments) : [];
       } catch (e) {
-        console.error('[MACROS] Failed to parse deletedAttachments', e);
+        logger.error('[MACROS] Failed to parse deletedAttachments', { error: e.message });
       }
 
       let oldAttachments = [];
       try {
         oldAttachments = req.body.oldAttachments ? JSON.parse(req.body.oldAttachments) : [];
       } catch (e) {
-        console.error('[MACROS] Failed to parse oldAttachments', e);
+        logger.error('[MACROS] Failed to parse oldAttachments', { error: e.message });
       }
 
       const attachments = req.files || [];
 
-      console.log('[MACROS] Updating macro:', macroId, 'for client:', client_id);
+      logger.info('[MACROS] Updating macro', { macroId, client_id });
 
       // Build update object with only provided fields
       const updates = {};
@@ -290,7 +291,7 @@ router.post('/updateMacro',
         .single();
 
       if (error) {
-        console.error('[MACROS] Update failed:', error.message);
+        logger.error('[MACROS] Update failed', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
@@ -305,11 +306,11 @@ router.post('/updateMacro',
         result.attachments = updatedMacro?.attachments || [];
       }
 
-      console.log('[MACROS] Macro updated successfully');
+      logger.info('[MACROS] Macro updated successfully');
       logFromReq(req, { ...ACTIONS.MACRO_UPDATED, targetType: 'macro', targetId: data.id, details: { title: data.title } });
       res.json(result);
     } catch (err) {
-      console.error('[MACROS] Server error:', err.message);
+      logger.error('[MACROS] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -330,7 +331,7 @@ router.delete('/deleteMacro',
       const macroId = req.sanitized.macroId;
       const client_id = req.user.client_id;
 
-      console.log('[MACROS] Deleting macro:', macroId, 'for client:', client_id);
+      logger.info('[MACROS] Deleting macro', { macroId, client_id });
 
       //deleting attachments from database
       const { data: oldAttachments, error: oldAttachmentsError } = await supabase
@@ -340,15 +341,15 @@ router.delete('/deleteMacro',
         .single();
       
       if (oldAttachmentsError) {
-        console.error('[MACROS] Delete failed:', oldAttachments.message);
-        return res.status(500).json({ error: 'Datenbankfehler' });
+        logger.error('[MACROS] Delete failed', { error: oldAttachments.message });
+        return res.status(500).json({ error: 'Database error' });
       }
       
       if (oldAttachments.attachments != null && oldAttachments.attachments.length > 0) {
         const response = await deleteAttachmentsFromStorage(oldAttachments.attachments);
         if (!response.success) {
-          console.error('[MACROS] Delete failed:', response.message);
-          return res.status(500).json({ error: 'Datenbankfehler' });
+          logger.error('[MACROS] Delete failed', { error: response.message });
+          return res.status(500).json({ error: 'Database error' });
         }
       }
 
@@ -362,7 +363,7 @@ router.delete('/deleteMacro',
         .single();
 
       if (error) {
-        console.error('[MACROS] Delete failed:', error.message);
+        logger.error('[MACROS] Delete macro failed', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
@@ -370,11 +371,11 @@ router.delete('/deleteMacro',
         return res.status(404).json({ error: 'Macro not found or access denied' });
       }
 
-      console.log('[MACROS] Macro deleted successfully');
+      logger.info('[MACROS] Macro deleted successfully');
       logFromReq(req, { ...ACTIONS.MACRO_DELETED, targetType: 'macro', targetId: macroId });
       res.json({ success: true });
     } catch (err) {
-      console.error('[MACROS] Server error:', err.message);
+      logger.error('[MACROS] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -387,7 +388,13 @@ router.delete('/deleteMacroGroup',
       const groupId = req.body.groupId;
       const client_id = req.user.client_id;
 
-      console.log('[MACROS] Deleting group', groupId, 'for client:', client_id);
+      // Validate groupId is a positive integer
+      const parsedId = parseInt(groupId, 10);
+      if (!groupId || isNaN(parsedId) || parsedId <= 0 || String(parsedId) !== String(groupId)) {
+        return res.status(400).json({ success: false, error: 'Invalid group ID' });
+      }
+
+      logger.info('[MACROS] Deleting group', { groupId, client_id });
 
       // Delete group - include client_id check for security
       const { data, error } = await supabase
@@ -399,7 +406,7 @@ router.delete('/deleteMacroGroup',
         .single();
 
       if (error) {
-        console.error('[MACROS] Delete failed:', error.message);
+        logger.error('[MACROS] Delete group failed', { error: error.message });
         return res.status(500).json({ success: false, error: 'Database error' });
       }
 
@@ -407,11 +414,11 @@ router.delete('/deleteMacroGroup',
         return res.status(404).json({ success: false, error: 'Group not found or access denied' });
       }
 
-      console.log('[MACROS] Group deleted successfully');
+      logger.info('[MACROS] Group deleted successfully');
       logFromReq(req, { ...ACTIONS.MACRO_GROUP_DELETED, targetType: 'macro_group', targetId: groupId });
       res.json({ success: true });
     } catch (err) {
-      console.error('[MACROS] Failed to delete macro group', err.message);
+      logger.error('[MACROS] Failed to delete macro group', { error: err.message });
       res.status(500).json({ success: false, error: 'Server error' });
     }
   }

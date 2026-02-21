@@ -63,6 +63,7 @@ export const apiClient = {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session.access_token}`,
+        'X-Requested-With': 'XMLHttpRequest',
         ...options.headers,
       },
     });
@@ -165,7 +166,8 @@ export const apiClient = {
       method: 'POST',
       credentials: 'include',
       headers: {
-        'Authorization': `Bearer ${session.access_token}`
+        'Authorization': `Bearer ${session.access_token}`,
+        'X-Requested-With': 'XMLHttpRequest',
       },
       body: formData,
     });
@@ -209,6 +211,7 @@ export async function serverApiCall(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${accessToken}`,
+      'X-Requested-With': 'XMLHttpRequest',
       ...options.headers,
     },
   });

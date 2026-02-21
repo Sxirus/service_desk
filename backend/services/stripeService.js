@@ -1,4 +1,5 @@
 const Stripe = require('stripe');
+const logger = require('../utils/logger');
 
 // Initialize Stripe with secret key from environment
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
@@ -19,7 +20,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
  */
 async function createStripeCustomer(clientData) {
   try {
-    console.log('[StripeService] Creating Stripe customer for:', clientData.name);
+    logger.info('[StripeService] Creating Stripe customer for', { name: clientData.name });
 
     const customerData = {
       email: clientData.email,
@@ -63,14 +64,14 @@ async function createStripeCustomer(clientData) {
 
     const customer = await stripe.customers.create(customerData);
 
-    console.log('[StripeService] Stripe customer created successfully:', customer.id);
+    logger.info('[StripeService] Stripe customer created successfully', { customerId: customer.id });
     return {
       success: true,
       stripe_customer_id: customer.id,
       customer: customer,
     };
   } catch (error) {
-    console.error('[StripeService] Error creating Stripe customer:', error.message);
+    logger.error('[StripeService] Error creating Stripe customer', { error: error.message });
     return {
       success: false,
       error: error.message,
@@ -86,17 +87,17 @@ async function createStripeCustomer(clientData) {
  */
 async function updateStripeCustomer(stripeCustomerId, updates) {
   try {
-    console.log('[StripeService] Updating Stripe customer:', stripeCustomerId);
+    logger.info('[StripeService] Updating Stripe customer', { stripeCustomerId });
 
     const customer = await stripe.customers.update(stripeCustomerId, updates);
 
-    console.log('[StripeService] Stripe customer updated successfully');
+    logger.info('[StripeService] Stripe customer updated successfully');
     return {
       success: true,
       customer: customer,
     };
   } catch (error) {
-    console.error('[StripeService] Error updating Stripe customer:', error.message);
+    logger.error('[StripeService] Error updating Stripe customer', { error: error.message });
     return {
       success: false,
       error: error.message,
@@ -117,7 +118,7 @@ async function getStripeCustomer(stripeCustomerId) {
       customer: customer,
     };
   } catch (error) {
-    console.error('[StripeService] Error retrieving Stripe customer:', error.message);
+    logger.error('[StripeService] Error retrieving Stripe customer', { error: error.message });
     return {
       success: false,
       error: error.message,
@@ -132,17 +133,17 @@ async function getStripeCustomer(stripeCustomerId) {
  */
 async function deleteStripeCustomer(stripeCustomerId) {
   try {
-    console.log('[StripeService] Deleting Stripe customer:', stripeCustomerId);
+    logger.info('[StripeService] Deleting Stripe customer', { stripeCustomerId });
 
     const deleted = await stripe.customers.del(stripeCustomerId);
 
-    console.log('[StripeService] Stripe customer deleted successfully');
+    logger.info('[StripeService] Stripe customer deleted successfully');
     return {
       success: true,
       deleted: deleted,
     };
   } catch (error) {
-    console.error('[StripeService] Error deleting Stripe customer:', error.message);
+    logger.error('[StripeService] Error deleting Stripe customer', { error: error.message });
     return {
       success: false,
       error: error.message,
@@ -162,7 +163,7 @@ async function deleteStripeCustomer(stripeCustomerId) {
  */
 async function createCheckoutSession({ customerId, priceId, quantity = 1, successUrl, cancelUrl }) {
   try {
-    console.log('[StripeService] Creating checkout session for customer:', customerId, 'quantity:', quantity);
+    logger.info('[StripeService] Creating checkout session for customer', { customerId, quantity });
 
     const session = await stripe.checkout.sessions.create({
       ui_mode: 'custom', // Custom UI using Stripe Elements
@@ -177,14 +178,14 @@ async function createCheckoutSession({ customerId, priceId, quantity = 1, succes
       return_url: successUrl,
     });
 
-    console.log('[StripeService] Checkout session created:', session.id);
+    logger.info('[StripeService] Checkout session created', { sessionId: session.id });
     return {
       success: true,
       clientSecret: session.client_secret,
       sessionId: session.id,
     };
   } catch (error) {
-    console.error('[StripeService] Error creating checkout session:', error.message);
+    logger.error('[StripeService] Error creating checkout session', { error: error.message });
     return {
       success: false,
       error: error.message,
@@ -199,13 +200,13 @@ async function createCheckoutSession({ customerId, priceId, quantity = 1, succes
  */
 async function retrieveCheckoutSession(sessionId) {
   try {
-    console.log('[StripeService] Retrieving checkout session:', sessionId);
+    logger.info('[StripeService] Retrieving checkout session', { sessionId });
 
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
       expand: ['subscription'],
     });
 
-    console.log('[StripeService] Session retrieved:', session.id, 'Status:', session.status);
+    logger.info('[StripeService] Session retrieved', { sessionId: session.id, status: session.status });
     return {
       success: true,
       session: session,
@@ -213,7 +214,7 @@ async function retrieveCheckoutSession(sessionId) {
       status: session.status,
     };
   } catch (error) {
-    console.error('[StripeService] Error retrieving session:', error.message);
+    logger.error('[StripeService] Error retrieving session', { error: error.message });
     return {
       success: false,
       error: error.message,
@@ -231,20 +232,20 @@ async function retrieveCheckoutSession(sessionId) {
  */
 async function createBillingPortalSession({ customerId, returnUrl }) {
   try {
-    console.log('[StripeService] Creating billing portal session for customer:', customerId);
+    logger.info('[StripeService] Creating billing portal session for customer', { customerId });
 
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: returnUrl,
     });
 
-    console.log('[StripeService] Billing portal session created');
+    logger.info('[StripeService] Billing portal session created');
     return {
       success: true,
       url: session.url,
     };
   } catch (error) {
-    console.error('[StripeService] Error creating billing portal session:', error.message);
+    logger.error('[StripeService] Error creating billing portal session', { error: error.message });
     return {
       success: false,
       error: error.message,
@@ -259,25 +260,25 @@ async function createBillingPortalSession({ customerId, returnUrl }) {
  */
 async function getSubscription(subscriptionId) {
   try {
-    console.log('[StripeService] Retrieving subscription:', subscriptionId);
+    logger.info('[StripeService] Retrieving subscription', { subscriptionId });
 
     const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
       expand: ['latest_invoice', 'customer'],
     });
 
-    console.log('[StripeService] Subscription retrieved:', subscription.id, 'Status:', subscription.status);
-    console.log('[StripeService] Full subscription object keys:', Object.keys(subscription));
-    console.log('[StripeService] Period dates:', {
+    logger.info('[StripeService] Subscription retrieved', { subscriptionId: subscription.id, status: subscription.status });
+    logger.info('[StripeService] Full subscription object keys', { keys: Object.keys(subscription) });
+    logger.info('[StripeService] Period dates', {
       current_period_start: subscription.current_period_start,
       current_period_end: subscription.current_period_end,
     });
-    console.log('[StripeService] Items:', subscription.items);
+    logger.info('[StripeService] Items', { items: subscription.items });
     return {
       success: true,
       subscription: subscription,
     };
   } catch (error) {
-    console.error('[StripeService] Error retrieving subscription:', error.message);
+    logger.error('[StripeService] Error retrieving subscription', { error: error.message });
     return {
       success: false,
       error: error.message,
@@ -293,7 +294,7 @@ async function getSubscription(subscriptionId) {
  */
 async function updateSubscriptionQuantity(subscriptionId, quantity) {
   try {
-    console.log('[StripeService] Updating subscription quantity:', subscriptionId, 'to', quantity);
+    logger.info('[StripeService] Updating subscription quantity', { subscriptionId, quantity });
 
     const subscription = await stripe.subscriptions.update(subscriptionId, {
       items: [{
@@ -303,13 +304,13 @@ async function updateSubscriptionQuantity(subscriptionId, quantity) {
       proration_behavior: 'always_invoice', // Pro-rate immediately
     });
 
-    console.log('[StripeService] Subscription quantity updated:', subscription.id, 'New quantity:', quantity);
+    logger.info('[StripeService] Subscription quantity updated', { subscriptionId: subscription.id, quantity });
     return {
       success: true,
       subscription: subscription,
     };
   } catch (error) {
-    console.error('[StripeService] Error updating subscription quantity:', error.message);
+    logger.error('[StripeService] Error updating subscription quantity', { error: error.message });
     return {
       success: false,
       error: error.message,
@@ -355,7 +356,7 @@ async function getSubscriptionMRR(subscriptionId) {
       currency: subscription.currency
     };
   } catch (error) {
-    console.error('[StripeService] Error getting subscription MRR:', error.message);
+    logger.error('[StripeService] Error getting subscription MRR', { error: error.message });
     return {
       success: false,
       error: error.message,
@@ -409,7 +410,7 @@ async function getCustomerTotalRevenue(customerId) {
       invoiceCount: invoices.data.length
     };
   } catch (error) {
-    console.error('[StripeService] Error getting customer revenue:', error.message);
+    logger.error('[StripeService] Error getting customer revenue', { error: error.message });
     return {
       success: false,
       error: error.message,
@@ -496,7 +497,7 @@ async function getPlatformRevenueMetrics() {
       currency: 'eur'
     };
   } catch (error) {
-    console.error('[StripeService] Error getting platform revenue:', error.message);
+    logger.error('[StripeService] Error getting platform revenue', { error: error.message });
     return {
       success: false,
       error: error.message,

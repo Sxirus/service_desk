@@ -6,6 +6,7 @@
  */
 
 const supabase = require('../config/supabase');
+const logger = require('../utils/logger');
 
 /**
  * Verify that the user's client_id matches the requested client_id
@@ -26,7 +27,7 @@ function authorizeClient(req, res, next) {
 
   // Convert both to numbers for comparison
   if (parseInt(requestedClientId) !== parseInt(userClientId)) {
-    console.warn('[AUTHZ] Client access denied:', {
+    logger.warn('[AUTHZ] Client access denied', {
       user_client_id: userClientId,
       requested_client_id: requestedClientId,
       employee_id: req.user?.employee_id
@@ -74,7 +75,7 @@ async function authorizeCustomerAccess(req, res, next) {
       .single();
 
     if (error || !customer) {
-      console.error('[AUTHZ] Customer not found:', customerId);
+      logger.error('[AUTHZ] Customer not found', { customerId });
       return res.status(404).json({ 
         error: 'Not Found',
         message: 'Customer not found' 
@@ -82,7 +83,7 @@ async function authorizeCustomerAccess(req, res, next) {
     }
 
     if (customer.client_id !== userClientId) {
-      console.warn('[AUTHZ] Customer access denied:', {
+      logger.warn('[AUTHZ] Customer access denied', {
         customer_id: customerId,
         customer_client_id: customer.client_id,
         user_client_id: userClientId,
@@ -99,7 +100,7 @@ async function authorizeCustomerAccess(req, res, next) {
     req.customer = customer;
     next();
   } catch (error) {
-    console.error('[AUTHZ] Customer authorization error:', error);
+    logger.error('[AUTHZ] Customer authorization error', { error: error.message });
     res.status(500).json({ 
       error: 'Internal Server Error',
       message: 'Authorization check failed' 
@@ -140,7 +141,7 @@ async function authorizeEmployeeAccess(req, res, next) {
       .single();
 
     if (error || !employee) {
-      console.error('[AUTHZ] Employee not found:', targetEmployeeId);
+      logger.error('[AUTHZ] Employee not found', { targetEmployeeId });
       return res.status(404).json({ 
         error: 'Not Found',
         message: 'Employee not found' 
@@ -148,7 +149,7 @@ async function authorizeEmployeeAccess(req, res, next) {
     }
 
     if (employee.client_id !== userClientId) {
-      console.warn('[AUTHZ] Employee access denied:', {
+      logger.warn('[AUTHZ] Employee access denied', {
         target_employee_id: targetEmployeeId,
         employee_client_id: employee.client_id,
         user_client_id: userClientId,
@@ -163,7 +164,7 @@ async function authorizeEmployeeAccess(req, res, next) {
 
     next();
   } catch (error) {
-    console.error('[AUTHZ] Employee authorization error:', error);
+    logger.error('[AUTHZ] Employee authorization error', { error: error.message });
     res.status(500).json({ 
       error: 'Internal Server Error',
       message: 'Authorization check failed' 

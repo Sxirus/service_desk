@@ -17,6 +17,7 @@ const { logFromReq, ACTIONS } = require('../services/activityLogger');
 const upload = multer();
 const { storeOutgoingAttachmentsInDB } = require('../services/attachments/outgoing');
 const encryption = require('../utils/encryption');
+const logger = require('../utils/logger');
 
 /**
  * Get unread mails for authenticated user's client
@@ -32,7 +33,7 @@ router.get('/getMails',
       // Use client_id from authenticated user (secure - can't be spoofed)
       const client_id = req.user.client_id;
       
-      console.log('[EMAILS] Fetching mails for client:', client_id);
+      logger.info('[EMAILS] Fetching mails for client', { client_id });
 
       // Fetch only unassigned customer mails (customers without an employee_id)
       const { data: unassignedCustomers, error: custErr } = await supabase
@@ -42,13 +43,13 @@ router.get('/getMails',
         .is('employee_id', null);
 
       if (custErr) {
-        console.error('[EMAILS] Customers fetch error:', custErr.message);
+        logger.error('[EMAILS] Customers fetch error', { error: custErr.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
       const ids = (unassignedCustomers ?? []).map(c => c.id);
       if (ids.length === 0) {
-        console.log('[EMAILS] No unassigned customers, returning empty array');
+        logger.info('[EMAILS] No unassigned customers, returning empty array');
         return res.json({ success: true, data: [] });
       }
 
@@ -62,16 +63,16 @@ router.get('/getMails',
         .limit(100);
 
       if (error) {
-        console.error('[EMAILS] Supabase error:', error.message);
+        logger.error('[EMAILS] Supabase error', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
       const mails = data ?? [];
 
-      console.log('[EMAILS] Fetched', mails.length, 'unread mails');
+      logger.info('[EMAILS] Fetched unread mails', { count: mails.length });
       res.json({success: true, data: mails});
     } catch (err) {
-      console.error('[EMAILS] Server error:', err.message);
+      logger.error('[EMAILS] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -92,7 +93,7 @@ router.get('/getEmailsFromCustomer',
     try {
       const customerId = req.sanitized.customerId;
       
-      console.log('[EMAILS] Fetching emails for customer:', customerId);
+      logger.info('[EMAILS] Fetching emails for customer', { customerId });
 
       // Fetch incoming mails
       const { data: incomingMails, error: errorIncoming } = await supabase
@@ -101,7 +102,7 @@ router.get('/getEmailsFromCustomer',
         .eq('customer_id', customerId);
 
       if (errorIncoming) {
-        console.error('[EMAILS] Error fetching incoming mails:', errorIncoming);
+        logger.error('[EMAILS] Error fetching incoming mails', { error: errorIncoming });
         return res.status(500).json({ error: 'Database error' });
       }
 
@@ -112,7 +113,7 @@ router.get('/getEmailsFromCustomer',
         .eq('customer_id', customerId);
       
       if (errorSent) {
-        console.error('[EMAILS] Error fetching sent mails:', errorSent);
+        logger.error('[EMAILS] Error fetching sent mails', { error: errorSent });
         return res.status(500).json({ error: 'Database error' });
       }
 
@@ -147,10 +148,10 @@ router.get('/getEmailsFromCustomer',
         }));
       }
 
-      console.log('[EMAILS] Fetched', allMails.length, 'total emails');
+      logger.info('[EMAILS] Fetched total emails', { count: allMails.length });
       res.json({success: true, allMails});
     } catch (err) {
-      console.error('[EMAILS] Server error:', err.message);
+      logger.error('[EMAILS] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -184,14 +185,14 @@ router.post('/sendMail',
 
       const attachments = req.files || [];
 
-      console.log('[EMAILS] Sending mail with thread context:', { 
+      logger.info('[EMAILS] Sending mail with thread context', { 
         customerId, 
         threadEmailAddress,
         attachmentCount: attachments.length,
         files: attachments.map(f => f.originalname)
       });
 
-      console.log('[EMAILS] Sending mail to customer:', customerId, 'using client SMTP:', client_id);
+      logger.info('[EMAILS] Sending mail to customer', { customerId, client_id });
 
       // Check if client is on free tier and has reached limits
       const { data: clientData, error: clientError } = await supabase
@@ -201,7 +202,7 @@ router.post('/sendMail',
         .single();
 
       if (clientError) {
-        console.error('[EMAILS] Error fetching client data:', clientError.message);
+        logger.error('[EMAILS] Error fetching client data', { error: clientError.message });
       } else if (clientData.subscription_tier === 'free' || !clientData.subscription_tier) {
         // Check user limit for free tier
         const { count: activeEmployeeCount } = await supabase
@@ -211,7 +212,7 @@ router.post('/sendMail',
           .or('disabled.is.null,disabled.eq.false');
 
         if (activeEmployeeCount && activeEmployeeCount > 1) {
-          console.warn('[EMAILS] Free tier user limit exceeded:', activeEmployeeCount, '/ 1');
+          logger.warn('[EMAILS] Free tier user limit exceeded', { activeEmployeeCount, limit: 1 });
           return res.status(403).json({
             success: false,
             error: 'User limit exceeded',
@@ -240,7 +241,7 @@ router.post('/sendMail',
             .gte('send_at', firstDayOfMonth.toISOString());
 
           if (emailCount && emailCount >= 50) {
-            console.warn('[EMAILS] Free tier email limit reached:', emailCount, '/ 50');
+            logger.warn('[EMAILS] Free tier email limit reached', { emailCount, limit: 50 });
             return res.status(403).json({
               success: false,
               error: 'Email limit reached',
@@ -256,12 +257,12 @@ router.post('/sendMail',
       if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
         return res.status(400).json({ 
           success: false, 
-          error: 'Ungültige Empfänger-Email-Adresse' 
+          error: 'Invalid recipient email address' 
         });
       }
 
       const autoAssign = clientData?.auto_assign_employee_on_send;
-      console.log('[Emails] Auto assign employee:', autoAssign);
+      logger.info('[EMAILS] Auto assign employee', { autoAssign });
 
       if(autoAssign) {
         // Verify customer belongs to user's client and check current assignment
@@ -272,12 +273,12 @@ router.post('/sendMail',
           .single();
 
         if (customerError || !customer) {
-          console.error('[Emails] Customer not found:', customerId);
+          logger.error('[EMAILS] Customer not found', { customerId });
           return res.status(404).json({ error: 'Customer not found' });
         }
 
         if (customer.client_id !== client_id) {
-          console.warn('[Emails] Unauthorized customer access attempt:', {
+          logger.warn('[EMAILS] Unauthorized customer access attempt', {
             customerId,
             customer_client_id: customer.client_id,
             user_client_id: client_id
@@ -295,12 +296,12 @@ router.post('/sendMail',
             .single();
 
           if (employeeError || !employee) {
-            console.error('[Emails] Employee not found:', employee_id);
+            logger.error('[EMAILS] Employee not found', { employee_id });
             return res.status(404).json({ error: 'Employee not found' });
           }
 
           if (employee.client_id !== client_id) {
-            console.warn('[Emails] Unauthorized employee access attempt:', {
+            logger.warn('[EMAILS] Unauthorized employee access attempt', {
               employee_id,
               employee_client_id: employee.client_id,
               user_client_id: client_id
@@ -315,45 +316,45 @@ router.post('/sendMail',
             .eq('id', customerId);
 
           if (error) {
-            console.error('[Emails] Auto-assignment update failed:', error.message);
+            logger.error('[EMAILS] Auto-assignment update failed', { error: error.message });
             return res.status(500).json({ error: 'Database error' });
           }
 
-          console.log('[Emails] Successfully auto-assigned employee', employee_id, 'to customer', customerId);
+          logger.info('[EMAILS] Successfully auto-assigned employee', { employee_id, customerId });
         } else {
-          console.log('[Emails] Customer already has an assigned employee, skipping auto-assign');
+          logger.info('[EMAILS] Customer already has an assigned employee, skipping auto-assign');
         }
       }
       
-      // 1. SMTP Konfiguration aus Datenbank holen (mit Provider JOIN)
+      // 1. Get SMTP configuration from database (with Provider JOIN)
       const smtpConfig = await getClientSmtpConfig(client_id, threadEmailAddress);
       
       if (!smtpConfig) {
         return res.status(500).json({ 
           success: false, 
-          error: 'Keine SMTP Konfiguration für diesen Client gefunden. Bitte kontaktieren Sie den Administrator.' 
+          error: 'No SMTP configuration found for this client. Please contact the administrator.' 
         });
       }
 
-      console.log('[EMAILS] Using SMTP config:', {
+      logger.info('[EMAILS] Using SMTP config', {
         provider: smtpConfig.provider,
         host: smtpConfig.host,
         port: smtpConfig.port,
         from: smtpConfig.auth.user
       });
 
-      // 2. Create transporter mit Datenbank-Konfiguration
+      // 2. Create transporter with database configuration
       const transporter = nodemailer.createTransport(smtpConfig);
 
-      // 3. Verify SMTP connection (optional aber empfohlen)
+      // 3. Verify SMTP connection (optional but recommended)
       try {
         await transporter.verify();
-        console.log('[EMAILS] SMTP connection verified for provider:', smtpConfig.provider);
+        logger.info('[EMAILS] SMTP connection verified', { provider: smtpConfig.provider });
       } catch (verifyError) {
-        console.error('[EMAILS] SMTP verification failed for provider:', smtpConfig.provider, verifyError);
+        logger.error('[EMAILS] SMTP verification failed', { provider: smtpConfig.provider, error: verifyError });
         return res.status(500).json({ 
           success: false, 
-          error: `SMTP Verbindung zu ${smtpConfig.provider} fehlgeschlagen: ${verifyError.message}` 
+          error: `SMTP connection to ${smtpConfig.provider} failed: ${verifyError.message}` 
         });
       }
 
@@ -376,16 +377,16 @@ router.post('/sendMail',
       if (macroAttachmentsRaw) {
         try {
           const parsedMacros = JSON.parse(macroAttachmentsRaw);
-          console.log('[EMAILS] Processing macro attachments:', parsedMacros.length);
+          logger.info('[EMAILS] Processing macro attachments', { count: parsedMacros.length });
           
           for (const m of parsedMacros) {
-            console.log('[EMAILS] Downloading macro attachment:', m.filename, m.path);
+            logger.info('[EMAILS] Downloading macro attachment', { filename: m.filename, path: m.path });
             const { data, error } = await supabase.storage
               .from('macro-attachments')
               .download(m.path);
             
             if (error || !data) {
-              console.error('[EMAILS] Failed to download macro attachment:', m.path, error?.message);
+              logger.error('[EMAILS] Failed to download macro attachment', { path: m.path, error: error?.message });
               continue;
             }
 
@@ -398,7 +399,7 @@ router.post('/sendMail',
                 buffer = Buffer.from(data);
               }
             } catch (convErr) {
-              console.error('[EMAILS] Buffer conversion failed for macro attachment:', convErr);
+              logger.error('[EMAILS] Buffer conversion failed for macro attachment', { error: convErr });
               continue;
             }
 
@@ -417,7 +418,7 @@ router.post('/sendMail',
             });
           }
         } catch (err) {
-          console.error('[EMAILS] Error parsing macro attachments JSON:', err);
+          logger.error('[EMAILS] Error parsing macro attachments JSON', { error: err });
         }
       }
 
@@ -428,7 +429,7 @@ router.post('/sendMail',
 
       const info = await transporter.sendMail(mailOptions);
 
-      console.log('[EMAILS] Email sent via', smtpConfig.provider, ':', info.messageId);
+      logger.info('[EMAILS] Email sent', { provider: smtpConfig.provider, messageId: info.messageId });
 
       // 5. Store in database with authenticated employee_id
       const insertData = {
@@ -451,11 +452,11 @@ router.post('/sendMail',
         .single();
 
       if (error) {
-        console.error('[EMAILS] Database insert error:', error);
-        // Email wurde gesendet, aber DB-Speicherung fehlgeschlagen
+        logger.error('[EMAILS] Database insert error', { error });
+        // Email was sent, but database storage failed
         return res.status(500).json({ 
           success: false, 
-          error: 'Email gesendet, aber Speicherung fehlgeschlagen',
+          error: 'Email sent, but database storage failed',
           messageId: info.messageId,
           sentVia: smtpConfig.auth.user
         });
@@ -472,18 +473,18 @@ router.post('/sendMail',
         .eq('customer_id', customerId);
 
       if (statusError) {
-        console.warn('[EMAILS] Failed to update ticket status:', statusError.message);
+        logger.warn('[EMAILS] Failed to update ticket status', { error: statusError.message });
         // Non-critical, continue
       } else {
-        console.log('[EMAILS] Ticket status updated to:', finalStatus);
+        logger.info('[EMAILS] Ticket status updated', { status: finalStatus });
       }
       
       const allFiles = [...attachments, ...macroFiles];
       if (allFiles.length > 0) {
-        console.log('[EMAILS] Storing', allFiles.length, 'total attachments in DB (including', macroFiles.length, 'macro files)');
+        logger.info('[EMAILS] Storing attachments in DB', { total: allFiles.length, macroFiles: macroFiles.length });
         storeOutgoingAttachmentsInDB(allFiles, client_id, data.id);
       } else {
-        console.log('[Email] No attachments, procceding');
+        logger.info('[EMAILS] No attachments, proceeding');
       }
       
 
@@ -530,7 +531,7 @@ router.post('/addInternalNote',
       const html = req.sanitized.html || null;
       const employee_id = req.user.employee_id;
 
-      console.log('[EMAILS] Adding internal note for customer:', customerId, 'by employee:', employee_id);
+      logger.info('[EMAILS] Adding internal note', { customerId, employee_id });
 
       const insertData = {
         employee_id,
@@ -550,18 +551,18 @@ router.post('/addInternalNote',
         .single();
 
       if (error) {
-        console.error('[EMAILS] Internal note insert error:', error);
+        logger.error('[EMAILS] Internal note insert error', { error });
         return res.status(500).json({
           success: false,
           error: 'Failed to save internal note',
         });
       }
 
-      console.log('[EMAILS] Internal note saved successfully, id:', data.id);
+      logger.info('[EMAILS] Internal note saved successfully', { id: data.id });
       logFromReq(req, { ...ACTIONS.INTERNAL_NOTE_ADDED, targetType: 'customer', targetId: customerId });
       res.json({ success: true, note: data });
     } catch (err) {
-      console.error('[EMAILS] Internal note error:', err);
+      logger.error('[EMAILS] Internal note error', { error: err });
       res.status(500).json({
         success: false,
         error: 'Failed to save internal note: ' + err.message,
@@ -597,7 +598,7 @@ router.post('/updateSubject',
 
       const sanitizedSubject = subject.trim().slice(0, 500);
 
-      console.log('[EMAILS] Updating subject for customer:', customerId, 'to:', sanitizedSubject);
+      logger.info('[EMAILS] Updating subject for customer', { customerId, subject: sanitizedSubject });
 
       const { data, error } = await supabase
         .from('incoming-mails')
@@ -605,15 +606,15 @@ router.post('/updateSubject',
         .eq('customer_id', customerId);
 
       if (error) {
-        console.error('[EMAILS] Supabase error:', error.message);
+        logger.error('[EMAILS] Supabase error', { error: error.message });
         return res.status(500).json({ success: false, error: error.message });
       }
 
-      console.log('[EMAILS] Subject updated successfully');
+      logger.info('[EMAILS] Subject updated successfully');
       logFromReq(req, { ...ACTIONS.TICKET_SUBJECT_CHANGED, targetType: 'customer', targetId: customerId, details: { newSubject: sanitizedSubject } });
       res.json({ success: true, subject: sanitizedSubject });
     } catch (err) {
-      console.error('[EMAILS] Server error:', err.message);
+      logger.error('[EMAILS] Server error', { error: err.message });
       res.status(500).json({ success: false, error: 'Server error' });
     }
   }
@@ -645,7 +646,7 @@ router.post('/updateStatus',
         });
       }
 
-      console.log('[EMAILS] Updating status to', status, 'for customer:', customerId);
+      logger.info('[EMAILS] Updating status', { status, customerId });
 
       const { data, error } = await supabase
         .from('incoming-mails')
@@ -653,15 +654,15 @@ router.post('/updateStatus',
         .eq('customer_id', customerId);
 
       if (error) {
-        console.error('[EMAILS] Supabase error:', error.message);
+        logger.error('[EMAILS] Supabase error', { error: error.message });
         return res.status(500).json({ success: false, error: error.message });
       }
 
-      console.log('[EMAILS] Status updated to:', status);
+      logger.info('[EMAILS] Status updated', { status });
       logFromReq(req, { ...ACTIONS.TICKET_STATUS_CHANGED, targetType: 'customer', targetId: customerId, details: { newStatus: status } });
       res.json({ success: true, status });
     } catch (err) {
-      console.error('[EMAILS] Server error:', err.message);
+      logger.error('[EMAILS] Server error', { error: err.message });
       res.status(500).json({ success: false, error: 'Server error' });
     } 
   }
@@ -710,7 +711,7 @@ router.post('/bulkUpdateStatus',
         return res.status(400).json({ success: false, error: 'No valid customer IDs provided' });
       }
 
-      console.log('[EMAILS] Bulk updating status to', status, 'for customers:', ids);
+      logger.info('[EMAILS] Bulk updating status', { status, customerIds: ids });
 
       // Verify all customers belong to user's client
       const { data: customers, error: customerError } = await supabase
@@ -719,13 +720,13 @@ router.post('/bulkUpdateStatus',
         .in('id', ids);
 
       if (customerError) {
-        console.error('[EMAILS] Customer verification error:', customerError);
+        logger.error('[EMAILS] Customer verification error', { error: customerError });
         return res.status(500).json({ error: 'Database error' });
       }
 
       const unauthorizedCustomer = customers.find(c => c.client_id !== client_id);
       if (unauthorizedCustomer) {
-        console.warn('[EMAILS] Unauthorized bulk status update attempt for customer:', unauthorizedCustomer.id);
+        logger.warn('[EMAILS] Unauthorized bulk status update attempt', { customerId: unauthorizedCustomer.id });
         return res.status(403).json({ error: 'Access denied to one or more customers' });
       }
 
@@ -738,15 +739,15 @@ router.post('/bulkUpdateStatus',
         .in('customer_id', authorizedIds);
 
       if (error) {
-        console.error('[EMAILS] Bulk status update error:', error.message);
+        logger.error('[EMAILS] Bulk status update error', { error: error.message });
         return res.status(500).json({ success: false, error: error.message });
       }
 
-      console.log('[EMAILS] Bulk status updated to', status, 'for', authorizedIds.length, 'customers');
+      logger.info('[EMAILS] Bulk status updated', { status, count: authorizedIds.length });
       logFromReq(req, { ...ACTIONS.TICKET_BULK_STATUS, details: { customerIds: authorizedIds, newStatus: status, count: authorizedIds.length } });
       res.json({ success: true, updated: authorizedIds.length, status });
     } catch (err) {
-      console.error('[EMAILS] Server error:', err.message);
+      logger.error('[EMAILS] Server error', { error: err.message });
       res.status(500).json({ success: false, error: 'Server error' });
     }
   }
@@ -772,7 +773,7 @@ router.get('/getMailsbyCustomerIds',
         return res.status(400).json({ error: 'No valid customer IDs provided' });
       }
 
-      console.log('[EMAILS] Fetching mails for customers:', ids);
+      logger.info('[EMAILS] Fetching mails for customers', { ids });
 
       // Verify all customers belong to user's client (security check)
       const { data: customers, error: customerError } = await supabase
@@ -781,14 +782,14 @@ router.get('/getMailsbyCustomerIds',
         .in('id', ids);
 
       if (customerError) {
-        console.error('[EMAILS] Customer verification error:', customerError);
+        logger.error('[EMAILS] Customer verification error', { error: customerError });
         return res.status(500).json({ error: 'Database error' });
       }
 
       // Check if any customer doesn't belong to user's client
       const unauthorizedCustomer = customers.find(c => c.client_id !== client_id);
       if (unauthorizedCustomer) {
-        console.warn('[EMAILS] Unauthorized access attempt for customer:', unauthorizedCustomer.id);
+        logger.warn('[EMAILS] Unauthorized access attempt', { customerId: unauthorizedCustomer.id });
         return res.status(403).json({ error: 'Access denied to one or more customers' });
       }
 
@@ -804,14 +805,14 @@ router.get('/getMailsbyCustomerIds',
         .limit(100);
 
       if (error) {
-        console.error('[EMAILS] Supabase error:', error.message);
+        logger.error('[EMAILS] Supabase error', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
-      console.log('[EMAILS] Fetched', data.length, 'mails for', authorizedIds.length, 'customers');
+      logger.info('[EMAILS] Fetched mails for customers', { count: data.length, customerCount: authorizedIds.length });
       res.json({success: true, data});    
     } catch (err) {
-      console.error('[EMAILS] Server error:', err.message);
+      logger.error('[EMAILS] Server error', { error: err.message });
       res.status(500).json({ success: false, error: 'Server error' });
     }
   }
@@ -819,9 +820,9 @@ router.get('/getMailsbyCustomerIds',
 
 async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
   try {
-    console.log('[EMAILS] Fetching SMTP config for client:', client_id, 'thread email:', threadEmailAddress);
+    logger.info('[EMAILS] Fetching SMTP config for client', { client_id, threadEmailAddress });
 
-    // 1. Hole Client-Einstellungen (Modus & primäre Email)
+    // 1. Get client settings (mode & primary email)
     const { data: clientSettings, error: clientError } = await supabase
       .from('clients')
       .select('email_sending_mode, primary_email_id')
@@ -829,15 +830,15 @@ async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
       .single();
 
     if (clientError || !clientSettings) {
-      console.error('[EMAILS] Client settings error:', clientError);
+      logger.error('[EMAILS] Client settings error', { error: clientError });
       return null;
     }
 
     const { email_sending_mode, primary_email_id } = clientSettings;
 
-    // 2. Thread-Based Mode: Verwende die Email, von der die ursprüngliche Nachricht kam
+    // 2. Thread-Based Mode: Use the email the original message came from
     if (email_sending_mode === 'thread-based' && threadEmailAddress) {
-      console.log('[EMAILS] Thread-based mode, looking for email:', threadEmailAddress);
+      logger.info('[EMAILS] Thread-based mode, looking for email', { threadEmailAddress });
       
       const { data: threadEmail, error: threadError } = await supabase
         .from('client-emails')
@@ -857,7 +858,7 @@ async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
 
       if (!threadError && threadEmail && threadEmail['email-provider']) {
         const provider = threadEmail['email-provider'];
-        console.log('[EMAILS] Using thread-based email:', threadEmail.email_address);
+        logger.info('[EMAILS] Using thread-based email', { email: threadEmail.email_address });
         
         return {
           host: provider.smtp,
@@ -870,13 +871,13 @@ async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
           provider: 'Thread-Based: ' + threadEmail.email_address
         };
       } else {
-        console.warn('[EMAILS] Thread email not found, falling back to primary mode');
+        logger.warn('[EMAILS] Thread email not found, falling back to primary mode');
       }
     }
 
-    // 3. Primary Mode: Verwende die konfigurierte primäre Email
+    // 3. Primary Mode: Use the configured primary email
     if (email_sending_mode === 'primary' && primary_email_id) {
-      console.log('[EMAILS] Primary mode, using primary email ID:', primary_email_id);
+      logger.info('[EMAILS] Primary mode, using primary email', { primary_email_id });
       
       const { data: primaryEmail, error: primaryError } = await supabase
         .from('client-emails')
@@ -896,7 +897,7 @@ async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
 
       if (!primaryError && primaryEmail && primaryEmail['email-provider']) {
         const provider = primaryEmail['email-provider'];
-        console.log('[EMAILS] Using primary email:', primaryEmail.email_address);
+        logger.info('[EMAILS] Using primary email', { email: primaryEmail.email_address });
         
         return {
           host: provider.smtp,
@@ -911,8 +912,8 @@ async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
       }
     }
 
-    // 4. Fallback: Erste verfügbare Email
-    console.warn('[EMAILS] Using fallback - first available email');
+    // 4. Fallback: First available email
+    logger.warn('[EMAILS] Using fallback - first available email');
     const { data: fallbackEmails, error: fallbackError } = await supabase
       .from('client-emails')
       .select(`
@@ -945,10 +946,10 @@ async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
         };
       }
     }
-    console.error('[EMAILS] No valid SMTP configuration found for client:', client_id);
+    logger.error('[EMAILS] No valid SMTP configuration found', { client_id });
     return null;
   } catch (err) {
-    console.error('[EMAILS] SMTP config error:', err);
+    logger.error('[EMAILS] SMTP config error', { error: err });
     return null;
   }
 }
@@ -968,7 +969,7 @@ router.post('/getSignedUrl',
 
     // Validate allowed storage locations
     const allowedLocations = ['attachments', 'avatars', 'macro-attachments', 'sent-attachments', 'mail-attachments'];
-    console.log(location);
+    logger.info('[EMAILS] getSignedUrl location', { location });
     if (!location || !allowedLocations.includes(location)) {
       return res.status(400).json({ error: 'Invalid storage location' });
     }
@@ -976,7 +977,7 @@ router.post('/getSignedUrl',
     // Security check: Verify the path starts with the user's client_id
     // This prevents accessing other clients' files
     if (!path.startsWith(`${client_id}/`)) {
-      console.warn('[EMAILS] Access denied - path does not belong to client:', {
+      logger.warn('[EMAILS] Access denied - path does not belong to client', {
         path,
         client_id,
         requestedBy: req.user.employee_id
@@ -984,7 +985,7 @@ router.post('/getSignedUrl',
       return res.status(403).json({ error: 'Access denied to this resource' });
     }
 
-    console.log('[EMAILS] creating signed url for', {
+    logger.info('[EMAILS] Creating signed url', {
       path: path,
       location: location,
       client_id: client_id
@@ -1028,7 +1029,7 @@ router.post('/test-mailbox',
         });
       }
 
-      console.log('[EMAILS] Testing mailbox connection for:', email_address);
+      logger.info('[EMAILS] Testing mailbox connection', { email_address });
 
       const results = {
         imap: { success: false, message: '' },
@@ -1058,7 +1059,7 @@ router.post('/test-mailbox',
           
           imapConnection.once('ready', () => {
             clearTimeout(timeout);
-            console.log('[EMAILS] IMAP connection successful');
+            logger.info('[EMAILS] IMAP connection successful');
             results.imap = { success: true, message: 'IMAP connection successful' };
             imapConnection.end();
             resolve();
@@ -1066,7 +1067,7 @@ router.post('/test-mailbox',
           
           imapConnection.once('error', (err) => {
             clearTimeout(timeout);
-            console.error('[EMAILS] IMAP error:', err.message);
+            logger.error('[EMAILS] IMAP error', { error: err.message });
             results.imap = { success: false, message: err.message };
             reject(err);
           });
@@ -1074,7 +1075,7 @@ router.post('/test-mailbox',
           imapConnection.connect();
         });
       } catch (imapErr) {
-        console.error('[EMAILS] IMAP test failed:', imapErr.message);
+        logger.error('[EMAILS] IMAP test failed', { error: imapErr.message });
         results.imap = { 
           success: false, 
           message: imapErr.message || 'IMAP connection failed' 
@@ -1099,12 +1100,12 @@ router.post('/test-mailbox',
         });
         
         await transporter.verify();
-        console.log('[EMAILS] SMTP connection successful');
+        logger.info('[EMAILS] SMTP connection successful');
         results.smtp = { success: true, message: 'SMTP connection successful' };
         
         transporter.close();
       } catch (smtpErr) {
-        console.error('[EMAILS] SMTP test failed:', smtpErr.message);
+        logger.error('[EMAILS] SMTP test failed', { error: smtpErr.message });
         results.smtp = { 
           success: false, 
           message: smtpErr.message || 'SMTP connection failed' 
@@ -1133,7 +1134,7 @@ router.post('/test-mailbox',
         details: results,
       });
     } catch (err) {
-      console.error('[EMAILS] Test mailbox error:', err.message);
+      logger.error('[EMAILS] Test mailbox error', { error: err.message });
       return res.status(500).json({ 
         success: false, 
         message: 'Connection test failed: ' + err.message 

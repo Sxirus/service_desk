@@ -11,6 +11,7 @@ const { authenticate } = require('../middleware/auth');
 const { validateId } = require('../middleware/validation');
 const { stopWorkerById } = require('../services/workerManager');
 const { logFromReq, ACTIONS } = require('../services/activityLogger');
+const logger = require('../utils/logger');
 
 /**
  * GET /api/email-accounts/providers
@@ -26,7 +27,7 @@ router.get('/providers', authenticate, async (req, res) => {
         if (error) throw error;
         res.json({ success: true, data });
     } catch (err) {
-        console.error('[EMAIL_ACCOUNTS] Providers error:', err);
+        logger.error('[EMAIL_ACCOUNTS] Providers error:', err);
         res.status(500).json({ success: false, error: 'Failed to fetch providers' });
     }
 });
@@ -61,7 +62,7 @@ router.get('/', authenticate, async (req, res) => {
 
         res.json({ success: true, data });
     } catch (err) {
-        console.error('[EMAIL_ACCOUNTS] Fetch error:', err);
+        logger.error('[EMAIL_ACCOUNTS] Fetch error:', err);
         res.status(500).json({ success: false, error: 'Failed to fetch email accounts' });
     }
 });
@@ -111,7 +112,7 @@ router.post('/', authenticate, async (req, res) => {
         logFromReq(req, { ...ACTIONS.EMAIL_ACCOUNT_ADDED, targetType: 'email_account', targetId: data.id, details: { emailAddress: email_address } });
         res.json({ success: true, data });
     } catch (err) {
-        console.error('[EMAIL_ACCOUNTS] Create error:', err);
+        logger.error('[EMAIL_ACCOUNTS] Create error:', err);
         res.status(500).json({ success: false, error: err.message });
     }
 });
@@ -159,7 +160,7 @@ router.patch('/:id', authenticate, validateId('id'), async (req, res) => {
         logFromReq(req, { ...ACTIONS.EMAIL_ACCOUNT_UPDATED, targetType: 'email_account', targetId: id, details: { changedFields: Object.keys(updates).filter(k => k !== 'password') } });
         res.json({ success: true, data });
     } catch (err) {
-        console.error('[EMAIL_ACCOUNTS] Update error:', err);
+        logger.error('[EMAIL_ACCOUNTS] Update error:', err);
         res.status(500).json({ success: false, error: err.message });
     }
 });
@@ -201,7 +202,7 @@ router.delete('/:id', authenticate, validateId('id'), async (req, res) => {
         logFromReq(req, { ...ACTIONS.EMAIL_ACCOUNT_DELETED, targetType: 'email_account', targetId: id });
         res.json({ success: true });
     } catch (err) {
-        console.error('[EMAIL_ACCOUNTS] Delete error:', err);
+        logger.error('[EMAIL_ACCOUNTS] Delete error:', err);
         res.status(500).json({ success: false, error: err.message });
     }
 });

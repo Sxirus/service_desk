@@ -7,6 +7,7 @@
  */
 
 const supabase = require('../config/supabase');
+const logger = require('../utils/logger');
 
 /**
  * Middleware to authenticate requests using Supabase JWT
@@ -30,7 +31,7 @@ async function authenticate(req, res, next) {
     const { data: { user }, error } = await supabase.auth.getUser(token);
 
     if (error || !user) {
-      console.error('[AUTH] Token verification failed:', error?.message);
+      logger.error('[AUTH] Token verification failed', { error: error?.message });
       return res.status(401).json({ 
         error: 'Unauthorized',
         message: 'Invalid or expired token' 
@@ -45,7 +46,7 @@ async function authenticate(req, res, next) {
       .single();
 
     if (employeeError || !employee) {
-      console.error('[AUTH] Employee not found for user:', user.id);
+      logger.error('[AUTH] Employee not found for user', { userId: user.id });
       return res.status(403).json({ 
         error: 'Forbidden',
         message: 'User is not associated with any client' 
@@ -61,7 +62,7 @@ async function authenticate(req, res, next) {
       client_id: employee.client_id
     };
 
-    console.log('[AUTH] User authenticated:', {
+    logger.info('[AUTH] User authenticated', {
       employee_id: employee.id,
       client_id: employee.client_id,
       email: user.email
@@ -69,7 +70,7 @@ async function authenticate(req, res, next) {
 
     next();
   } catch (error) {
-    console.error('[AUTH] Authentication error:', error);
+    logger.error('[AUTH] Authentication error', { error: error.message || error });
     res.status(500).json({ 
       error: 'Internal Server Error',
       message: 'Authentication failed' 
@@ -118,7 +119,7 @@ async function optionalAuthenticate(req, res, next) {
 
     next();
   } catch (error) {
-    console.error('[AUTH] Optional authentication error:', error);
+    logger.error('[AUTH] Optional authentication error', { error: error.message || error });
     req.user = null;
     next();
   }

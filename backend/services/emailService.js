@@ -2,6 +2,7 @@ const supabase = require('../config/supabase');
 const nodemailer = require('nodemailer');
 const encryption = require('../utils/encryption');
 const { storeOutgoingAttachmentsInDB } = require('./attachments/outgoing');
+const logger = require('../utils/logger');
 
 /**
  * Get unread mails for a client
@@ -109,7 +110,7 @@ async function sendEmail({
   // Get SMTP Config
   const smtpConfig = await getClientSmtpConfig(clientId, threadEmailAddress);
   if (!smtpConfig) {
-    throw new Error('Keine SMTP Konfiguration für diesen Client gefunden.');
+    throw new Error('No SMTP configuration found for this client.');
   }
 
   // Send via Nodemailer
@@ -142,9 +143,9 @@ async function sendEmail({
     .single();
 
   if (error) {
-    console.error('[EmailService] DB Error:', error);
+    logger.error('[EmailService] DB Error', { error });
     // Note: Email was sent, but DB failed.
-    throw new Error('Email gesendet, aber Speicherung fehlgeschlagen');
+    throw new Error('Email sent, but database storage failed');
   }
 
   // Update Ticket Status

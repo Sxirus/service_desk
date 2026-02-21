@@ -10,6 +10,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require("../config/supabase");
 const { authenticate } = require('../middleware/auth');
+const logger = require('../utils/logger');
 
 /**
  * Get signed URL for an avatar
@@ -33,7 +34,7 @@ router.post('/getSignedUrl',
       });
     }
 
-    console.log('[AVATARS] Creating signed URL for:', {
+    logger.info('[AVATARS] Creating signed URL for:', {
       path: path,
       requestedBy: req.user.employee_id,
       clientId: req.user.client_id
@@ -54,7 +55,7 @@ router.post('/getSignedUrl',
       
       // Only allow access to avatars within the same client
       if (pathClientId !== req.user.client_id) {
-        console.warn('[AVATARS] Unauthorized access attempt:', {
+        logger.warn('[AVATARS] Unauthorized access attempt:', {
           requestedClientId: pathClientId,
           userClientId: req.user.client_id,
           userId: req.user.employee_id
@@ -72,18 +73,18 @@ router.post('/getSignedUrl',
         .createSignedUrl(path, 60 * 60); // 1 hour expiry
 
       if (error) {
-        console.error('[AVATARS] Error creating signed URL:', error.message);
+        logger.error('[AVATARS] Error creating signed URL:', error.message);
         return res.status(500).json({ 
           error: 'Server Error',
           message: error.message 
         });
       }
 
-      console.log('[AVATARS] Signed URL created successfully for:', path);
+      logger.info('[AVATARS] Signed URL created successfully for:', path);
       return res.json({ success: true, signedUrl: data.signedUrl });
 
     } catch (err) {
-      console.error('[AVATARS] Server error:', err.message);
+      logger.error('[AVATARS] Server error:', err.message);
       return res.status(500).json({ 
         error: 'Server Error',
         message: err.message 
@@ -122,7 +123,7 @@ router.post('/getSignedUrls',
       });
     }
 
-    console.log('[AVATARS] Creating batch signed URLs:', {
+    logger.info('[AVATARS] Creating batch signed URLs:', {
       count: paths.length,
       requestedBy: req.user.employee_id,
       clientId: req.user.client_id
@@ -178,10 +179,10 @@ router.post('/getSignedUrls',
       }
 
       if (errors.length > 0) {
-        console.warn('[AVATARS] Some URLs failed to generate:', errors);
+        logger.warn('[AVATARS] Some URLs failed to generate:', errors);
       }
 
-      console.log('[AVATARS] Batch signed URLs created:', {
+      logger.info('[AVATARS] Batch signed URLs created:', {
         successful: Object.keys(urls).length,
         failed: errors.length
       });
@@ -193,7 +194,7 @@ router.post('/getSignedUrls',
       });
 
     } catch (err) {
-      console.error('[AVATARS] Server error:', err.message);
+      logger.error('[AVATARS] Server error:', err.message);
       return res.status(500).json({ 
         error: 'Server Error',
         message: err.message 

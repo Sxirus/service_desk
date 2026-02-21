@@ -11,6 +11,7 @@ const supabase = require("../config/supabase");
 const { authenticate } = require('../middleware/auth');
 const { validateId } = require('../middleware/validation');
 const { logFromReq, ACTIONS } = require('../services/activityLogger');
+const logger = require('../utils/logger');
 
 /**
  * Get all inboxes for authenticated user's client (Admin only)
@@ -25,7 +26,7 @@ router.get('/getInboxes',
     try {
       const client_id = req.user.client_id;
       
-      console.log('[INBOXES] Fetching inboxes for client:', client_id);
+      logger.info('[INBOXES] Fetching inboxes for client', { client_id });
 
       const { data, error } = await supabase
         .from("inboxes")
@@ -50,14 +51,14 @@ router.get('/getInboxes',
         .order("name");
 
       if (error) {
-        console.error('[INBOXES] Supabase error:', error.message);
+        logger.error('[INBOXES] Supabase error', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
-      console.log('[INBOXES] Fetched', data.length, 'inboxes');
+      logger.info('[INBOXES] Fetched inboxes', { count: data.length });
       res.json({success: true, data});
     } catch (err) {
-      console.error('[INBOXES] Server error:', err.message);
+      logger.error('[INBOXES] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -77,7 +78,7 @@ router.get('/getAccessibleInboxes',
       const employee_id = req.user.employee_id;
       const client_id = req.user.client_id;
 
-      console.log('[INBOXES] Fetching accessible inboxes for employee:', employee_id);
+      logger.info('[INBOXES] Fetching accessible inboxes for employee', { employee_id });
 
       // Get employee's groups
       const { data: employeeGroups, error: groupsError } = await supabase
@@ -86,15 +87,15 @@ router.get('/getAccessibleInboxes',
         .eq('employee_id', employee_id);
 
       if (groupsError) {
-        console.error('[INBOXES] Error fetching employee groups:', groupsError.message);
+        logger.error('[INBOXES] Error fetching employee groups', { error: groupsError.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
       const groupIds = employeeGroups.map(g => g.group_id);
-      console.log('[INBOXES] Employee is in groups:', groupIds);
+      logger.info('[INBOXES] Employee is in groups', { groupIds });
 
       if (groupIds.length === 0) {
-        console.log('[INBOXES] Employee not in any groups, returning empty list');
+        logger.info('[INBOXES] Employee not in any groups, returning empty list');
         return res.json({success: true, data: []});
       }
 
@@ -113,7 +114,7 @@ router.get('/getAccessibleInboxes',
         .in('group_id', groupIds);
 
       if (inboxError) {
-        console.error('[INBOXES] Error fetching inbox groups:', inboxError.message);
+        logger.error('[INBOXES] Error fetching inbox groups', { error: inboxError.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
@@ -128,10 +129,10 @@ router.get('/getAccessibleInboxes',
         }
       }
 
-      console.log('[INBOXES] Found', uniqueInboxes.length, 'accessible inboxes');
+      logger.info('[INBOXES] Found accessible inboxes', { count: uniqueInboxes.length });
       res.json({success: true, data: uniqueInboxes});
     } catch (err) {
-      console.error('[INBOXES] Server error:', err.message);
+      logger.error('[INBOXES] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -153,7 +154,7 @@ router.get('/getInboxEmails',
       const employee_id = req.user.employee_id;
       const client_id = req.user.client_id;
 
-      console.log('[INBOXES] Fetching emails for inbox:', inbox_id);
+      logger.info('[INBOXES] Fetching emails for inbox', { inbox_id });
 
       // Verify user has access to this inbox
       const { data: employeeGroups, error: groupsError } = await supabase
@@ -162,7 +163,7 @@ router.get('/getInboxEmails',
         .eq('employee_id', employee_id);
 
       if (groupsError) {
-        console.error('[INBOXES] Error fetching employee groups:', groupsError.message);
+        logger.error('[INBOXES] Error fetching employee groups', { error: groupsError.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
@@ -176,11 +177,7 @@ router.get('/getInboxEmails',
         .limit(1);
 
       if (accessError || !inboxAccess || inboxAccess.length === 0) {
-        console.warn('[INBOXES] Unauthorized inbox access attempt:', {
-          inbox_id,
-          employee_id,
-          employee_groups: groupIds
-        });
+        logger.warn('[INBOXES] Unauthorized inbox access attempt', { inbox_id, employee_id, employee_groups: groupIds });
         return res.status(403).json({ error: 'Access denied to this inbox' });
       }
 
@@ -191,7 +188,7 @@ router.get('/getInboxEmails',
         .eq('inbox_id', inbox_id);
 
       if (filtersError) {
-        console.error('[INBOXES] Error fetching filters:', filtersError.message);
+        logger.error('[INBOXES] Error fetching filters', { error: filtersError.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
@@ -268,14 +265,14 @@ router.get('/getInboxEmails',
       const { data, error } = await query;
 
       if (error) {
-        console.error('[INBOXES] Error fetching emails:', error.message);
+        logger.error('[INBOXES] Error fetching emails', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
-      console.log('[INBOXES] Fetched', data.length, 'filtered emails');
+      logger.info('[INBOXES] Fetched filtered emails', { count: data.length });
       res.json({success: true, data});
     } catch (err) {
-      console.error('[INBOXES] Server error:', err.message);
+      logger.error('[INBOXES] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -301,7 +298,7 @@ router.post('/createInbox',
         return res.status(400).json({ error: 'Valid inbox name is required' });
       }
 
-      console.log('[INBOXES] Creating inbox:', name);
+      logger.info('[INBOXES] Creating inbox', { name });
 
       const { data, error } = await supabase
         .from('inboxes')
@@ -315,15 +312,15 @@ router.post('/createInbox',
         .single();
 
       if (error) {
-        console.error('[INBOXES] Create failed:', error.message);
+        logger.error('[INBOXES] Create failed', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
-      console.log('[INBOXES] Inbox created successfully:', data.id);
+      logger.info('[INBOXES] Inbox created successfully', { inboxId: data.id });
       logFromReq(req, { ...ACTIONS.INBOX_CREATED, targetType: 'inbox', targetId: data.id, details: { name: data.name } });
       res.json({ success: true, data });
     } catch (err) {
-      console.error('[INBOXES] Server error:', err.message);
+      logger.error('[INBOXES] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -350,7 +347,7 @@ router.put('/updateInbox',
         return res.status(400).json({ error: 'Valid inbox name is required' });
       }
 
-      console.log('[INBOXES] Updating inbox:', inbox_id);
+      logger.info('[INBOXES] Updating inbox', { inbox_id });
 
       // Verify inbox belongs to user's client
       const { data: inbox, error: inboxError } = await supabase
@@ -360,12 +357,12 @@ router.put('/updateInbox',
         .single();
 
       if (inboxError || !inbox) {
-        console.error('[INBOXES] Inbox not found:', inbox_id);
+        logger.error('[INBOXES] Inbox not found', { inbox_id });
         return res.status(404).json({ error: 'Inbox not found' });
       }
 
       if (inbox.client_id !== client_id) {
-        console.warn('[INBOXES] Unauthorized inbox update attempt');
+        logger.warn('[INBOXES] Unauthorized inbox update attempt');
         return res.status(403).json({ error: 'Access denied to this inbox' });
       }
 
@@ -380,15 +377,15 @@ router.put('/updateInbox',
         .single();
 
       if (error) {
-        console.error('[INBOXES] Update failed:', error.message);
+        logger.error('[INBOXES] Update failed', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
-      console.log('[INBOXES] Inbox updated successfully');
+      logger.info('[INBOXES] Inbox updated successfully');
       logFromReq(req, { ...ACTIONS.INBOX_UPDATED, targetType: 'inbox', targetId: inbox_id, details: { name: data.name } });
       res.json({ success: true, data });
     } catch (err) {
-      console.error('[INBOXES] Server error:', err.message);
+      logger.error('[INBOXES] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -409,7 +406,7 @@ router.delete('/deleteInbox',
       const inbox_id = req.sanitized.inbox_id;
       const client_id = req.user.client_id;
 
-      console.log('[INBOXES] Deleting inbox:', inbox_id);
+      logger.info('[INBOXES] Deleting inbox', { inbox_id });
 
       // Verify inbox belongs to user's client
       const { data: inbox, error: inboxError } = await supabase
@@ -419,12 +416,12 @@ router.delete('/deleteInbox',
         .single();
 
       if (inboxError || !inbox) {
-        console.error('[INBOXES] Inbox not found:', inbox_id);
+        logger.error('[INBOXES] Inbox not found', { inbox_id });
         return res.status(404).json({ error: 'Inbox not found' });
       }
 
       if (inbox.client_id !== client_id) {
-        console.warn('[INBOXES] Unauthorized inbox delete attempt');
+        logger.warn('[INBOXES] Unauthorized inbox delete attempt');
         return res.status(403).json({ error: 'Access denied to this inbox' });
       }
 
@@ -434,15 +431,15 @@ router.delete('/deleteInbox',
         .eq('id', inbox_id);
 
       if (error) {
-        console.error('[INBOXES] Delete failed:', error.message);
+        logger.error('[INBOXES] Delete failed', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
-      console.log('[INBOXES] Inbox deleted successfully');
+      logger.info('[INBOXES] Inbox deleted successfully');
       logFromReq(req, { ...ACTIONS.INBOX_DELETED, targetType: 'inbox', targetId: inbox_id });
       res.json({ success: true });
     } catch (err) {
-      console.error('[INBOXES] Server error:', err.message);
+      logger.error('[INBOXES] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -483,14 +480,14 @@ router.post('/addGroup',
         .select();
 
       if (error) {
-        console.error('[INBOXES] Add group failed:', error.message);
+        logger.error('[INBOXES] Add group failed', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
       logFromReq(req, { ...ACTIONS.INBOX_GROUP_ADDED, targetType: 'inbox', targetId: inbox_id, details: { groupId: group_id } });
       res.json({ success: true, data });
     } catch (err) {
-      console.error('[INBOXES] Server error:', err.message);
+      logger.error('[INBOXES] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -529,14 +526,14 @@ router.delete('/removeGroup',
         .eq('group_id', group_id);
 
       if (error) {
-        console.error('[INBOXES] Remove group failed:', error.message);
+        logger.error('[INBOXES] Remove group failed', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
       logFromReq(req, { ...ACTIONS.INBOX_GROUP_REMOVED, targetType: 'inbox', targetId: inbox_id, details: { groupId: group_id } });
       res.json({ success: true });
     } catch (err) {
-      console.error('[INBOXES] Server error:', err.message);
+      logger.error('[INBOXES] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -590,7 +587,7 @@ router.post('/setFilters',
           .insert(filtersToInsert);
 
         if (error) {
-          console.error('[INBOXES] Set filters failed:', error.message);
+          logger.error('[INBOXES] Set filters failed', { error: error.message });
           return res.status(500).json({ error: 'Database error' });
         }
       }
@@ -598,7 +595,7 @@ router.post('/setFilters',
       logFromReq(req, { ...ACTIONS.INBOX_FILTERS_SET, targetType: 'inbox', targetId: inbox_id, details: { filterCount: filters.length } });
       res.json({ success: true });
     } catch (err) {
-      console.error('[INBOXES] Server error:', err.message);
+      logger.error('[INBOXES] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -618,7 +615,7 @@ router.get('/getCounts',
       const employee_id = req.user.employee_id;
       const client_id = req.user.client_id;
 
-      console.log('[INBOXES] Fetching email counts for employee:', employee_id);
+      logger.info('[INBOXES] Fetching email counts for employee', { employee_id });
 
       // Get count for "Dashboard" (new/open emails from customers assigned to this employee)
       const { count: dashboardCount, error: dashboardError } = await supabase
@@ -629,7 +626,7 @@ router.get('/getCounts',
         .in('status', ['new', 'open']);
 
       if (dashboardError) {
-        console.error('[INBOXES] Error counting dashboard mails:', dashboardError.message);
+        logger.error('[INBOXES] Error counting dashboard mails', { error: dashboardError.message });
       }
 
       // Get employee's groups
@@ -639,7 +636,7 @@ router.get('/getCounts',
         .eq('employee_id', employee_id);
 
       if (groupsError) {
-        console.error('[INBOXES] Error fetching employee groups:', groupsError.message);
+        logger.error('[INBOXES] Error fetching employee groups', { error: groupsError.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
@@ -672,7 +669,7 @@ router.get('/getCounts',
         .in('group_id', groupIds);
 
       if (inboxError) {
-        console.error('[INBOXES] Error fetching inbox groups:', inboxError.message);
+        logger.error('[INBOXES] Error fetching inbox groups', { error: inboxError.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
@@ -736,14 +733,14 @@ router.get('/getCounts',
         const { count, error: countError } = await query;
         
         if (countError) {
-          console.error(`[INBOXES] Error counting emails for inbox ${inbox.id}:`, countError.message);
+          logger.error(`[INBOXES] Error counting emails for inbox ${inbox.id}`, { error: countError.message });
           inboxCounts[inbox.id] = 0;
         } else {
           inboxCounts[inbox.id] = count || 0;
         }
       }
 
-      console.log('[INBOXES] Email counts:', { dashboard: dashboardCount, inboxes: inboxCounts });
+      logger.info('[INBOXES] Email counts', { dashboard: dashboardCount, inboxes: inboxCounts });
       res.json({ 
         success: true, 
         data: { 
@@ -752,7 +749,7 @@ router.get('/getCounts',
         } 
       });
     } catch (err) {
-      console.error('[INBOXES] Server error:', err.message);
+      logger.error('[INBOXES] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }

@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const logger = require('./logger');
 
 // The algorithm to use for encryption
 const ALGORITHM = 'aes-256-gcm';
@@ -48,7 +49,7 @@ function encrypt(text) {
         // Return format: iv:authTag:encryptedData
         return `${iv.toString('base64')}:${authTag}:${encrypted}`;
     } catch (error) {
-        console.error('[Encryption] Encryption failed:', error.message);
+        logger.error('[Encryption] Encryption failed', { error: error.message });
         throw new Error('Encryption failed');
     }
 }
@@ -65,7 +66,7 @@ function decrypt(encryptedText) {
     const parts = encryptedText.split(':');
     if (parts.length !== 3) {
         // Log warning for legacy plaintext data
-        console.warn('[Encryption] Data is not encrypted or in wrong format, returning as-is');
+        logger.warn('[Encryption] Data is not encrypted or in wrong format, returning as-is');
         return encryptedText;
     }
     
@@ -83,7 +84,7 @@ function decrypt(encryptedText) {
         
         return decrypted;
     } catch (error) {
-        console.error('[Encryption] Decryption failed:', error.message);
+        logger.error('[Encryption] Decryption failed', { error: error.message });
         // If decryption fails, it might be that the text just happens to contain two colons but isn't encrypted
         // or the key is wrong. In a strict environment, we should throw an error.
         // For the migration phase, we return as-is or throw depending on strictness.

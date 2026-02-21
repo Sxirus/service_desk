@@ -4,6 +4,7 @@
  */
 
 const validator = require('validator');
+const logger = require('../utils/logger');
 
 /**
  * Validate and sanitize Shopify shop name
@@ -111,7 +112,7 @@ function validateOAuthState(req, res, next) {
   const savedState = req.cookies?.shopify_oauth_state;
 
   if (!state || !savedState) {
-    console.error('[VALIDATION] Missing OAuth state');
+    logger.error('[VALIDATION] Missing OAuth state');
     return res.status(403).json({ 
       error: 'Forbidden',
       message: 'Invalid OAuth state' 
@@ -119,7 +120,7 @@ function validateOAuthState(req, res, next) {
   }
 
   if (state !== savedState) {
-    console.error('[VALIDATION] OAuth state mismatch - possible CSRF attack');
+    logger.error('[VALIDATION] OAuth state mismatch - possible CSRF attack');
     return res.status(403).json({ 
       error: 'Forbidden',
       message: 'State validation failed - possible CSRF attack' 
@@ -138,7 +139,7 @@ function validateOAuthState(req, res, next) {
     req.sanitized.stateData = stateData;
     next();
   } catch (error) {
-    console.error('[VALIDATION] Failed to decode state:', error);
+    logger.error('[VALIDATION] Failed to decode state', { error: error.message });
     return res.status(403).json({ 
       error: 'Forbidden',
       message: 'Invalid state format' 
@@ -154,7 +155,7 @@ function validateShopifyHMAC(req, res, next) {
   const hmac = req.query.hmac;
 
   if (!hmac) {
-    console.error('[VALIDATION] Missing HMAC parameter');
+    logger.error('[VALIDATION] Missing HMAC parameter');
     return res.status(403).json({ 
       error: 'Forbidden',
       message: 'HMAC validation required' 
@@ -178,14 +179,14 @@ function validateShopifyHMAC(req, res, next) {
     .digest('hex');
 
   if (generatedHash !== hmac) {
-    console.error('[VALIDATION] HMAC validation failed');
+    logger.error('[VALIDATION] HMAC validation failed');
     return res.status(403).json({ 
       error: 'Forbidden',
       message: 'HMAC validation failed - request may be forged' 
     });
   }
 
-  console.log('[VALIDATION] HMAC validated successfully');
+  logger.info('[VALIDATION] HMAC validated successfully');
   next();
 }
 

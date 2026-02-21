@@ -1,5 +1,6 @@
 const sharp = require("sharp");
 const AdmZip = require('adm-zip');
+const logger = require('../../utils/logger');
 
 //jpeg/jpg scales
 const TARGET_HEIGHT_JPEG = 600;
@@ -31,7 +32,7 @@ function isPng(att) {
 
 function isDocx(att) {
   const ct = (att.contentType || '').toLowerCase();
-  console.log('DOCX content type', ct);
+  logger.info('DOCX content type', { contentType: ct });
   const name = (att.filename || '').toLowerCase();
   return ct === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
   name.endsWith('.docx')
@@ -44,12 +45,12 @@ function asJpegFilename(filename) {
 
 //function to scale down the attachments
 async function downscaleAttachments(attachments) {
-  console.log("[Attachment Handler] Entered Downscaling");
-  downsized = [];
+  logger.info("[Attachment Handler] Entered Downscaling");
+  let downsized = [];
   for (const att of attachments) {
     try {
       const sizeBefore = att.size;
-      console.log("Size before:", (sizeBefore / (1024 * 1024)).toFixed(2));
+      logger.info('Size before: ' + (sizeBefore / (1024 * 1024)).toFixed(2));
 
       let data;
       let outContentType = att.contentType;
@@ -64,18 +65,18 @@ async function downscaleAttachments(attachments) {
         outContentType = 'image/png';
         outFilename = att.filename.replace(/\.png$/i, '.png');
       } else if (isDocx(att)){
-        console.log('[DOCX] compressing', att.filename);
+        logger.info('[DOCX] compressing', { filename: att.filename });
         const { buffer, changed } = await compressDocx(att.content);
         data = buffer;
-        console.log(`[DOCX] ${changed} images recompressed`);
+        logger.info(`[DOCX] ${changed} images recompressed`);
       } else {
         //no downscaling for that file type inplemented -> just use the whole attachment
         data = att.content;
       }
       if (data.length > sizeBefore) {
-        console.log("!!!DOWNSCALING FAILED!!! Data is bigger then before");
+        logger.info("!!!DOWNSCALING FAILED!!! Data is bigger than before");
       } else {
-        console.log("New Size:", (data.length / (1024 * 1024)).toFixed(2));
+        logger.info('New Size: ' + (data.length / (1024 * 1024)).toFixed(2));
       }
 
         downsized.push({
@@ -87,7 +88,7 @@ async function downscaleAttachments(attachments) {
       });
 
     } catch (error) {
-      console.log("Downsclaing Error", error);
+      logger.error("Downscaling error", { error: error.message });
       downsized.push(att); //using non downscaled attachment
     }
   }
@@ -96,7 +97,7 @@ async function downscaleAttachments(attachments) {
 
 // function to scale down a jpeg or jpg
 async function scalejpeg(att) {
-  console.log("[Attachment Handler] entered scalejpeg");
+  logger.info("[Attachment Handler] entered scalejpeg");
   try {
     let pipeline = sharp(att.content, { failOnError: false }).rotate();
     const meta = await pipeline.metadata();
@@ -105,15 +106,15 @@ async function scalejpeg(att) {
       pipeline = pipeline.resize({ height: TARGET_HEIGHT_JPEG });
     }
 
-    data = await pipeline
+    const data = await pipeline
       .withMetadata({ density: DENSITY_PPI })
       .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
       .toBuffer();
     
-    console.log("Downscaled data:",data);
+    logger.info("Downscaled data", { size: data.length });
     return data;
   } catch (error) {
-    console.log("Downscaling Error in Jpeg", error)
+    logger.error("Downscaling error in JPEG", { error: error.message })
     throw new Error(error)
   }
 }
@@ -123,7 +124,7 @@ async function scalePng(inputBuffer) {
   if (!inputBuffer || !Buffer.isBuffer(inputBuffer)) {
     throw new Error('scalePng: input must be a Buffer');
   }
-  console.log('[Attachment Handler] scalePng');
+  logger.info('[Attachment Handler] scalePng');
 
   try {
     let pipeline = sharp(inputBuffer, { failOnError: false }).rotate();
@@ -133,18 +134,18 @@ async function scalePng(inputBuffer) {
       pipeline = pipeline.resize({ height: TARGET_HEIGHT_PNG });
     }
 
-    // Kompression: hohe Kompressionsstufe = kleinere Datei
+    // Compression: higher compression level = smaller file
     const data = await pipeline
       .png({
         compressionLevel: compressionLevel_PNG,  // 0–9, 9 = maximal
         adaptiveFiltering: true,
-        palette: true         // Farbreduktion, spart Platz
+        palette: true         // Color reduction, saves space
       })
       .toBuffer();
 
     return data;
   } catch (err) {
-    console.error('scalePng error', err);
+    logger.error('scalePng error', { error: err.message });
     throw err;
   }
 }
@@ -218,7 +219,7 @@ function convertMulterFilesToNodemailerAttachments(multerFiles) {
       content: file.buffer,
       contentType: file.mimetype,
       contentDisposition: 'attachment',
-      // Generiere eine Content-ID ähnlich wie bei empfangenen Emails
+      // Generate a Content-ID similar to received emails
       contentId: `<${generateContentId()}>`,
       cid: generateContentId(),
       headers: {

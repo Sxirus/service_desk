@@ -10,6 +10,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require("../config/supabase");
 const { authenticate } = require('../middleware/auth');
+const logger = require('../utils/logger');
 
 /**
  * Get email statistics for a date range
@@ -74,7 +75,7 @@ router.get('/email-stats',
         });
       }
 
-      console.log('[ANALYTICS] Fetching email stats for client:', client_id, 'from:', from, 'to:', to);
+      logger.info('[ANALYTICS] Fetching email stats for client', { client_id, from, to });
 
       // Get customer IDs for this client with a reasonable limit
       // For very large clients, we use direct client_id filtering on incoming-mails
@@ -86,7 +87,7 @@ router.get('/email-stats',
         .limit(MAX_CUSTOMER_IDS);
 
       if (customersError) {
-        console.error('[ANALYTICS] Error fetching customer IDs:', customersError.message);
+        logger.error('[ANALYTICS] Error fetching customer IDs', { error: customersError.message });
         return res.status(500).json({ 
           error: 'Database Error',
           message: 'Failed to fetch customer data' 
@@ -97,7 +98,7 @@ router.get('/email-stats',
 
       // Handle case where client has no customers
       if (customerIds.length === 0) {
-        console.log('[ANALYTICS] No customers found for client:', client_id);
+        logger.info('[ANALYTICS] No customers found for client', { client_id });
         return res.json({
           totalIncoming: 0,
           totalSent: 0,
@@ -132,7 +133,7 @@ router.get('/email-stats',
       ]);
 
       if (incomingError) {
-        console.error('[ANALYTICS] Error fetching incoming emails:', incomingError.message);
+        logger.error('[ANALYTICS] Error fetching incoming emails', { error: incomingError.message });
         return res.status(500).json({ 
           error: 'Database Error',
           message: 'Failed to fetch incoming emails' 
@@ -140,7 +141,7 @@ router.get('/email-stats',
       }
 
       if (sentError) {
-        console.error('[ANALYTICS] Error fetching sent emails:', sentError.message);
+        logger.error('[ANALYTICS] Error fetching sent emails', { error: sentError.message });
         return res.status(500).json({ 
           error: 'Database Error',
           message: 'Failed to fetch sent emails' 
@@ -208,16 +209,11 @@ router.get('/email-stats',
         dailyStats
       };
 
-      console.log('[ANALYTICS] Returning stats:', {
-        totalIncoming,
-        totalSent,
-        dailyStatsCount: dailyStats.length,
-        averageResponseTime
-      });
+      logger.info('[ANALYTICS] Returning stats', { totalIncoming, totalSent, dailyStatsCount: dailyStats.length, averageResponseTime });
 
       res.json(response);
     } catch (err) {
-      console.error('[ANALYTICS] Server error:', err.message);
+      logger.error('[ANALYTICS] Server error', { error: err.message });
       res.status(500).json({ 
         error: 'Internal Server Error',
         message: 'Failed to fetch analytics data' 
@@ -265,7 +261,7 @@ router.get('/employee-stats',
         });
       }
 
-      console.log('[ANALYTICS] Fetching employee stats for client:', client_id, 'from:', from, 'to:', to);
+      logger.info('[ANALYTICS] Fetching employee stats for client', { client_id, from, to });
 
       // Get all employees for this client
       const { data: employees, error: employeesError } = await supabase
@@ -274,7 +270,7 @@ router.get('/employee-stats',
         .eq('client_id', client_id);
 
       if (employeesError) {
-        console.error('[ANALYTICS] Error fetching employees:', employeesError.message);
+        logger.error('[ANALYTICS] Error fetching employees', { error: employeesError.message });
         return res.status(500).json({ 
           error: 'Database Error',
           message: 'Failed to fetch employee data' 
@@ -288,7 +284,7 @@ router.get('/employee-stats',
         .eq('client_id', client_id);
 
       if (customersError) {
-        console.error('[ANALYTICS] Error fetching customers:', customersError.message);
+        logger.error('[ANALYTICS] Error fetching customers', { error: customersError.message });
         return res.status(500).json({ 
           error: 'Database Error',
           message: 'Failed to fetch customer data' 
@@ -311,7 +307,7 @@ router.get('/employee-stats',
         .order('send_at', { ascending: true });
 
       if (sentError) {
-        console.error('[ANALYTICS] Error fetching sent emails:', sentError.message);
+        logger.error('[ANALYTICS] Error fetching sent emails', { error: sentError.message });
         return res.status(500).json({ 
           error: 'Database Error',
           message: 'Failed to fetch sent emails' 
@@ -381,11 +377,11 @@ router.get('/employee-stats',
           return a.employee_id - b.employee_id;
         });
 
-      console.log('[ANALYTICS] Returning employee stats:', summary.length, 'employees', daily.length, 'daily records');
+      logger.info('[ANALYTICS] Returning employee stats', { employeeCount: summary.length, dailyRecords: daily.length });
 
       res.json({ summary, daily });
     } catch (err) {
-      console.error('[ANALYTICS] Server error:', err.message);
+      logger.error('[ANALYTICS] Server error', { error: err.message });
       res.status(500).json({ 
         error: 'Internal Server Error',
         message: 'Failed to fetch employee analytics data' 
@@ -449,7 +445,7 @@ router.get('/status-stats',
         });
       }
 
-      console.log('[ANALYTICS] Fetching status stats for client:', client_id, 'from:', from, 'to:', to);
+      logger.info('[ANALYTICS] Fetching status stats for client', { client_id, from, to });
 
       // Fetch all emails with their current status
       const { data: emails, error: emailsError } = await supabase
@@ -460,7 +456,7 @@ router.get('/status-stats',
         .lte('send_at', to);
 
       if (emailsError) {
-        console.error('[ANALYTICS] Error fetching emails:', emailsError.message);
+        logger.error('[ANALYTICS] Error fetching emails', { error: emailsError.message });
         return res.status(500).json({ 
           error: 'Database Error',
           message: 'Failed to fetch email data' 
@@ -508,11 +504,11 @@ router.get('/status-stats',
         (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
       );
 
-      console.log('[ANALYTICS] Returning status stats:', statusDistribution);
+      logger.info('[ANALYTICS] Returning status stats', { statusDistribution });
 
       res.json({ statusDistribution, dailyStatus });
     } catch (err) {
-      console.error('[ANALYTICS] Server error:', err.message);
+      logger.error('[ANALYTICS] Server error', { error: err.message });
       res.status(500).json({ 
         error: 'Internal Server Error',
         message: 'Failed to fetch status analytics data' 

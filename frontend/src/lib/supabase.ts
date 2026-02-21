@@ -40,7 +40,7 @@ export function createClient({ request, cookies }: { request: Request; cookies: 
               ...options,                      // Spread existing options
               path: "/",                       // Make cookie available site-wide
               sameSite: "lax",                 // CSRF protection while allowing some cross-site usage
-              secure: false,                   // Set to false for development (HTTP), true for production (HTTPS)
+              secure: import.meta.env.PROD,    // true in production (HTTPS), false in development (HTTP)
             });
           }
         },

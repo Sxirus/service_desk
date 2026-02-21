@@ -7,6 +7,7 @@ const supabase = require('../config/supabase');  // Supabase client for database
 const { storeIncomingAttachmentInDB } = require('./attachments/incoming');
 const nodemailer = require('nodemailer');
 const { getClientSmtpConfig } = require('./emailService');
+const logger = require('../utils/logger');
 
 /**
  * Save a parsed email to the database with customer association
@@ -22,53 +23,68 @@ const { getClientSmtpConfig } = require('./emailService');
  */
 async function saveEmail(parsedEmail, clientId, InboxEmail, confirmation) {
     // Extract relevant email data for processing
-    const { subject, from, to, date, text, html, attachments = [] } = parsedEmail;
+    const { subject, from, to, date, text, html, attachments = [], messageId } = parsedEmail;
     
     // Extract sender's email address from the parsed email structure
     const senderEmailAddress = Array.isArray(from.value) && from.value.length > 0 && from.value[0].address
         ? from.value[0].address
         : null;
     if (!senderEmailAddress) {
-        console.error(`[${InboxEmail}] Invalid sender email structure:`, from);
+        logger.error(`[${InboxEmail}] Invalid sender email structure`, { from });
         return;
     }
 
-    // NEU: Extract recipient email addresses (to_email_address)
+    // Deduplication: skip if we've already processed this message_id
+    if (messageId) {
+        const { data: existingEmail } = await supabase
+            .from('incoming-mails')
+            .select('id')
+            .eq('message_id', messageId)
+            .eq('client_id', clientId)
+            .maybeSingle();
+
+        if (existingEmail) {
+            logger.info(`[${InboxEmail}] Duplicate email detected (message_id: ${messageId}), skipping`);
+            return;
+        }
+    }
+
+    // Extract recipient email addresses (to_email_address)
     let toEmailAddress = null;
     if (Array.isArray(to?.value) && to.value.length > 0) {
-        // Nehme die erste Empfänger-Email-Adresse
+        // Take the first recipient email address
         toEmailAddress = to.value[0].address;
     } else if (to?.text) {
-        // Fallback: Versuche aus dem Text-Feld zu extrahieren
+        // Fallback: try to extract from text field
         const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
         const match = to.text.match(emailRegex);
         toEmailAddress = match ? match[0] : null;
     }
 
-    // NEU: received_by ist die InboxEmail (welche unserer Emails hat die Nachricht empfangen)
+    // received_by is the inbox email
     const receivedBy = InboxEmail;
 
     let customerId;
 
-    console.log(`[${InboxEmail}] Checking if email address exists:`, senderEmailAddress);
+    logger.info(`[${InboxEmail}] Checking if email address exists`, { senderEmailAddress });
     
     // Check if this email address is already associated with a customer
     if (!(await checkIfEmailAddressExists(senderEmailAddress))) {
         // Email address is new - create a new customer record
-        console.log(`[${InboxEmail}] Email address does not exist, creating new customer with email:`, senderEmailAddress);
+        logger.info(`[${InboxEmail}] Email address does not exist, creating new customer with email`, { senderEmailAddress });
         customerId = await createCustomerWithEmail(from, clientId);
         if (!customerId) {
-            console.error(`[${clientId}] Failed to create customer for email address:`, senderEmailAddress);
+            logger.error(`[${clientId}] Failed to create customer for email address`, { senderEmailAddress });
             return;
         }
     } else {
         // Email address exists - retrieve the existing customer ID
         customerId = await getCustomerIdByEmail(senderEmailAddress);
-        console.log(`[${InboxEmail}] Email address exists, retrieving customer ID for "${senderEmailAddress}":`, customerId);
+        logger.info(`[${InboxEmail}] Email address exists, retrieving customer ID for "${senderEmailAddress}"`, { customerId });
     }
 
-    // NEU: Logging der Email-Details für Debugging
-    console.log(`[${InboxEmail}] Email details:`, {
+    // Log email details for debugging
+    logger.info(`[${InboxEmail}] Email details`, {
         from: senderEmailAddress,
         to: toEmailAddress,
         receivedBy: receivedBy,
@@ -102,14 +118,14 @@ async function saveEmail(parsedEmail, clientId, InboxEmail, confirmation) {
         if (lastEmail?.status === 'resolved') {
             // Ticket was resolved, customer is re-opening it
             initialStatus = 'open';
-            console.log(`[${InboxEmail}] Customer re-opening resolved ticket, setting status to 'open'`);
+            logger.info(`[${InboxEmail}] Customer re-opening resolved ticket, setting status to 'open'`);
         } else {
             // Active conversation, customer follow-up
             initialStatus = 'open';
-            console.log(`[${InboxEmail}] Customer follow-up on active ticket, setting status to 'open'`);
+            logger.info(`[${InboxEmail}] Customer follow-up on active ticket, setting status to 'open'`);
         }
     } else {
-        console.log(`[${InboxEmail}] New ticket (no prior agent response), setting status to 'new'`);
+        logger.info(`[${InboxEmail}] New ticket (no prior agent response), setting status to 'new'`);
     }
 
     // Insert the email into the incoming-mails table with customer association
@@ -122,40 +138,41 @@ async function saveEmail(parsedEmail, clientId, InboxEmail, confirmation) {
             text_content: text,                      // Plain text version of email content
             html_content: html,                      // HTML version of email content
             email_address: senderEmailAddress,       // Sender's email address for quick reference
-            to_email_address: toEmailAddress,        // NEU: Empfänger-Email-Adresse
-            received_by: receivedBy,                 // NEU: Welche unserer Emails hat die Nachricht empfangen
+            to_email_address: toEmailAddress,        // Recipient email address
+            received_by: receivedBy,                 // Which of our emails received the message
+            message_id: messageId || null,           // Email Message-ID header for deduplication
             status: initialStatus                    // Ticket lifecycle status
         }
     ]).select().single();
 
     // Handle database insertion errors
     if (emailError) {
-        console.error(`[${InboxEmail}] Failed to insert email:`, emailError);
+        logger.error(`[${InboxEmail}] Failed to insert email`, { error: emailError });
         return;
     }
 
     //saving attachments
     if (attachments.length > 0) {
-        console.log(`[${InboxEmail}] Saving attachments`);
+        logger.info(`[${InboxEmail}] Saving attachments`);
         storeIncomingAttachmentInDB(attachments, clientId, email.id);
     } else {
-        console.log(`[${InboxEmail}] Mail had no attachments, proceding`);
+        logger.info(`[${InboxEmail}] Mail had no attachments, proceding`);
     }
 
     //sending confirmation email
     const confirmMode = confirmation[0].confirmation_mail_mode || 'all';
 
     if (confirmMode === 'disabled') {
-        console.log(`[${InboxEmail}] Confirmation mail is disabled for this client`);
+        logger.info(`[${InboxEmail}] Confirmation mail is disabled for this client`);
     } else if (confirmation[0].confirm_mail == null || confirmation[0].confirm_mail == '' || confirmation[0].confirmation_mail_subject == null || confirmation[0].confirmation_mail_subject == '') {
-        console.log('Client set no confirmation mail');
+        logger.info('Client set no confirmation mail');
     } else if (confirmMode === 'new_only' && initialStatus !== 'new') {
-        console.log(`[${InboxEmail}] Confirmation mail mode is 'new_only' but ticket status is '${initialStatus}', skipping`);
+        logger.info(`[${InboxEmail}] Confirmation mail mode is 'new_only' but ticket status is '${initialStatus}', skipping`);
     } else {
         sendConfirmation(senderEmailAddress, confirmation[0], clientId, InboxEmail);
     }
 
-    console.log(`[${InboxEmail}] New Email processed and saved successfully with ID:`, email.id);
+    logger.info(`[${InboxEmail}] New Email processed and saved successfully`, { emailId: email.id });
 }
 
 /**
@@ -181,7 +198,7 @@ async function createCustomerWithEmail(from, clientId) {
 
     // Handle customer creation errors
     if (customerError) {
-        console.error(`[${senderEmailAddress}] Failed to create customer:`, customerError);
+        logger.error(`[${senderEmailAddress}] Failed to create customer`, { error: customerError });
         return;
     }
 
@@ -195,7 +212,7 @@ async function createCustomerWithEmail(from, clientId) {
 
     // Handle email address creation errors
     if (emailError) {
-        console.error(`[${clientId}] Failed to create email address:`, emailError);
+        logger.error(`[${clientId}] Failed to create email address`, { error: emailError });
         return;
     }
 
@@ -218,7 +235,7 @@ async function checkIfEmailAddressExists(email) {
     
     // Handle database query errors
     if (error) {
-        console.error(`[${email}] Failed to check email existence:`, error);
+        logger.error(`[${email}] Failed to check email existence`, { error });
         return false;                            // Assume email doesn't exist on error
     } else {
         // Return true if we found a record with a valid customer_id
@@ -242,7 +259,7 @@ async function getCustomerIdByEmail(email) {
     
     // Handle database query errors
     if (error) {
-        console.error(`[${email}] Failed to get customer ID by email:`, error);
+        logger.error(`[${email}] Failed to get customer ID by email`, { error });
         return null;                             // Return null to indicate failure
     }
     
@@ -258,7 +275,7 @@ async function getConfirmation(clientId) {
       .limit(1)
 
     if (error) {
-        console.log(`[${clientId}, Email Handler] Error getting clients confirm text`, error);
+        logger.info(`[${clientId}, Email Handler] Error getting clients confirm text`, { error });
         return null
     }
 
@@ -277,7 +294,7 @@ async function sendConfirmation(customerEmail, confirmation, clientId, inboxEmai
     // Get the client's SMTP config (prefer the inbox that received the email)
     const smtpConfig = await getClientSmtpConfig(clientId, inboxEmail);
     if (!smtpConfig) {
-      console.error(`[CONFIRMATION] No SMTP configuration found for client ${clientId}`);
+      logger.error(`[CONFIRMATION] No SMTP configuration found for client ${clientId}`);
       return;
     }
 
@@ -293,10 +310,10 @@ async function sendConfirmation(customerEmail, confirmation, clientId, inboxEmai
       html: htmlBody,
     });
 
-    console.log('[CONFIRMATION] Confirmation email sent:', info.messageId);
+    logger.info('[CONFIRMATION] Confirmation email sent', { messageId: info.messageId });
 
   } catch (err) {
-    console.error('[CONFIRMATION] Send error:', err);
+    logger.error('[CONFIRMATION] Send error', { error: err });
   }
 }
 

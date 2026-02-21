@@ -6,6 +6,7 @@ const express = require('express');
 const router = express.Router();
 const Stripe = require('stripe');
 const supabase = require('../config/supabase');
+const logger = require('../utils/logger');
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: '2025-03-31.basil',
@@ -24,7 +25,7 @@ router.post(
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
     if (!webhookSecret) {
-      console.error('[Webhook] STRIPE_WEBHOOK_SECRET not configured');
+      logger.error('[Webhook] STRIPE_WEBHOOK_SECRET not configured');
       return res.status(500).json({ error: 'Webhook secret not configured' });
     }
 
@@ -33,11 +34,11 @@ router.post(
     try {
       event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
     } catch (err) {
-      console.error('[Webhook] Signature verification failed:', err.message);
+      logger.error('[Webhook] Signature verification failed', { error: err.message });
       return res.status(400).json({ error: `Webhook Error: ${err.message}` });
     }
 
-    console.log(`[Webhook] Received event: ${event.type} (${event.id})`);
+    logger.info(`[Webhook] Received event: ${event.type} (${event.id})`);
 
     // Idempotency check - prevent duplicate processing
     const { data: existingEvent } = await supabase
@@ -47,7 +48,7 @@ router.post(
       .single();
 
     if (existingEvent) {
-      console.log(`[Webhook] Event ${event.id} already processed, skipping`);
+      logger.info(`[Webhook] Event ${event.id} already processed, skipping`);
       return res.status(200).json({ received: true, skipped: true });
     }
 
@@ -62,10 +63,10 @@ router.post(
         payload: event.data.object,
       });
 
-      console.log(`[Webhook] Event ${event.id} processed successfully`);
+      logger.info(`[Webhook] Event ${event.id} processed successfully`);
       return res.status(200).json({ received: true });
     } catch (err) {
-      console.error(`[Webhook] Error processing event ${event.id}:`, err);
+      logger.error(`[Webhook] Error processing event ${event.id}`, { error: err });
       return res.status(500).json({ error: 'Webhook processing failed' });
     }
   }
@@ -97,7 +98,7 @@ async function handleWebhookEvent(event, req) {
       break;
 
     default:
-      console.log(`[Webhook] Unhandled event type: ${event.type}`);
+      logger.info(`[Webhook] Unhandled event type: ${event.type}`);
   }
 }
 
@@ -108,7 +109,7 @@ async function handleWebhookEvent(event, req) {
  * - Creates platform notification
  */
 async function handleSubscriptionCancelled(subscription, req) {
-  console.log('[Webhook] Processing subscription cancellation:', subscription.id);
+  logger.info('[Webhook] Processing subscription cancellation', { subscriptionId: subscription.id });
 
   const stripeCustomerId = subscription.customer;
   const periodEnd = subscription.current_period_end
@@ -123,11 +124,11 @@ async function handleSubscriptionCancelled(subscription, req) {
     .single();
 
   if (clientError || !client) {
-    console.error('[Webhook] Client not found for Stripe customer:', stripeCustomerId);
+    logger.error('[Webhook] Client not found for Stripe customer', { stripeCustomerId });
     throw new Error(`Client not found for Stripe customer: ${stripeCustomerId}`);
   }
 
-  console.log(`[Webhook] Found client: ${client.name} (ID: ${client.id})`);
+  logger.info(`[Webhook] Found client: ${client.name} (ID: ${client.id})`);
 
   // Update client subscription status
   const { error: updateError } = await supabase
@@ -141,13 +142,13 @@ async function handleSubscriptionCancelled(subscription, req) {
     .eq('id', client.id);
 
   if (updateError) {
-    console.error('[Webhook] Error updating client:', updateError);
+    logger.error('[Webhook] Error updating client', { error: updateError });
     throw updateError;
   }
 
   // Find owner (oldest admin employee)
   const ownerId = await findAccountOwner(client.id);
-  console.log(`[Webhook] Account owner ID: ${ownerId}`);
+  logger.info(`[Webhook] Account owner ID: ${ownerId}`);
 
   // Schedule disabling of all employees except owner at period end
   if (ownerId) {
@@ -159,9 +160,9 @@ async function handleSubscriptionCancelled(subscription, req) {
       .eq('disabled', false);
 
     if (scheduleError) {
-      console.error('[Webhook] Error scheduling employee disables:', scheduleError);
+      logger.error('[Webhook] Error scheduling employee disables', { error: scheduleError });
     } else {
-      console.log(`[Webhook] Scheduled employee disables for ${periodEnd.toISOString()}`);
+      logger.info(`[Webhook] Scheduled employee disables for ${periodEnd.toISOString()}`);
     }
   }
 
@@ -169,8 +170,8 @@ async function handleSubscriptionCancelled(subscription, req) {
   await createPlatformNotification({
     type: 'subscription_cancelled',
     clientId: client.id,
-    title: 'Abonnement gekündigt',
-    message: `${client.name} hat das Abonnement gekündigt. Zugang endet am ${periodEnd.toLocaleDateString('de-DE')}.`,
+    title: 'Subscription cancelled',
+    message: `${client.name} cancelled the subscription. Access ends on ${periodEnd.toLocaleDateString('en-US')}.`,
     metadata: {
       subscription_id: subscription.id,
       cancelled_at: new Date().toISOString(),
@@ -192,14 +193,14 @@ async function handleSubscriptionCancelled(subscription, req) {
     req
   );
 
-  console.log(`[Webhook] Subscription cancellation processed for client ${client.id}`);
+  logger.info(`[Webhook] Subscription cancellation processed for client ${client.id}`);
 }
 
 /**
  * Handle subscription updates (e.g., plan changes, quantity updates)
  */
 async function handleSubscriptionUpdated(subscription, req) {
-  console.log('[Webhook] Processing subscription update:', subscription.id);
+  logger.info('[Webhook] Processing subscription update', { subscriptionId: subscription.id });
 
   const stripeCustomerId = subscription.customer;
 
@@ -211,7 +212,7 @@ async function handleSubscriptionUpdated(subscription, req) {
     .single();
 
   if (clientError || !client) {
-    console.error('[Webhook] Client not found for Stripe customer:', stripeCustomerId);
+    logger.error('[Webhook] Client not found for Stripe customer', { stripeCustomerId });
     return; // Don't throw - this might be a new customer not yet in our system
   }
 
@@ -225,7 +226,7 @@ async function handleSubscriptionUpdated(subscription, req) {
       .not('scheduled_disable_at', 'is', null);
 
     if (clearError) {
-      console.error('[Webhook] Error clearing scheduled disables:', clearError);
+      logger.error('[Webhook] Error clearing scheduled disables', { error: clearError });
     }
 
     // Update client to paid tier
@@ -239,7 +240,7 @@ async function handleSubscriptionUpdated(subscription, req) {
       })
       .eq('id', client.id);
 
-    console.log(`[Webhook] Subscription reactivated for client ${client.id}`);
+    logger.info(`[Webhook] Subscription reactivated for client ${client.id}`);
   }
 
   // Handle cancel_at_period_end (pending cancellation)
@@ -268,8 +269,8 @@ async function handleSubscriptionUpdated(subscription, req) {
     await createPlatformNotification({
       type: 'subscription_pending_cancellation',
       clientId: client.id,
-      title: 'Kündigung ausstehend',
-      message: `${client.name} hat gekündigt. Zugang endet am ${periodEnd.toLocaleDateString('de-DE')}.`,
+    title: 'Cancellation pending',
+    message: `${client.name} has cancelled. Access ends on ${periodEnd.toLocaleDateString('en-US')}.`,
       metadata: {
         subscription_id: subscription.id,
         period_ends_at: periodEnd.toISOString(),
@@ -277,14 +278,14 @@ async function handleSubscriptionUpdated(subscription, req) {
     });
   }
 
-  console.log(`[Webhook] Subscription update processed for client ${client.id}`);
+  logger.info(`[Webhook] Subscription update processed for client ${client.id}`);
 }
 
 /**
  * Handle payment failures
  */
 async function handlePaymentFailed(invoice, req) {
-  console.log('[Webhook] Processing payment failure:', invoice.id);
+  logger.info('[Webhook] Processing payment failure', { invoiceId: invoice.id });
 
   const stripeCustomerId = invoice.customer;
 
@@ -296,7 +297,7 @@ async function handlePaymentFailed(invoice, req) {
     .single();
 
   if (clientError || !client) {
-    console.error('[Webhook] Client not found for Stripe customer:', stripeCustomerId);
+    logger.error('[Webhook] Client not found for Stripe customer', { stripeCustomerId });
     return;
   }
 
@@ -304,8 +305,8 @@ async function handlePaymentFailed(invoice, req) {
   await createPlatformNotification({
     type: 'payment_failed',
     clientId: client.id,
-    title: 'Zahlung fehlgeschlagen',
-    message: `Zahlung für ${client.name} ist fehlgeschlagen. Betrag: ${(invoice.amount_due / 100).toFixed(2)} ${invoice.currency.toUpperCase()}`,
+    title: 'Payment failed',
+    message: `Payment for ${client.name} has failed. Amount: ${(invoice.amount_due / 100).toFixed(2)} ${invoice.currency.toUpperCase()}`,
     metadata: {
       invoice_id: invoice.id,
       amount_due: invoice.amount_due,
@@ -328,18 +329,18 @@ async function handlePaymentFailed(invoice, req) {
     req
   );
 
-  console.log(`[Webhook] Payment failure notification created for client ${client.id}`);
+  logger.info(`[Webhook] Payment failure notification created for client ${client.id}`);
 }
 
 /**
  * Handle successful checkout completion
  */
 async function handleCheckoutCompleted(session, req) {
-  console.log('[Webhook] Processing checkout completion:', session.id);
+  logger.info('[Webhook] Processing checkout completion', { sessionId: session.id });
 
   // Only process subscription checkouts
   if (session.mode !== 'subscription') {
-    console.log('[Webhook] Not a subscription checkout, skipping');
+    logger.info('[Webhook] Not a subscription checkout, skipping');
     return;
   }
 
@@ -354,7 +355,7 @@ async function handleCheckoutCompleted(session, req) {
     .single();
 
   if (clientError || !client) {
-    console.error('[Webhook] Client not found for Stripe customer:', stripeCustomerId);
+    logger.error('[Webhook] Client not found for Stripe customer', { stripeCustomerId });
     return;
   }
 
@@ -370,7 +371,7 @@ async function handleCheckoutCompleted(session, req) {
     .eq('id', client.id);
 
   if (updateError) {
-    console.error('[Webhook] Error updating client:', updateError);
+    logger.error('[Webhook] Error updating client', { error: updateError });
     throw updateError;
   }
 
@@ -396,14 +397,14 @@ async function handleCheckoutCompleted(session, req) {
     req
   );
 
-  console.log(`[Webhook] Checkout completed for client ${client.id}`);
+  logger.info(`[Webhook] Checkout completed for client ${client.id}`);
 }
 
 /**
  * Handle successful invoice payment (subscription renewal)
  */
 async function handleInvoicePaid(invoice, req) {
-  console.log('[Webhook] Processing paid invoice:', invoice.id);
+  logger.info('[Webhook] Processing paid invoice', { invoiceId: invoice.id });
 
   // Only process subscription invoices
   if (!invoice.subscription) {
@@ -431,7 +432,7 @@ async function handleInvoicePaid(invoice, req) {
     })
     .eq('id', client.id);
 
-  console.log(`[Webhook] Invoice paid for client ${client.id}`);
+  logger.info(`[Webhook] Invoice paid for client ${client.id}`);
 }
 
 /**
@@ -451,7 +452,7 @@ async function findAccountOwner(clientId) {
     .limit(1);
 
   if (error || !employees || employees.length === 0) {
-    console.error('[Webhook] Could not find account owner:', error);
+    logger.error('[Webhook] Could not find account owner', { error });
     return null;
   }
 
@@ -472,7 +473,7 @@ async function createPlatformNotification({ type, clientId, title, message, meta
   });
 
   if (error) {
-    console.error('[Webhook] Error creating notification:', error);
+    logger.error('[Webhook] Error creating notification', { error });
   }
 }
 
@@ -491,7 +492,7 @@ async function logWebhookAction(action, targetType, targetId, details, req) {
   });
 
   if (error) {
-    console.error('[Webhook] Error logging to audit trail:', error);
+    logger.error('[Webhook] Error logging to audit trail', { error });
   }
 }
 
@@ -500,6 +501,6 @@ module.exports = router;
 
 /**
  * TODO:
- * Stripe Webhook konfigurieren: Im Stripe Dashboard den Endpoint https://your-domain.com/api/webhooks/stripe erstellen
- * Cron Job einrichten (optional): Für automatisches Deaktivieren der Mitarbeiter nach Grace Period
+ * Configure Stripe Webhook: Im Stripe Dashboard den Endpoint https://your-domain.com/api/webhooks/stripe erstellen
+ * Set up Cron Job (optional): For automatic employee deactivation after grace period
  */

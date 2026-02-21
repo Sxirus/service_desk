@@ -12,6 +12,7 @@ const { authenticate } = require('../middleware/auth');
 const { authorizeCustomerAccess, authorizeEmployeeAccess } = require('../middleware/authorization');
 const { validateId, validateEmail, sanitizeText } = require('../middleware/validation');
 const { logFromReq, ACTIONS } = require('../services/activityLogger');
+const logger = require('../utils/logger');
 
 /**
  * Get customer by ID
@@ -28,7 +29,7 @@ router.get('/getCustomerById',
       const customerId = req.sanitized.customerId;
       const client_id = req.user.client_id;
 
-      console.log('[CUSTOMERS] Fetching customer:', customerId);
+      logger.info('[CUSTOMERS] Fetching customer', { customerId });
 
       // Fetch customer and verify it belongs to user's client
       const { data, error } = await supabase
@@ -38,18 +39,18 @@ router.get('/getCustomerById',
         .single();
 
       if (error) {
-        console.error('[CUSTOMERS] Supabase error:', error.message);
+        logger.error('[CUSTOMERS] Supabase error', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
       if (!data) {
-        console.warn('[CUSTOMERS] Customer not found:', customerId);
+        logger.warn('[CUSTOMERS] Customer not found', { customerId });
         return res.status(404).json({ error: 'Customer not found' });
       }
 
       // Verify customer belongs to user's client
       if (data.client_id !== client_id) {
-        console.warn('[CUSTOMERS] Unauthorized access attempt:', {
+        logger.warn('[CUSTOMERS] Unauthorized access attempt', {
           customer_id: customerId,
           customer_client_id: data.client_id,
           user_client_id: client_id,
@@ -58,10 +59,10 @@ router.get('/getCustomerById',
         return res.status(403).json({ error: 'Access denied to this customer' });
       }
 
-      console.log('[CUSTOMERS] Customer fetched successfully');
+      logger.info('[CUSTOMERS] Customer fetched successfully');
       res.json({success: true, data: [data]}); // Return as array to match original API format
     } catch (err) {
-      console.error('[CUSTOMERS] Server error:', err.message);
+      logger.error('[CUSTOMERS] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -85,7 +86,7 @@ router.get('/getAssignedCustomers',
       const employee_id = req.sanitized.employee_id || req.user.employee_id;
       const client_id = req.user.client_id;
 
-      console.log('[CUSTOMERS] Fetching assigned customers for employee:', employee_id);
+      logger.info('[CUSTOMERS] Fetching assigned customers for employee', { employee_id });
 
       // If employee_id was provided (not the authenticated user's), verify it belongs to same client
       if (req.sanitized.employee_id && req.sanitized.employee_id !== req.user.employee_id) {
@@ -96,12 +97,12 @@ router.get('/getAssignedCustomers',
           .single();
 
         if (employeeError || !employee) {
-          console.error('[CUSTOMERS] Employee not found:', employee_id);
+          logger.error('[CUSTOMERS] Employee not found', { employee_id });
           return res.status(404).json({ error: 'Employee not found' });
         }
 
         if (employee.client_id !== client_id) {
-          console.warn('[CUSTOMERS] Unauthorized employee access attempt:', {
+          logger.warn('[CUSTOMERS] Unauthorized employee access attempt', {
             requested_employee_id: employee_id,
             employee_client_id: employee.client_id,
             user_client_id: client_id
@@ -117,14 +118,14 @@ router.get('/getAssignedCustomers',
         .eq('employee_id', employee_id);
 
       if (error) {
-        console.error('[CUSTOMERS] Supabase error:', error.message);
+        logger.error('[CUSTOMERS] Supabase error', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
-      console.log('[CUSTOMERS] Fetched', data.length, 'assigned customers');
+      logger.info('[CUSTOMERS] Fetched assigned customers', { count: data.length });
       res.json({success: true, data: data});
     } catch (err) {
-      console.error('[CUSTOMERS] Server error:', err.message);
+      logger.error('[CUSTOMERS] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -145,7 +146,7 @@ router.get('/getAllCustomers',
     try {
       const client_id = req.user.client_id;
 
-      console.log('[CUSTOMERS] Fetching all customers for client:', client_id);
+      logger.info('[CUSTOMERS] Fetching all customers for client', { client_id });
 
       const { data, error } = await supabase
         .from('customers')
@@ -154,14 +155,14 @@ router.get('/getAllCustomers',
         .order('name');
 
       if (error) {
-        console.error('[CUSTOMERS] Supabase error:', error.message);
+        logger.error('[CUSTOMERS] Supabase error', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
-      console.log('[CUSTOMERS] Fetched', data.length, 'customers');
+      logger.info('[CUSTOMERS] Fetched customers', { count: data.length });
       res.json({success: true, data});
     } catch (err) {
-      console.error('[CUSTOMERS] Server error:', err.message);
+      logger.error('[CUSTOMERS] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -194,7 +195,7 @@ router.post(
         .maybeSingle();
 
       if (emailErr) {
-        console.error('[CUSTOMERS] Error finding email address:', emailErr);
+        logger.error('[CUSTOMERS] Error finding email address', { error: emailErr });
         return res.status(500).json({ error: 'Database error' });
       }
 
@@ -207,7 +208,7 @@ router.post(
           .maybeSingle();
 
         if (customerErr) {
-          console.error('[CUSTOMERS] Error loading customer for email:', customerErr);
+          logger.error('[CUSTOMERS] Error loading customer for email', { error: customerErr });
           return res.status(500).json({ error: 'Database error' });
         }
 
@@ -247,7 +248,7 @@ router.post(
         .single();
 
       if (createCustomerErr) {
-        console.error('[CUSTOMERS] Error creating customer:', createCustomerErr);
+        logger.error('[CUSTOMERS] Error creating customer', { error: createCustomerErr });
         return res.status(500).json({ error: 'Database error' });
       }
 
@@ -259,13 +260,13 @@ router.post(
         });
 
       if (createEmailErr) {
-        console.error('[CUSTOMERS] Error creating email address:', createEmailErr);
+        logger.error('[CUSTOMERS] Error creating email address', { error: createEmailErr });
         return res.status(500).json({ error: 'Database error' });
       }
 
       return res.json({ success: true, customerId: createdCustomer.id, existed: false });
     } catch (err) {
-      console.error('[CUSTOMERS] Server error:', err.message);
+      logger.error('[CUSTOMERS] Server error', { error: err.message });
       return res.status(500).json({ error: 'Server error' });
     }
   }
@@ -289,18 +290,21 @@ router.get('/search',
         return res.json({ success: true, data: [] });
       }
 
-      console.log('[CUSTOMERS] Searching customers for:', q);
+      // Sanitize search input: limit length and escape special SQL LIKE characters
+      const sanitizedQ = q.slice(0, 100).replace(/[%_\\]/g, '\\$&');
+
+      logger.info('[CUSTOMERS] Searching customers', { query: sanitizedQ });
 
       // Search customers by name
       const { data: customersByName, error: nameError } = await supabase
         .from('customers')
         .select('id, name, client_id')
         .eq('client_id', client_id)
-        .ilike('name', `%${q}%`)
+        .ilike('name', `%${sanitizedQ}%`)
         .limit(20);
 
       if (nameError) {
-        console.error('[CUSTOMERS] Search by name error:', nameError.message);
+        logger.error('[CUSTOMERS] Search by name error', { error: nameError.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
@@ -308,10 +312,10 @@ router.get('/search',
       const { data: emailMatches, error: emailError } = await supabase
         .from('email-addresses')
         .select('customer_id, email_address')
-        .ilike('email_address', `%${q}%`);
+        .ilike('email_address', `%${sanitizedQ}%`);
 
       if (emailError) {
-        console.error('[CUSTOMERS] Search by email error:', emailError.message);
+        logger.error('[CUSTOMERS] Search by email error', { error: emailError.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
@@ -358,10 +362,10 @@ router.get('/search',
       }
 
       const results = [...customerMap.values()];
-      console.log('[CUSTOMERS] Search returned', results.length, 'results');
+      logger.info('[CUSTOMERS] Search returned results', { count: results.length });
       res.json({ success: true, data: results });
     } catch (err) {
-      console.error('[CUSTOMERS] Server error:', err.message);
+      logger.error('[CUSTOMERS] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -392,7 +396,7 @@ router.post('/merge',
       const primaryId = req.sanitized.primaryCustomerId;
       const secondaryId = req.sanitized.secondaryCustomerId;
 
-      console.log('[CUSTOMERS] Merge request:', { primaryId, secondaryId });
+      logger.info('[CUSTOMERS] Merge request', { primaryId, secondaryId });
 
       if (primaryId === secondaryId) {
         return res.status(400).json({ error: 'Cannot merge a customer with itself' });
@@ -406,7 +410,7 @@ router.post('/merge',
         .single();
 
       if (primaryError || !primary) {
-        console.error('[CUSTOMERS] Primary customer not found:', primaryId);
+        logger.error('[CUSTOMERS] Primary customer not found', { primaryId });
         return res.status(404).json({ error: 'Primary customer not found' });
       }
 
@@ -417,12 +421,12 @@ router.post('/merge',
         .single();
 
       if (secondaryError || !secondary) {
-        console.error('[CUSTOMERS] Secondary customer not found:', secondaryId);
+        logger.error('[CUSTOMERS] Secondary customer not found', { secondaryId });
         return res.status(404).json({ error: 'Secondary customer not found' });
       }
 
       if (primary.client_id !== client_id || secondary.client_id !== client_id) {
-        console.warn('[CUSTOMERS] Merge access denied:', {
+        logger.warn('[CUSTOMERS] Merge access denied', {
           primary_client_id: primary.client_id,
           secondary_client_id: secondary.client_id,
           user_client_id: client_id
@@ -437,7 +441,7 @@ router.post('/merge',
         .eq('customer_id', secondaryId);
 
       if (emailMoveError) {
-        console.error('[CUSTOMERS] Error moving email addresses:', emailMoveError.message);
+        logger.error('[CUSTOMERS] Error moving email addresses', { error: emailMoveError.message });
         return res.status(500).json({ error: 'Failed to move email addresses' });
       }
 
@@ -448,7 +452,7 @@ router.post('/merge',
         .eq('customer_id', secondaryId);
 
       if (incomingMoveError) {
-        console.error('[CUSTOMERS] Error moving incoming mails:', incomingMoveError.message);
+        logger.error('[CUSTOMERS] Error moving incoming mails', { error: incomingMoveError.message });
         return res.status(500).json({ error: 'Failed to move incoming mails' });
       }
 
@@ -459,7 +463,7 @@ router.post('/merge',
         .eq('customer_id', secondaryId);
 
       if (sentMoveError) {
-        console.error('[CUSTOMERS] Error moving sent mails:', sentMoveError.message);
+        logger.error('[CUSTOMERS] Error moving sent mails', { error: sentMoveError.message });
         return res.status(500).json({ error: 'Failed to move sent mails' });
       }
 
@@ -479,7 +483,7 @@ router.post('/merge',
           .eq('id', primaryId);
 
         if (updateError) {
-          console.error('[CUSTOMERS] Error updating primary customer:', updateError.message);
+          logger.error('[CUSTOMERS] Error updating primary customer', { error: updateError.message });
           // Non-critical, continue with deletion
         }
       }
@@ -491,11 +495,11 @@ router.post('/merge',
         .eq('id', secondaryId);
 
       if (deleteError) {
-        console.error('[CUSTOMERS] Error deleting secondary customer:', deleteError.message);
+        logger.error('[CUSTOMERS] Error deleting secondary customer', { error: deleteError.message });
         return res.status(500).json({ error: 'Failed to delete merged customer' });
       }
 
-      console.log('[CUSTOMERS] Merge completed successfully:', {
+      logger.info('[CUSTOMERS] Merge completed successfully', {
         primaryId,
         secondaryId,
         assignmentUpdated: Object.keys(updates).length > 0
@@ -509,7 +513,7 @@ router.post('/merge',
         primaryCustomerId: primaryId
       });
     } catch (err) {
-      console.error('[CUSTOMERS] Merge server error:', err.message);
+      logger.error('[CUSTOMERS] Merge server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }

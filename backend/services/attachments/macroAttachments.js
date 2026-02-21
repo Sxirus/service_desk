@@ -1,9 +1,10 @@
 const supabase = require('../../config/supabase');
 const crypto = require('node:crypto');
 const {convertMulterFilesToNodemailerAttachments} = require('./attachmenthandler');
+const logger = require('../../utils/logger');
 
 async function storeMacroAttachmentsInDB(attachments, client_id, macro_id, deletedAttachments, parsedOldAttachments) {
-  console.log("[Attachment-Handler-Macro] Saving attachments", attachments.length);
+  logger.info("[Attachment-Handler-Macro] Saving attachments", { count: attachments.length });
   const formatedAttachments = convertMulterFilesToNodemailerAttachments(attachments);
   const attachmentData = [];
   const oldAttachments = Array.isArray(parsedOldAttachments) ? parsedOldAttachments : [];
@@ -18,7 +19,7 @@ async function storeMacroAttachmentsInDB(attachments, client_id, macro_id, delet
 
   for(const att of formatedAttachments) {
     try {
-      console.log("Content Type: ", att.contentType);
+      logger.info("Content Type", { contentType: att.contentType });
       const base = (att.filename || 'file.bin').replace(/[^a-zA-Z0-9._-]/g, '_');
 
       //hash for an indiviual path
@@ -26,7 +27,7 @@ async function storeMacroAttachmentsInDB(attachments, client_id, macro_id, delet
       try {
         hash = crypto.createHash('sha256').update(att.content).digest('hex').slice(0, 8);
       } catch (error) {
-        console.log("error hashing", error)
+        logger.error("error hashing", { error })
         hash = crypto.randomBytes(8).toString('hex');
       }
       const objectPath = `${client_id}/${macro_id}/${hash}_${base}`;
@@ -40,10 +41,10 @@ async function storeMacroAttachmentsInDB(attachments, client_id, macro_id, delet
         });
 
       if (uploadError) {
-        console.error('Upload-Fehler:', uploadError);
+        logger.error('Upload error', { error: uploadError });
         throw uploadError;
       }else {
-        console.log("Uploaded Attachment to DB", att.filename);
+        logger.info("Uploaded Attachment to DB", { filename: att.filename });
       }     
       //checksum
       const checksum = crypto.createHash('sha256').update(att.content).digest('hex');
@@ -61,7 +62,7 @@ async function storeMacroAttachmentsInDB(attachments, client_id, macro_id, delet
       attachmentData.push(attachmentReference);
 
     } catch (error){
-      console.log("[Attachment-Handler-Macro] Error saving in the Database", error);
+      logger.error("[Attachment-Handler-Macro] Error saving in the Database", { error });
     }
   }
   try {
@@ -73,39 +74,39 @@ async function storeMacroAttachmentsInDB(attachments, client_id, macro_id, delet
       .single()
 
     if (insertError) {
-      console.error('[Attachment-Handler-Macro] Insert-Fehler:', insertError);
+      logger.error('[Attachment-Handler-Macro] Insert error', { error: insertError });
     }
     return returnData;
   } catch (err) {
-    console.log("[Attachment-Handler-Macro] Error saving in the Database", err);
+    logger.error("[Attachment-Handler-Macro] Error saving in the Database", { error: err });
   }
 }
 
 async function deleteAttachmentsFromStorage(attachments) {
 
   try {
-    // Extrahiere nur die object_paths
+    // Extract only the object_paths
     const filePaths = attachments.map(file => file.object_path);
     
-    // Lösche alle Dateien auf einmal
+    // Deleting all files at once
     const { data, error } = await supabase
       .storage
       .from('macro-attachments')
       .remove(filePaths);
     
     if (error) {
-      console.error('Fehler beim Löschen:', error);
+      logger.error('Error deleting', { error });
       return { success: false, error: error.message };
     }
     
     return { 
       success: true, 
       deletedCount: attachments.length,
-      message: `${attachments.length} Dateien gelöscht` 
+      message: `${attachments.length} Files deleted` 
     };
     
   } catch (error) {
-    console.error('Unerwarteter Fehler:', error);
+    logger.error('Unexpected error', { error });
     return { success: false, error: error.message };
   }
 }

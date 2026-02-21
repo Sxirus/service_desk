@@ -11,6 +11,7 @@ const supabase = require("../config/supabase");
 const { authenticate } = require('../middleware/auth');
 const { sanitizeText, sanitizeHtmlField } = require('../middleware/validation');
 const { logFromReq, ACTIONS } = require('../services/activityLogger');
+const logger = require('../utils/logger');
 
 /**
  * Update email signature
@@ -24,7 +25,7 @@ router.post('/updateSignature',
       const client_id = req.user.client_id;
       const signature = req.sanitized.signature || '';
 
-      console.log('[SETTINGS] Updating email signature for client:', client_id);
+      logger.info('[SETTINGS] Updating email signature for client', { client_id });
 
       const { data, error } = await supabase
         .from('clients')
@@ -32,7 +33,7 @@ router.post('/updateSignature',
         .eq('id', client_id);
 
       if (error) {
-        console.error('[SETTINGS] Error updating signature:', error);
+        logger.error('[SETTINGS] Error updating signature', { error });
         return res.status(500).json({ 
           success: false, 
           error: 'Failed to update signature' 
@@ -42,7 +43,7 @@ router.post('/updateSignature',
       logFromReq(req, { ...ACTIONS.SETTINGS_SIGNATURE });
       res.json({ success: true });
     } catch (err) {
-      console.error('[SETTINGS] Server error:', err);
+      logger.error('[SETTINGS] Server error', { error: err });
       res.status(500).json({ success: false, error: err.message });
     }
   }
@@ -59,10 +60,7 @@ router.post('/updateEmailConfig',
       const client_id = req.user.client_id;
       const { sendingMode, primaryEmailId } = req.body;
 
-      console.log('[SETTINGS] Updating email config for client:', client_id, {
-        sendingMode,
-        primaryEmailId
-      });
+      logger.info('[SETTINGS] Updating email config for client', { client_id, sendingMode, primaryEmailId });
 
       // Validate sending mode
       if (!['primary', 'thread-based'].includes(sendingMode)) {
@@ -100,7 +98,7 @@ router.post('/updateEmailConfig',
         .eq('id', client_id);
 
       if (error) {
-        console.error('[SETTINGS] Error updating email config:', error);
+        logger.error('[SETTINGS] Error updating email config', { error });
         return res.status(500).json({ 
           success: false, 
           error: 'Failed to update email configuration' 
@@ -110,7 +108,7 @@ router.post('/updateEmailConfig',
       logFromReq(req, { ...ACTIONS.SETTINGS_EMAIL_CONFIG, details: { sendingMode, primaryEmailId: primaryEmailId || null } });
       res.json({ success: true });
     } catch (err) {
-      console.error('[SETTINGS] Server error:', err);
+      logger.error('[SETTINGS] Server error', { error: err });
       res.status(500).json({ success: false, error: err.message });
     }
   }
@@ -127,7 +125,7 @@ router.post('/updateConfirmMail',
       const body = req.sanitized?.body ?? req.body.body;
       const client_id = req.user.client_id;
 
-      console.log('[SETTINGS] Updating confirmation mail for client:', client_id);
+      logger.info('[SETTINGS] Updating confirmation mail for client', { client_id });
 
       const { data, error } = await supabase
         .from('clients')
@@ -138,15 +136,15 @@ router.post('/updateConfirmMail',
         .eq('id', client_id);
 
       if (error) {
-        console.error('[SETTINGS] Confirmation mail update failed:', error.message);
+        logger.error('[SETTINGS] Confirmation mail update failed', { error: error.message });
         return res.status(500).json({ success: false, error: error.message });
       }
 
-      console.log('[SETTINGS] Confirm mail updated successfully');
+      logger.info('[SETTINGS] Confirm mail updated successfully');
       logFromReq(req, { ...ACTIONS.SETTINGS_CONFIRM_MAIL });
       res.json({ success: true, data });
     } catch (err) {
-      console.error('[SETTINGS] Server error:', err.message);
+      logger.error('[SETTINGS] Server error', { error: err.message });
       res.status(500).json({ success: false, error: 'Server error' });
     }
 });
@@ -174,7 +172,7 @@ router.get('/tracking', authenticate, async (req, res) => {
     
     res.json({ success: true, settings });
   } catch (err) {
-    console.error('[SETTINGS] Error fetching tracking settings:', err);
+    logger.error('[SETTINGS] Error fetching tracking settings', { error: err });
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -205,7 +203,7 @@ router.post('/tracking', authenticate, async (req, res) => {
     logFromReq(req, { ...ACTIONS.SETTINGS_TRACKING });
     res.json({ success: true });
   } catch (err) {
-    console.error('[SETTINGS] Error updating tracking settings:', err);
+    logger.error('[SETTINGS] Error updating tracking settings', { error: err });
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -223,7 +221,7 @@ router.get('/getAllSettings',
     try {
       const client_id = req.user.client_id;
 
-      console.log('[SETTINGS] Fetching all settings for client:', client_id);
+      logger.info('[SETTINGS] Fetching all settings for client', { client_id });
 
       const { data, error } = await supabase
         .from('clients')
@@ -232,12 +230,12 @@ router.get('/getAllSettings',
         .single();
 
       if (error) {
-        console.error('[SETTINGS] Supabase error:', error.message);
+        logger.error('[SETTINGS] Supabase error', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
       if (!data) {
-        console.warn('[SETTINGS] Client not found:', client_id);
+        logger.warn('[SETTINGS] Client not found', { client_id });
         return res.status(404).json({ error: 'Client not found' });
       }
 
@@ -257,10 +255,10 @@ router.get('/getAllSettings',
         // DO NOT send: shopify_access_token, shopify_secret
       };
 
-      console.log('[SETTINGS] Settings fetched successfully');
+      logger.info('[SETTINGS] Settings fetched successfully');
       res.json({success: true, safeData});
     } catch (err) {
-      console.error('[SETTINGS] Server error:', err.message);
+      logger.error('[SETTINGS] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -291,7 +289,7 @@ router.put('/updateSettings',
         'address_country'
       ];
 
-      console.log('[SETTINGS] Updating settings for client:', client_id);
+      logger.info('[SETTINGS] Updating settings for client', { client_id });
 
       // Build update object with only allowed fields
       const updates = {};
@@ -330,15 +328,15 @@ router.put('/updateSettings',
         .single();
 
       if (error) {
-        console.error('[SETTINGS] Update failed:', error.message);
+        logger.error('[SETTINGS] Update failed', { error: error.message });
         return res.status(500).json({ success: false, error: error.message });
       }
 
-      console.log('[SETTINGS] Settings updated successfully');
+      logger.info('[SETTINGS] Settings updated successfully');
       logFromReq(req, { ...ACTIONS.SETTINGS_GENERAL, details: { changedFields: Object.keys(updates) } });
       res.json({ success: true, data });
     } catch (err) {
-      console.error('[SETTINGS] Server error:', err.message);
+      logger.error('[SETTINGS] Server error', { error: err.message });
       res.status(500).json({ success: false, error: 'Servererror' });
     }
   }
@@ -357,7 +355,7 @@ router.get('/getShopifyStatus',
     try {
       const client_id = req.user.client_id;
 
-      console.log('[SETTINGS] Fetching Shopify status for client:', client_id);
+      logger.info('[SETTINGS] Fetching Shopify status for client', { client_id });
 
       const { data, error } = await supabase
         .from('clients')
@@ -366,18 +364,18 @@ router.get('/getShopifyStatus',
         .single();
 
       if (error) {
-        console.error('[SETTINGS] Supabase error:', error.message);
+        logger.error('[SETTINGS] Supabase error', { error: error.message });
         return res.status(500).json({ error: 'Database error' });
       }
 
-      console.log('[SETTINGS] Shopify status fetched');
+      logger.info('[SETTINGS] Shopify status fetched');
       res.json({
         connected: data.shopify_connected || false,
         store_url: data.shopify_store_url || null,
         scope: data.shopify_scope || null
       });
     } catch (err) {
-      console.error('[SETTINGS] Server error:', err.message);
+      logger.error('[SETTINGS] Server error', { error: err.message });
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -396,7 +394,7 @@ router.post('/updateConfirmMailMode',
         return res.status(400).json({ success: false, error: 'Invalid mode. Must be one of: all, new_only, disabled' });
       }
 
-      console.log('[SETTINGS] Updating confirmation mail mode for client:', client_id, 'to:', mode);
+      logger.info('[SETTINGS] Updating confirmation mail mode for client', { client_id, mode });
 
       const { data, error } = await supabase
         .from('clients')
@@ -404,15 +402,15 @@ router.post('/updateConfirmMailMode',
         .eq('id', client_id);
 
       if (error) {
-        console.error('[SETTINGS] Confirmation mail mode update failed:', error.message);
+        logger.error('[SETTINGS] Confirmation mail mode update failed', { error: error.message });
         return res.status(500).json({ success: false, error: error.message });
       }
 
-      console.log('[SETTINGS] Confirmation mail mode updated successfully');
+      logger.info('[SETTINGS] Confirmation mail mode updated successfully');
       logFromReq(req, { ...ACTIONS.SETTINGS_CONFIRM_MODE, details: { mode } });
       res.json({ success: true, data });
     } catch (err) {
-      console.error('[SETTINGS] Server error:', err.message);
+      logger.error('[SETTINGS] Server error', { error: err.message });
       res.status(500).json({ success: false, error: 'Server error' });
     }
   }
@@ -426,7 +424,7 @@ router.post('/updateAutoAssignEmployeeOnSend',
       const client_id = req.user.client_id;
       const value = req.body.value;
 
-      console.log('[SETTINGS] Updating auto assign employee on send');
+      logger.info('[SETTINGS] Updating auto assign employee on send');
       
       const { data, error } = await supabase
         .from('clients')
@@ -434,15 +432,15 @@ router.post('/updateAutoAssignEmployeeOnSend',
         .eq('id', client_id)
 
       if (error) {
-        console.error('[SETTINGS] auto assign employee on send update failed:', error.message);
+        logger.error('[SETTINGS] auto assign employee on send update failed', { error: error.message });
         return res.status(500).json({ success: false, error: error.message });
       }
 
-      console.log('[SETTINGS] Auto assign employee on send updated successfully');
+      logger.info('[SETTINGS] Auto assign employee on send updated successfully');
       logFromReq(req, { ...ACTIONS.SETTINGS_AUTO_ASSIGN, details: { enabled: value } });
       res.json({success: true, data})
     } catch (err) {
-      console.error('[SETTINGS] Server error:', err.message);
+      logger.error('[SETTINGS] Server error', { error: err.message });
       res.status(500).json({ success: false, error: 'Server error' });
     }
   }

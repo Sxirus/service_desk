@@ -12,13 +12,14 @@
  */
 
 const supabase = require('../config/supabase');
+const logger = require('../utils/logger');
 
 /**
  * Disable all employees whose scheduled_disable_at has passed
  * @returns {Promise<{success: boolean, disabled: number, errors: string[]}>}
  */
 async function disableScheduledEmployees() {
-  console.log('[DisableJob] Starting scheduled employee disable check');
+  logger.info('[DisableJob] Starting scheduled employee disable check');
   
   const now = new Date().toISOString();
   const errors = [];
@@ -32,16 +33,16 @@ async function disableScheduledEmployees() {
       .eq('disabled', false);
 
     if (fetchError) {
-      console.error('[DisableJob] Error fetching employees:', fetchError);
+      logger.error('[DisableJob] Error fetching employees:', { error: fetchError });
       return { success: false, disabled: 0, errors: [fetchError.message] };
     }
 
     if (!employees || employees.length === 0) {
-      console.log('[DisableJob] No employees to disable');
+      logger.info('[DisableJob] No employees to disable');
       return { success: true, disabled: 0, errors: [] };
     }
 
-    console.log(`[DisableJob] Found ${employees.length} employees to disable`);
+    logger.info(`[DisableJob] Found ${employees.length} employees to disable`);
 
     // Disable each employee
     const employeeIds = employees.map(e => e.id);
@@ -55,7 +56,7 @@ async function disableScheduledEmployees() {
       .in('id', employeeIds);
 
     if (updateError) {
-      console.error('[DisableJob] Error disabling employees:', updateError);
+      logger.error('[DisableJob] Error disabling employees:', { error: updateError });
       errors.push(updateError.message);
     }
 
@@ -70,14 +71,14 @@ async function disableScheduledEmployees() {
 
     // Log for each client
     for (const [clientId, employeeNames] of Object.entries(clientGroups)) {
-      console.log(`[DisableJob] Disabled ${employeeNames.length} employees for client ${clientId}:`, employeeNames);
+      logger.info(`[DisableJob] Disabled ${employeeNames.length} employees for client ${clientId}`, { employeeNames });
       
       // Create platform notification
       await supabase.from('platform_notifications').insert({
         type: 'employees_disabled',
         client_id: parseInt(clientId),
-        title: 'Mitarbeiter deaktiviert',
-        message: `${employeeNames.length} Mitarbeiter wurden nach Ablauf der Kündigungsfrist deaktiviert.`,
+        title: 'Employees disabled',
+        message: `${employeeNames.length} employees were disabled after the subscription cancellation grace period expired.`,
         metadata: {
           employee_count: employeeNames.length,
           employee_names: employeeNames,
@@ -102,14 +103,14 @@ async function disableScheduledEmployees() {
       });
     }
 
-    console.log(`[DisableJob] Successfully disabled ${employees.length} employees`);
+    logger.info(`[DisableJob] Successfully disabled ${employees.length} employees`);
     return { 
       success: true, 
       disabled: employees.length, 
       errors 
     };
   } catch (error) {
-    console.error('[DisableJob] Unexpected error:', error);
+    logger.error('[DisableJob] Unexpected error:', { error });
     return { 
       success: false, 
       disabled: 0, 
@@ -123,7 +124,7 @@ async function disableScheduledEmployees() {
  * @param {number} clientId - The client ID
  */
 async function clearScheduledDisables(clientId) {
-  console.log(`[DisableJob] Clearing scheduled disables for client ${clientId}`);
+  logger.info(`[DisableJob] Clearing scheduled disables for client ${clientId}`);
   
   const { error } = await supabase
     .from('employees')
@@ -132,7 +133,7 @@ async function clearScheduledDisables(clientId) {
     .not('scheduled_disable_at', 'is', null);
 
   if (error) {
-    console.error('[DisableJob] Error clearing scheduled disables:', error);
+    logger.error('[DisableJob] Error clearing scheduled disables:', { error });
     return { success: false, error: error.message };
   }
 
@@ -143,11 +144,11 @@ async function clearScheduledDisables(clientId) {
 if (require.main === module) {
   disableScheduledEmployees()
     .then(result => {
-      console.log('[DisableJob] Job completed:', result);
+      logger.info('[DisableJob] Job completed', { result });
       process.exit(result.success ? 0 : 1);
     })
     .catch(err => {
-      console.error('[DisableJob] Job failed:', err);
+      logger.error('[DisableJob] Job failed', { error: err });
       process.exit(1);
     });
 }

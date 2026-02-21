@@ -1,15 +1,16 @@
 const supabase = require('../../config/supabase');
 const crypto = require('node:crypto');
 const {downscaleAttachments, convertMulterFilesToNodemailerAttachments} = require('./attachmenthandler')
+const logger = require('../../utils/logger');
 
 async function storeOutgoingAttachmentsInDB(attachments, clientId, emailId) {
-  console.log("[Attachment-Handler-Outgoing] Saving attachments", attachments.length);
+  logger.info("[Attachment-Handler-Outgoing] Saving attachments", { count: attachments.length });
   const formatedAttachments = convertMulterFilesToNodemailerAttachments(attachments);
   const downscaledAttachments = await downscaleAttachments(formatedAttachments);
   const attachmentData = [];
   for (const att of downscaledAttachments) {
     try {
-      console.log("Content Type: ", att.contentType);
+      logger.info("Content Type", { contentType: att.contentType });
       const base = (att.filename || 'file.bin').replace(/[^a-zA-Z0-9._-]/g, '_');
 
       //hash for an indiviual path
@@ -17,7 +18,7 @@ async function storeOutgoingAttachmentsInDB(attachments, clientId, emailId) {
       try {
         hash = crypto.createHash('sha256').update(att.content).digest('hex').slice(0, 8);
       } catch (error) {
-        console.log("error hashing", error)
+        logger.error("error hashing", { error })
         hash = crypto.randomBytes(8).toString('hex');
       }
       const objectPath = `${clientId}/${emailId}/${hash}_${base}`;
@@ -31,10 +32,10 @@ async function storeOutgoingAttachmentsInDB(attachments, clientId, emailId) {
         });
 
       if (uploadError) {
-        console.error('Upload-Fehler:', uploadError);
+        logger.error('Upload error', { error: uploadError });
         throw uploadError;
       }else {
-        console.log("Uploaded Attachment to DB", att.filename);
+        logger.info("Uploaded Attachment to DB", { filename: att.filename });
       }     
       //checksum
       const checksum = crypto.createHash('sha256').update(att.content).digest('hex');
@@ -52,7 +53,7 @@ async function storeOutgoingAttachmentsInDB(attachments, clientId, emailId) {
       attachmentData.push(attachmentReference);
 
     } catch (error){
-      console.log("[Attachment-Handler-Outgoing] Error saving in the Database", error);
+      logger.error("[Attachment-Handler-Outgoing] Error saving in the Database", { error });
     }
   }
   try {
@@ -62,10 +63,10 @@ async function storeOutgoingAttachmentsInDB(attachments, clientId, emailId) {
       .eq('id', emailId);
 
     if (insertError) {
-      console.error('[Attachment-Handler-Outgoing] Insert-Fehler:', insertError);
+      logger.error('[Attachment-Handler-Outgoing] Insert error', { error: insertError });
     }
   } catch (err) {
-    console.log("[Attachment-Handler-Outgoing] Error saving in the Database", err);
+    logger.error("[Attachment-Handler-Outgoing] Error saving in the Database", { error: err });
   }
 }
 

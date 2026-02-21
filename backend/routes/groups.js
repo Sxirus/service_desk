@@ -11,6 +11,7 @@ const supabase = require("../config/supabase");
 const { authenticate } = require('../middleware/auth');
 const { validateId } = require('../middleware/validation');
 const { logFromReq, ACTIONS } = require('../services/activityLogger');
+const logger = require('../utils/logger');
 
 /**
  * Get all groups for authenticated user's client
@@ -25,7 +26,7 @@ router.get('/getGroups',
     try {
       const client_id = req.user.client_id;
       
-      console.log('[GROUPS] Fetching groups for client:', client_id);
+      logger.info('[GROUPS] Fetching groups for client:', client_id);
 
       const { data, error } = await supabase
         .from("employee_groups")
@@ -34,14 +35,14 @@ router.get('/getGroups',
         .order("name");
 
       if (error) {
-        console.error('[GROUPS] Supabase error:', error.message);
+        logger.error('[GROUPS] Supabase error:', error.message);
         return res.status(500).json({ error: 'Database error' });
       }
 
-      console.log('[GROUPS] Fetched', data.length, 'groups');
+      logger.info('[GROUPS] Fetched', data.length, 'groups');
       res.json({success: true, data});
     } catch (err) {
-      console.error('[GROUPS] Server error:', err.message);
+      logger.error('[GROUPS] Server error:', err.message);
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -61,7 +62,7 @@ router.get('/getGroupsWithMembers',
     try {
       const client_id = req.user.client_id;
 
-      console.log('[GROUPS] Fetching groups with members for client:', client_id);
+      logger.info('[GROUPS] Fetching groups with members for client:', client_id);
 
       // Fetch all groups
       const { data: groups, error: groupsError } = await supabase
@@ -71,12 +72,12 @@ router.get('/getGroupsWithMembers',
         .order("name");
 
       if (groupsError) {
-        console.error('[GROUPS] Supabase error fetching groups:', groupsError.message);
+        logger.error('[GROUPS] Supabase error fetching groups:', groupsError.message);
         return res.status(500).json({ error: 'Database error' });
       }
 
       if (!groups || groups.length === 0) {
-        console.log('[GROUPS] No groups found');
+        logger.info('[GROUPS] No groups found');
         return res.json({ success: true, data: [] });
       }
 
@@ -95,7 +96,7 @@ router.get('/getGroupsWithMembers',
         .in('group_id', groupIds);
 
       if (membersError) {
-        console.error('[GROUPS] Supabase error fetching members:', membersError.message);
+        logger.error('[GROUPS] Supabase error fetching members:', membersError.message);
         return res.status(500).json({ error: 'Database error' });
       }
 
@@ -118,10 +119,10 @@ router.get('/getGroupsWithMembers',
         members: membersByGroup[g.id] || []
       }));
 
-      console.log('[GROUPS] Fetched', result.length, 'groups with members');
+      logger.info('[GROUPS] Fetched', result.length, 'groups with members');
       res.json({ success: true, data: result });
     } catch (err) {
-      console.error('[GROUPS] Server error:', err.message);
+      logger.error('[GROUPS] Server error:', err.message);
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -142,7 +143,7 @@ router.get('/getGroupMembers',
       const group_id = req.sanitized.group_id;
       const client_id = req.user.client_id;
 
-      console.log('[GROUPS] Fetching members for group:', group_id);
+      logger.info('[GROUPS] Fetching members for group:', group_id);
 
       // Verify group belongs to user's client
       const { data: group, error: groupError } = await supabase
@@ -152,12 +153,12 @@ router.get('/getGroupMembers',
         .single();
 
       if (groupError || !group) {
-        console.error('[GROUPS] Group not found:', group_id);
+        logger.error('[GROUPS] Group not found:', group_id);
         return res.status(404).json({ error: 'Group not found' });
       }
 
       if (group.client_id !== client_id) {
-        console.warn('[GROUPS] Unauthorized group access attempt:', {
+        logger.warn('[GROUPS] Unauthorized group access attempt:', {
           group_id,
           group_client_id: group.client_id,
           user_client_id: client_id
@@ -178,7 +179,7 @@ router.get('/getGroupMembers',
         .eq('group_id', group_id);
 
       if (error) {
-        console.error('[GROUPS] Supabase error:', error.message);
+        logger.error('[GROUPS] Supabase error:', error.message);
         return res.status(500).json({ error: 'Database error' });
       }
 
@@ -187,10 +188,10 @@ router.get('/getGroupMembers',
         name: m.employees?.name
       }));
 
-      console.log('[GROUPS] Fetched', members.length, 'members');
+      logger.info('[GROUPS] Fetched', members.length, 'members');
       res.json({success: true, data: members});
     } catch (err) {
-      console.error('[GROUPS] Server error:', err.message);
+      logger.error('[GROUPS] Server error:', err.message);
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -215,7 +216,7 @@ router.post('/createGroup',
         return res.status(400).json({ error: 'Valid group name is required' });
       }
 
-      console.log('[GROUPS] Creating group:', name);
+      logger.info('[GROUPS] Creating group:', name);
 
       const { data, error } = await supabase
         .from('employee_groups')
@@ -228,15 +229,15 @@ router.post('/createGroup',
         .single();
 
       if (error) {
-        console.error('[GROUPS] Create failed:', error.message);
+        logger.error('[GROUPS] Create failed:', error.message);
         return res.status(500).json({ error: 'Database error' });
       }
 
-      console.log('[GROUPS] Group created successfully:', data.id);
+      logger.info('[GROUPS] Group created successfully:', data.id);
       logFromReq(req, { ...ACTIONS.GROUP_CREATED, targetType: 'group', targetId: data.id, details: { name: data.name } });
       res.json({ success: true, data });
     } catch (err) {
-      console.error('[GROUPS] Server error:', err.message);
+      logger.error('[GROUPS] Server error:', err.message);
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -263,7 +264,7 @@ router.put('/updateGroup',
         return res.status(400).json({ error: 'Valid group name is required' });
       }
 
-      console.log('[GROUPS] Updating group:', group_id);
+      logger.info('[GROUPS] Updating group:', group_id);
 
       // Verify group belongs to user's client
       const { data: group, error: groupError } = await supabase
@@ -273,12 +274,12 @@ router.put('/updateGroup',
         .single();
 
       if (groupError || !group) {
-        console.error('[GROUPS] Group not found:', group_id);
+        logger.error('[GROUPS] Group not found:', group_id);
         return res.status(404).json({ error: 'Group not found' });
       }
 
       if (group.client_id !== client_id) {
-        console.warn('[GROUPS] Unauthorized group update attempt:', {
+        logger.warn('[GROUPS] Unauthorized group update attempt:', {
           group_id,
           group_client_id: group.client_id,
           user_client_id: client_id
@@ -298,15 +299,15 @@ router.put('/updateGroup',
         .single();
 
       if (error) {
-        console.error('[GROUPS] Update failed:', error.message);
+        logger.error('[GROUPS] Update failed:', error.message);
         return res.status(500).json({ error: 'Database error' });
       }
 
-      console.log('[GROUPS] Group updated successfully');
+      logger.info('[GROUPS] Group updated successfully');
       logFromReq(req, { ...ACTIONS.GROUP_UPDATED, targetType: 'group', targetId: group_id, details: { name: data.name } });
       res.json({ success: true, data });
     } catch (err) {
-      console.error('[GROUPS] Server error:', err.message);
+      logger.error('[GROUPS] Server error:', err.message);
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -328,7 +329,7 @@ router.delete('/deleteGroup',
       const group_id = req.sanitized.group_id;
       const client_id = req.user.client_id;
 
-      console.log('[GROUPS] Deleting group:', group_id);
+      logger.info('[GROUPS] Deleting group:', group_id);
 
       // Verify group belongs to user's client
       const { data: group, error: groupError } = await supabase
@@ -338,12 +339,12 @@ router.delete('/deleteGroup',
         .single();
 
       if (groupError || !group) {
-        console.error('[GROUPS] Group not found:', group_id);
+        logger.error('[GROUPS] Group not found:', group_id);
         return res.status(404).json({ error: 'Group not found' });
       }
 
       if (group.client_id !== client_id) {
-        console.warn('[GROUPS] Unauthorized group delete attempt:', {
+        logger.warn('[GROUPS] Unauthorized group delete attempt:', {
           group_id,
           group_client_id: group.client_id,
           user_client_id: client_id
@@ -358,15 +359,15 @@ router.delete('/deleteGroup',
         .eq('id', group_id);
 
       if (error) {
-        console.error('[GROUPS] Delete failed:', error.message);
+        logger.error('[GROUPS] Delete failed:', error.message);
         return res.status(500).json({ error: 'Database error' });
       }
 
-      console.log('[GROUPS] Group deleted successfully');
+      logger.info('[GROUPS] Group deleted successfully');
       logFromReq(req, { ...ACTIONS.GROUP_DELETED, targetType: 'group', targetId: group_id });
       res.json({ success: true });
     } catch (err) {
-      console.error('[GROUPS] Server error:', err.message);
+      logger.error('[GROUPS] Server error:', err.message);
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -390,7 +391,7 @@ router.post('/addMember',
       const employee_id = req.sanitized.employee_id;
       const client_id = req.user.client_id;
 
-      console.log('[GROUPS] Adding employee', employee_id, 'to group', group_id);
+      logger.info('[GROUPS] Adding employee', employee_id, 'to group', group_id);
 
       // Verify group belongs to user's client
       const { data: group, error: groupError } = await supabase
@@ -400,12 +401,12 @@ router.post('/addMember',
         .single();
 
       if (groupError || !group) {
-        console.error('[GROUPS] Group not found:', group_id);
+        logger.error('[GROUPS] Group not found:', group_id);
         return res.status(404).json({ error: 'Group not found' });
       }
 
       if (group.client_id !== client_id) {
-        console.warn('[GROUPS] Unauthorized group access:', {
+        logger.warn('[GROUPS] Unauthorized group access:', {
           group_id,
           group_client_id: group.client_id,
           user_client_id: client_id
@@ -421,12 +422,12 @@ router.post('/addMember',
         .single();
 
       if (employeeError || !employee) {
-        console.error('[GROUPS] Employee not found:', employee_id);
+        logger.error('[GROUPS] Employee not found:', employee_id);
         return res.status(404).json({ error: 'Employee not found' });
       }
 
       if (employee.client_id !== client_id) {
-        console.warn('[GROUPS] Unauthorized employee access:', {
+        logger.warn('[GROUPS] Unauthorized employee access:', {
           employee_id,
           employee_client_id: employee.client_id,
           user_client_id: client_id
@@ -446,15 +447,15 @@ router.post('/addMember',
         .select();
 
       if (error) {
-        console.error('[GROUPS] Add member failed:', error.message);
+        logger.error('[GROUPS] Add member failed:', error.message);
         return res.status(500).json({ error: 'Database error' });
       }
 
-      console.log('[GROUPS] Member added successfully');
+      logger.info('[GROUPS] Member added successfully');
       logFromReq(req, { ...ACTIONS.GROUP_MEMBER_ADDED, targetType: 'group', targetId: group_id, details: { employeeId: employee_id } });
       res.json({ success: true, data });
     } catch (err) {
-      console.error('[GROUPS] Server error:', err.message);
+      logger.error('[GROUPS] Server error:', err.message);
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -478,7 +479,7 @@ router.delete('/removeMember',
       const employee_id = req.sanitized.employee_id;
       const client_id = req.user.client_id;
 
-      console.log('[GROUPS] Removing employee', employee_id, 'from group', group_id);
+      logger.info('[GROUPS] Removing employee', employee_id, 'from group', group_id);
 
       // Verify group belongs to user's client
       const { data: group, error: groupError } = await supabase
@@ -488,12 +489,12 @@ router.delete('/removeMember',
         .single();
 
       if (groupError || !group) {
-        console.error('[GROUPS] Group not found:', group_id);
+        logger.error('[GROUPS] Group not found:', group_id);
         return res.status(404).json({ error: 'Group not found' });
       }
 
       if (group.client_id !== client_id) {
-        console.warn('[GROUPS] Unauthorized group access:', {
+        logger.warn('[GROUPS] Unauthorized group access:', {
           group_id,
           group_client_id: group.client_id,
           user_client_id: client_id
@@ -509,15 +510,15 @@ router.delete('/removeMember',
         .eq('employee_id', employee_id);
 
       if (error) {
-        console.error('[GROUPS] Remove member failed:', error.message);
+        logger.error('[GROUPS] Remove member failed:', error.message);
         return res.status(500).json({ error: 'Database error' });
       }
 
-      console.log('[GROUPS] Member removed successfully');
+      logger.info('[GROUPS] Member removed successfully');
       logFromReq(req, { ...ACTIONS.GROUP_MEMBER_REMOVED, targetType: 'group', targetId: group_id, details: { employeeId: employee_id } });
       res.json({ success: true });
     } catch (err) {
-      console.error('[GROUPS] Server error:', err.message);
+      logger.error('[GROUPS] Server error:', err.message);
       res.status(500).json({ error: 'Server error' });
     }
   }

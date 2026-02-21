@@ -45,12 +45,40 @@ app.use(express.urlencoded({ extended: true })); // Parse URL-encoded form data 
 // cookie parser to read cookies
 app.use(cookieParser());
 
+// CSRF protection: require a custom header on all state-changing requests.
+// Browsers enforce that custom headers cannot be sent cross-origin without CORS preflight,
+// so the presence of this header proves the request originated from an allowed origin.
+app.use('/api/', (req, res, next) => {
+  const safeMethods = ['GET', 'HEAD', 'OPTIONS'];
+  if (safeMethods.includes(req.method)) return next();
+  // Stripe webhooks send raw body and cannot include custom headers
+  if (req.originalUrl.startsWith('/api/webhooks/')) return next();
+  
+  if (!req.headers['x-requested-with']) {
+    return res.status(403).json({ error: 'Missing CSRF header (X-Requested-With)' });
+  }
+  next();
+});
+
 // Add rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000 // Increased from 100 to 1000 to prevent 429s during active usage
 });
 app.use('/api/', limiter);
+
+// Stricter rate limiter for auth-sensitive and login-adjacent routes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  max: 30,                     // 30 requests per 15min window
+  message: { error: 'Too many requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/client/register', authLimiter);
+app.use('/api/client/invite', authLimiter);
+app.use('/api/shopify/install', authLimiter);
+app.use('/api/shopify/callback', authLimiter);
 
 // API route registration
 app.use('/api/health', require('./routes/health')); // Health check endpoint for monitoring

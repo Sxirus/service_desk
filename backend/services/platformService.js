@@ -6,31 +6,45 @@ async function getAnalytics(days = 30) {
   const fromDate = new Date();
   fromDate.setDate(fromDate.getDate() - days);
 
-  // Overview stats
-  const { count: totalClients } = await supabase.from('clients').select('*', { count: 'exact', head: true });
-  const { count: paidClients } = await supabase.from('clients').select('*', { count: 'exact', head: true }).eq('subscription_tier', 'paid');
-  const { count: freeClients } = await supabase.from('clients').select('*', { count: 'exact', head: true }).neq('subscription_tier', 'paid');
-  const { count: totalEmployees } = await supabase.from('employees').select('*', { count: 'exact', head: true });
-  const { count: totalCustomers } = await supabase.from('customers').select('*', { count: 'exact', head: true });
-  const { count: totalEmails } = await supabase.from('sent-mail').select('*', { count: 'exact', head: true });
+  // Overview stats — run all counts in parallel instead of sequentially
+  const [
+    { count: totalClients },
+    { count: paidClients },
+    { count: freeClients },
+    { count: totalEmployees },
+    { count: totalCustomers },
+    { count: totalEmails }
+  ] = await Promise.all([
+    supabase.from('clients').select('*', { count: 'exact', head: true }),
+    supabase.from('clients').select('*', { count: 'exact', head: true }).eq('subscription_tier', 'paid'),
+    supabase.from('clients').select('*', { count: 'exact', head: true }).neq('subscription_tier', 'paid'),
+    supabase.from('employees').select('*', { count: 'exact', head: true }),
+    supabase.from('customers').select('*', { count: 'exact', head: true }),
+    supabase.from('sent-mail').select('*', { count: 'exact', head: true })
+  ]);
 
-  // Growth (last 6 months)
+  // Growth (last 6 months) — single query + JS grouping instead of 6 sequential queries
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
+  const startDate = new Date(sixMonthsAgo.getFullYear(), sixMonthsAgo.getMonth(), 1).toISOString();
+
+  const { data: recentCreations } = await supabase
+    .from('clients')
+    .select('created_at')
+    .gte('created_at', startDate);
+
   const growth = {};
   for (let i = 0; i < 6; i++) {
     const d = new Date();
     d.setMonth(d.getMonth() - i);
     const monthKey = d.toLocaleString('default', { month: 'short', year: 'numeric' });
-    
-    const startOfMonth = new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
-    const endOfMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString();
+    const startOfMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+    const endOfMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0);
 
-    const { count } = await supabase
-      .from('clients')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', startOfMonth)
-      .lte('created_at', endOfMonth);
-      
-    growth[monthKey] = count || 0;
+    growth[monthKey] = (recentCreations || []).filter(c => {
+      const created = new Date(c.created_at);
+      return created >= startOfMonth && created <= endOfMonth;
+    }).length;
   }
 
   // Recent clients
@@ -62,20 +76,25 @@ async function getBillingOverview() {
     .select('id, name, subscription_tier, stripe_customer_id, stripe_subscription_id, created_at')
     .order('created_at', { ascending: false });
 
-  // Enrich with employee counts
-  const enrichedClients = await Promise.all((clients || []).map(async (client) => {
-    const { count: employees } = await supabase
-      .from('employees')
-      .select('*', { count: 'exact', head: true })
-      .eq('client_id', client.id)
-      .or('disabled.is.null,disabled.eq.false');
-      
+  // Batch: single query for all active employee counts, grouped in JS
+  const { data: activeEmployees } = await supabase
+    .from('employees')
+    .select('client_id')
+    .or('disabled.is.null,disabled.eq.false');
+
+  const empCountMap = {};
+  for (const emp of (activeEmployees || [])) {
+    empCountMap[emp.client_id] = (empCountMap[emp.client_id] || 0) + 1;
+  }
+
+  const enrichedClients = (clients || []).map(client => {
+    const employees = empCountMap[client.id] || 0;
     return {
       ...client,
-      employees: employees || 0,
-      mrr: client.subscription_tier === 'paid' ? (employees || 0) * 9.99 : 0
+      employees,
+      mrr: client.subscription_tier === 'paid' ? employees * 9.99 : 0
     };
-  }));
+  });
 
   const summary = {
     totalClients: enrichedClients.length,
@@ -98,19 +117,29 @@ async function getClients() {
 
   if (error) throw new Error(error.message);
 
-  // Enrich with stats
-  const enriched = await Promise.all(clients.map(async (client) => {
-    const { count: employees } = await supabase
-      .from('employees')
-      .select('*', { count: 'exact', head: true })
-      .eq('client_id', client.id);
+  // Batch: two queries instead of 2N sequential queries
+  const clientIds = clients.map(c => c.id);
 
-    const { count: tickets } = await supabase
-      .from('incoming-mails')
-      .select('*', { count: 'exact', head: true })
-      .eq('client_id', client.id);
+  const [{ data: allEmployees }, { data: allTickets }] = await Promise.all([
+    supabase.from('employees').select('client_id').in('client_id', clientIds),
+    supabase.from('incoming-mails').select('client_id').in('client_id', clientIds)
+  ]);
 
-    return { ...client, stats: { employees: employees || 0, tickets: tickets || 0 } };
+  const empCountMap = {};
+  for (const e of (allEmployees || [])) {
+    empCountMap[e.client_id] = (empCountMap[e.client_id] || 0) + 1;
+  }
+  const ticketCountMap = {};
+  for (const t of (allTickets || [])) {
+    ticketCountMap[t.client_id] = (ticketCountMap[t.client_id] || 0) + 1;
+  }
+
+  const enriched = clients.map(client => ({
+    ...client,
+    stats: {
+      employees: empCountMap[client.id] || 0,
+      tickets: ticketCountMap[client.id] || 0
+    }
   }));
 
   return enriched;

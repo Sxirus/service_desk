@@ -7,6 +7,7 @@
  */
 
 const supabase = require('../config/supabase');
+const logger = require('../utils/logger');
 
 /**
  * Middleware to authenticate platform admin requests
@@ -35,7 +36,7 @@ async function authenticatePlatformAdmin(req, res, next) {
     const { data: { user }, error } = await supabase.auth.getUser(token);
 
     if (error || !user) {
-      console.error('[PLATFORM_AUTH] Token verification failed:', error?.message);
+      logger.error('[PLATFORM_AUTH] Token verification failed', { error: error?.message });
       return res.status(401).json({ 
         error: 'Unauthorized',
         message: 'Invalid or expired token' 
@@ -50,7 +51,7 @@ async function authenticatePlatformAdmin(req, res, next) {
       .single();
 
     if (platformError || !platformAdmin) {
-      console.error('[PLATFORM_AUTH] User is not a platform admin:', user.id);
+      logger.error('[PLATFORM_AUTH] User is not a platform admin', { userId: user.id });
       return res.status(403).json({ 
         error: 'Forbidden',
         message: 'Platform admin access required' 
@@ -76,14 +77,14 @@ async function authenticatePlatformAdmin(req, res, next) {
       email: user.email
     };
 
-    console.log('[PLATFORM_AUTH] Platform admin authenticated:', {
+    logger.info('[PLATFORM_AUTH] Platform admin authenticated', {
       platform_admin_id: platformAdmin.id,
       email: platformAdmin.email
     });
 
     next();
   } catch (error) {
-    console.error('[PLATFORM_AUTH] Authentication error:', error);
+    logger.error('[PLATFORM_AUTH] Authentication error', { error: error.message || error });
     res.status(500).json({ 
       error: 'Internal Server Error',
       message: 'Platform authentication failed' 
@@ -127,7 +128,7 @@ async function requirePlatformAdmin(req, res, next) {
 
     next();
   } catch (error) {
-    console.error('[PLATFORM_AUTH] requirePlatformAdmin error:', error);
+    logger.error('[PLATFORM_AUTH] requirePlatformAdmin error', { error: error.message || error });
     res.status(500).json({ 
       error: 'Internal Server Error',
       message: 'Platform authorization failed' 
@@ -158,7 +159,7 @@ async function logPlatformAction(adminId, action, targetType, targetId, details,
         user_agent: req?.headers?.['user-agent'] || null
       });
   } catch (error) {
-    console.error('[PLATFORM_AUDIT] Failed to log action:', error);
+    logger.error('[PLATFORM_AUDIT] Failed to log action', { error: error.message || error });
     // Don't throw - audit logging shouldn't break the main operation
   }
 }
