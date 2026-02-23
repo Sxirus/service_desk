@@ -56,7 +56,8 @@ async function fetchActiveAccounts() {
  */
 function startWorkerProcess(config) {
     const child = fork(path.join(__dirname, 'imapWorkerProcess.js'), [], {
-        stdio: ['pipe', 'pipe', 'pipe', 'ipc']
+        stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+        execArgv: ['--use-system-ca']
     });
 
     child.on('message', (msg) => {

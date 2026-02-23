@@ -1,7 +1,8 @@
 FROM node:20-alpine
 
 # Install build dependencies needed by sharp and imap (node-gyp)
-RUN apk add --no-cache python3 make g++ vips-dev
+# ca-certificates ensures full system CA bundle is available (fixes Gmail TLS on Alpine)
+RUN apk add --no-cache python3 make g++ vips-dev ca-certificates
 
 # Create a non-root user for security
 RUN addgroup -S worker && adduser -S worker -G worker
@@ -21,4 +22,4 @@ RUN rm -f .env .env.*
 # Switch to non-root user
 USER worker
 
-CMD ["node", "index.js"]
+CMD ["node", "--use-system-ca", "index.js"]

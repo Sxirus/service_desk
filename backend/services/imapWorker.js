@@ -112,7 +112,8 @@ async function pollNewEmailsSinceLast(config, confirmation) {
             authTimeout: 15000,
             connTimeout: 30000,
             tlsOptions: {
-                rejectUnauthorized: process.env.NODE_ENV === 'production'
+                rejectUnauthorized: process.env.NODE_ENV === 'production',
+                servername: imapHost
             }
         });
 
