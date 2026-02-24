@@ -1,6 +1,6 @@
 {
-  "appName": "Service Desk",
-  "serviceDesk": "Service Desk",
+  "appName": "Kundaro",
+  "serviceDesk": "Kundaro",
   "yourAssignedTickets": "Ihre zugewiesenen Tickets",
   "loading": "Wird geladen...",
   "working": "Wird verarbeitet...",
@@ -283,20 +283,20 @@
     "platformAdmins": "Plattform-Administratoren"
   },
   "branding": {
-    "poweredBy": "Bereitgestellt von Service Desk"
+    "poweredBy": "Bereitgestellt von Kundaro"
   },
   "pages": {
     "login": {
-      "pageTitle": "Anmelden - Service Desk"
+      "pageTitle": "Anmelden - Kundaro"
     },
     "register": {
-      "pageTitle": "Registrieren - Service Desk"
+      "pageTitle": "Registrieren - Kundaro"
     },
     "resetPassword": {
-      "pageTitle": "Passwort zurücksetzen - Service Desk"
+      "pageTitle": "Passwort zurücksetzen - Kundaro"
     },
     "dashboard": {
-      "pageTitle": "Service Desk - Dashboard",
+      "pageTitle": "Kundaro - Dashboard",
       "assignedTickets": "Zugewiesene Tickets",
       "ticketsAssigned": "{{count}} Ticket ist Ihnen zugewiesen",
       "ticketsAssigned_plural": "{{count}} Tickets sind Ihnen zugewiesen"
@@ -310,7 +310,7 @@
       "loadFailed": "Fehler beim Laden des Posteingangs"
     },
     "analytics": {
-      "pageTitle": "Analysen - Service Desk"
+      "pageTitle": "Analysen - Kundaro"
     }
   },
   "or": "oder"

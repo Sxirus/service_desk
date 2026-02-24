@@ -1,6 +1,6 @@
 // --- emailHandler.js ---
 // Email Handler module for processing and storing incoming emails in the database
-// Handles customer creation, email address management, and email storage for the service desk system
+// Handles customer creation, email address management, and email storage for the Kundaro system
 
 // Import required modules
 const supabase = require('../config/supabase');  // Supabase client for database operations
@@ -263,7 +263,7 @@ async function sendConfirmation(customerEmail, confirmation, clientId, inboxEmai
     const transporter = nodemailer.createTransport(smtpConfig);
 
     const info = await transporter.sendMail({
-      from: `"Service Desk" <${smtpConfig.auth.user}>`,
+      from: `"${smtpConfig.displayName}" <${smtpConfig.auth.user}>`,
       to,
       subject,
       text: textBody,

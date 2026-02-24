@@ -1,7 +1,7 @@
 {
-  "name": "imap-worker-service",
+  "name": "kundaro-imap-worker",
   "version": "1.0.0",
-  "description": "Standalone IMAP polling worker service for the service desk",
+  "description": "Standalone IMAP polling worker service for Kundaro",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

@@ -3,7 +3,7 @@
 
 /**
  * General Settings Page
- * Allows admin users to manage service desk settings and preferences
+ * Allows admin users to manage Kundaro settings and preferences
  * 
  * Security: Admin-only access (role_id = 1)
  * Uses: Auth helper for DRY authentication/authorization
@@ -111,10 +111,10 @@ try {
     {data: truefalseSettingsJSON, error: truefalseSettingsFetchError},
     {data: clientEmails, error: clientEmailsError},
   ] = await Promise.all([
-    // Client settings (signature, email mode, primary email)
+    // Client settings (signature, email mode, primary email, sender name)
     supabase
       .from('clients')
-      .select('email_signature, email_sending_mode, primary_email_id')
+      .select('email_signature, email_sending_mode, primary_email_id, sender_display_name')
       .eq("id", clientId)
       .single(),
     
@@ -177,6 +177,7 @@ if (clientEmailsError) {
 const signature = clientSettings?.email_signature || '';
 const emailSendingMode = clientSettings?.email_sending_mode || 'primary';
 const primaryEmailId = clientSettings?.primary_email_id;
+const senderDisplayName = clientSettings?.sender_display_name || '';
 const availableEmails = clientEmails || [];
 
 // DEBUG Logging
@@ -308,6 +309,21 @@ console.log("[general-settings] Page setup complete, rendering");
                       </span>
                     </label>
                   </div>
+                </div>
+
+                <!-- Sender Display Name -->
+                <div class="space-y-2">
+                  <label for="senderDisplayName" class="text-sm font-medium leading-none">{t('pages.settings.emailConfig.senderName')}</label>
+                  <input
+                    id="senderDisplayName"
+                    type="text"
+                    value={senderDisplayName}
+                    placeholder={t('pages.settings.emailConfig.senderNamePlaceholder')}
+                    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                  <p class="text-xs text-muted-foreground">
+                    {t('pages.settings.emailConfig.senderNameDescription')}
+                  </p>
                 </div>
 
                 <!-- Primary Email Selection (only show when mode is primary) -->
@@ -537,9 +553,7 @@ console.log("[general-settings] Page setup complete, rendering");
     </div>
   </AdminShell>
 
-  <script id="i18n-messages" type="application/json">
-    {clientMsgsJson}
-  </script>
+  <script id="i18n-messages" type="application/json" set:html={clientMsgsJson}></script>
 
   <script>
     /**
@@ -561,6 +575,7 @@ console.log("[general-settings] Page setup complete, rendering");
     const sendingModeRadios = document.querySelectorAll('input[name="sendingMode"]');
     const primaryEmailSelect = document.getElementById("primaryEmail");
     const primaryEmailSection = document.getElementById("primaryEmailSection");
+    const senderDisplayNameInput = document.getElementById("senderDisplayName") as HTMLInputElement;
 
     // Localized messages loaded from JSON script tag
     const msgsEl = document.getElementById('i18n-messages');
@@ -608,7 +623,8 @@ console.log("[general-settings] Page setup complete, rendering");
         try {
           const response = await apiClient.post('/settings/updateEmailConfig', {
             sendingMode: selectedMode,
-            primaryEmailId: selectedMode === 'primary' ? parseInt(primaryEmailId) : null
+            primaryEmailId: selectedMode === 'primary' ? parseInt(primaryEmailId) : null,
+            senderDisplayName: senderDisplayNameInput?.value?.trim() || null
           });
 
           if (!response.success) {

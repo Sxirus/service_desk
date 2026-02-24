@@ -1,7 +1,7 @@
 module.exports = {
     apps: [
         {
-            name: 'imap-worker',
+            name: 'kundaro-imap-worker',
             script: 'index.js',
             node_args: '--use-system-ca',  // Force Node to use system CA store
             restart_delay: 5000,

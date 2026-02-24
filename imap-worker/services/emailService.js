@@ -27,28 +27,29 @@ async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
   // 1. Read client settings
   const { data: clientSettings } = await supabase
     .from('clients')
-    .select('email_sending_mode, primary_email_id')
+    .select('email_sending_mode, primary_email_id, name, sender_display_name')
     .eq('id', client_id)
     .single();
 
   if (!clientSettings) return null;
   const { email_sending_mode, primary_email_id } = clientSettings;
+  const displayName = clientSettings.sender_display_name || clientSettings.name || 'Kundaro';
 
   // 2. Thread-based mode
   if (email_sending_mode === 'thread-based' && threadEmailAddress) {
     const config = await getEmailAccountConfig(client_id, { email_address: threadEmailAddress });
-    if (config) return { ...config, provider: 'Thread-Based: ' + threadEmailAddress };
+    if (config) return { ...config, displayName, provider: 'Thread-Based: ' + threadEmailAddress };
   }
 
   // 3. Primary mode
   if (email_sending_mode === 'primary' && primary_email_id) {
     const config = await getEmailAccountConfig(client_id, { id: primary_email_id });
-    if (config) return { ...config, provider: 'Primary' };
+    if (config) return { ...config, displayName, provider: 'Primary' };
   }
 
   // 4. Fallback: first active account
   const config = await getEmailAccountConfig(client_id, {}, true);
-  if (config) return { ...config, provider: 'Fallback' };
+  if (config) return { ...config, displayName, provider: 'Fallback' };
 
   return null;
 }

@@ -61,7 +61,7 @@ router.post('/updateEmailConfig',
   async (req, res) => {
     try {
       const client_id = req.user.client_id;
-      const { sendingMode, primaryEmailId } = req.body;
+      const { sendingMode, primaryEmailId, senderDisplayName } = req.body;
 
       logger.info('[SETTINGS] Updating email config for client', { client_id, sendingMode, primaryEmailId });
 
@@ -92,7 +92,8 @@ router.post('/updateEmailConfig',
 
       const updateData = {
         email_sending_mode: sendingMode,
-        primary_email_id: sendingMode === 'primary' ? primaryEmailId : null
+        primary_email_id: sendingMode === 'primary' ? primaryEmailId : null,
+        sender_display_name: senderDisplayName || null
       };
 
       const { data, error } = await supabase
@@ -108,7 +109,7 @@ router.post('/updateEmailConfig',
         });
       }
 
-      logFromReq(req, { ...ACTIONS.SETTINGS_EMAIL_CONFIG, details: { sendingMode, primaryEmailId: primaryEmailId || null } });
+      logFromReq(req, { ...ACTIONS.SETTINGS_EMAIL_CONFIG, details: { sendingMode, primaryEmailId: primaryEmailId || null, senderDisplayName: senderDisplayName || null } });
       res.json({ success: true });
     } catch (err) {
       logger.error('[SETTINGS] Server error', { error: err });

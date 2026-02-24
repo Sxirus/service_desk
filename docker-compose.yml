@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   frontend:
-    container_name: astro_frontend
+    container_name: kundaro_frontend
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -19,7 +19,7 @@ services:
       - backend
 
   backend:
-    container_name: express_backend
+    container_name: kundaro_backend
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -36,7 +36,7 @@ services:
       SUPABASE_KEY: ${SUPABASE_KEY}
 
   imap-worker:
-    container_name: imap_worker
+    container_name: kundaro_imap_worker
     build:
       context: ./imap-worker
       dockerfile: Dockerfile

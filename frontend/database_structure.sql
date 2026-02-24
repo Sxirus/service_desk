@@ -77,6 +77,7 @@ CREATE TABLE public.clients (
   auto_assign_employee_on_send boolean NOT NULL DEFAULT false,
   email_sending_mode text NOT NULL DEFAULT 'primary'::text,
   primary_email_id integer,
+  sender_display_name text,
   stripe_customer_id character varying,
   subscription_tier text DEFAULT 'free'::text,
   stripe_subscription_id text,

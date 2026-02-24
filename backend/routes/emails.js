@@ -380,7 +380,7 @@ router.post('/sendMail',
 
       // 4. Send email
       const mailOptions = {
-        from: `"Service Desk" <${smtpConfig.auth.user}>`,
+        from: `"${smtpConfig.displayName}" <${smtpConfig.auth.user}>`,
         to,
         subject,
         text,
@@ -842,10 +842,10 @@ async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
   try {
     logger.info('[EMAILS] Fetching SMTP config for client', { client_id, threadEmailAddress });
 
-    // 1. Get client settings (mode & primary email)
+    // 1. Get client settings (mode & primary email & display name)
     const { data: clientSettings, error: clientError } = await supabase
       .from('clients')
-      .select('email_sending_mode, primary_email_id')
+      .select('email_sending_mode, primary_email_id, name, sender_display_name')
       .eq('id', client_id)
       .single();
 
@@ -855,6 +855,7 @@ async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
     }
 
     const { email_sending_mode, primary_email_id } = clientSettings;
+    const displayName = clientSettings.sender_display_name || clientSettings.name || 'Kundaro';
 
     // 2. Thread-Based Mode: Use the email the original message came from
     if (email_sending_mode === 'thread-based' && threadEmailAddress) {
@@ -888,6 +889,7 @@ async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
             user: threadEmail.email_address,
             pass: encryption.decrypt(threadEmail.password)
           },
+          displayName,
           provider: 'Thread-Based: ' + threadEmail.email_address
         };
       } else {
@@ -927,6 +929,7 @@ async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
             user: primaryEmail.email_address,
             pass: encryption.decrypt(primaryEmail.password)
           },
+          displayName,
           provider: 'Primary: ' + primaryEmail.email_address
         };
       }
@@ -962,6 +965,7 @@ async function getClientSmtpConfig(client_id, threadEmailAddress = null) {
             user: fallbackEmail.email_address,
             pass: encryption.decrypt(fallbackEmail.password)
           },
+          displayName,
           provider: 'Fallback: ' + fallbackEmail.email_address
         };
       }
