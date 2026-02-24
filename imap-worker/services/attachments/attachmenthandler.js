@@ -11,6 +11,9 @@ const DENSITY_PPI = 180;
 const TARGET_HEIGHT_PNG = 600;
 const compressionLevel_PNG = 9; //0-9
 
+// B9 fix: Maximum attachment size before processing (25 MB)
+const MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024;
+
 //helpers
 function isJpeg(att) {
   const ct = (att.contentType || '').toLowerCase();
@@ -52,6 +55,16 @@ async function downscaleAttachments(attachments) {
       const sizeBefore = att.size;
       logger.info('Size before: ' + (sizeBefore / (1024 * 1024)).toFixed(2));
 
+      // B9 fix: Skip attachments exceeding the size limit
+      if (sizeBefore > MAX_ATTACHMENT_SIZE_BYTES) {
+        logger.warn('[Attachment Handler] Attachment exceeds size limit, skipping', {
+          filename: att.filename,
+          sizeMB: (sizeBefore / (1024 * 1024)).toFixed(2),
+          limitMB: (MAX_ATTACHMENT_SIZE_BYTES / (1024 * 1024)).toFixed(0)
+        });
+        continue;
+      }
+
       let data;
       let outContentType = att.contentType;
       let outFilename = att.filename;
@@ -73,19 +86,24 @@ async function downscaleAttachments(attachments) {
         //no downscaling for that file type inplemented -> just use the whole attachment
         data = att.content;
       }
+      // B10 fix: If downscaled result is larger, fall back to original
       if (data.length > sizeBefore) {
-        logger.info("!!!DOWNSCALING FAILED!!! Data is bigger than before");
+        logger.warn('[Attachment Handler] Downscaled result is larger than original, using original', {
+          filename: att.filename,
+          originalSize: sizeBefore,
+          downscaledSize: data.length
+        });
+        downsized.push(att);
       } else {
         logger.info('New Size: ' + (data.length / (1024 * 1024)).toFixed(2));
-      }
-
         downsized.push({
-        ...att,
-        filename: outFilename,
-        content: data,
-        size: data ? data.length : att.size,
-        contentType: outContentType || att.contentType
-      });
+          ...att,
+          filename: outFilename,
+          content: data,
+          size: data.length,
+          contentType: outContentType || att.contentType
+        });
+      }
 
     } catch (error) {
       logger.error("Downscaling error", { error: error.message });

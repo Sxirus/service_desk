@@ -66,10 +66,11 @@ async function saveEmail(parsedEmail, clientId, InboxEmail, confirmation) {
 
     let customerId;
 
-    logger.info(`[${InboxEmail}] Checking if email address exists`, { senderEmailAddress });
+    // B3 fix: Single query to find customer by email (replaces separate exists + getId queries)
+    logger.info(`[${InboxEmail}] Looking up customer by email`, { senderEmailAddress });
+    customerId = await findCustomerByEmail(senderEmailAddress);
     
-    // Check if this email address is already associated with a customer
-    if (!(await checkIfEmailAddressExists(senderEmailAddress))) {
+    if (!customerId) {
         // Email address is new - create a new customer record
         logger.info(`[${InboxEmail}] Email address does not exist, creating new customer with email`, { senderEmailAddress });
         customerId = await createCustomerWithEmail(from, clientId);
@@ -78,9 +79,7 @@ async function saveEmail(parsedEmail, clientId, InboxEmail, confirmation) {
             return;
         }
     } else {
-        // Email address exists - retrieve the existing customer ID
-        customerId = await getCustomerIdByEmail(senderEmailAddress);
-        logger.info(`[${InboxEmail}] Email address exists, retrieving customer ID for "${senderEmailAddress}"`, { customerId });
+        logger.info(`[${InboxEmail}] Found existing customer`, { customerId, senderEmailAddress });
     }
 
     // Log email details for debugging
@@ -95,32 +94,32 @@ async function saveEmail(parsedEmail, clientId, InboxEmail, confirmation) {
     // - If there's no prior agent response (no sent-mail), status is 'new'
     // - If agent has responded before and ticket was 'resolved', this is a re-open -> 'open'
     // - Otherwise for follow-ups during active conversation -> 'open'
+    // B3 fix: Run sent-mail check and last email status check in parallel
     let initialStatus = 'new';
     
-    // Check if there are any sent emails to this customer (agent has responded before)
-    const { data: sentEmails, error: sentError } = await supabase
-        .from('sent-mail')
-        .select('id')
-        .eq('customer_id', customerId)
-        .limit(1);
-    
-    if (!sentError && sentEmails && sentEmails.length > 0) {
-        // Agent has responded before, this is a follow-up or re-open
-        // Check the most recent email status for this customer
-        const { data: lastEmail } = await supabase
+    const [sentMailResult, lastEmailResult] = await Promise.all([
+        supabase
+            .from('sent-mail')
+            .select('id')
+            .eq('customer_id', customerId)
+            .limit(1),
+        supabase
             .from('incoming-mails')
             .select('status')
             .eq('customer_id', customerId)
             .order('send_at', { ascending: false })
             .limit(1)
-            .single();
-        
+            .maybeSingle()
+    ]);
+
+    const { data: sentEmails, error: sentError } = sentMailResult;
+    const { data: lastEmail } = lastEmailResult;
+
+    if (!sentError && sentEmails && sentEmails.length > 0) {
         if (lastEmail?.status === 'resolved') {
-            // Ticket was resolved, customer is re-opening it
             initialStatus = 'open';
             logger.info(`[${InboxEmail}] Customer re-opening resolved ticket, setting status to 'open'`);
         } else {
-            // Active conversation, customer follow-up
             initialStatus = 'open';
             logger.info(`[${InboxEmail}] Customer follow-up on active ticket, setting status to 'open'`);
         }
@@ -210,37 +209,21 @@ async function createCustomerWithEmail(from, clientId) {
 }
 
 /**
- * Check if an email address already exists in the system
+ * B3 fix: Combined email-address lookup — replaces separate checkIfEmailAddressExists + getCustomerIdByEmail
+ * Returns customer_id if found, null otherwise.
  */
-async function checkIfEmailAddressExists(email) {
+async function findCustomerByEmail(email) {
     const { data, error } = await supabase.from('email-addresses')
         .select('customer_id')
         .eq('email_address', email)
         .maybeSingle();
     
     if (error) {
-        logger.error(`[${email}] Failed to check email existence`, { error });
-        return false;
-    } else {
-        return Boolean(data?.customer_id);
-    }
-}
-
-/**
- * Retrieve the customer ID associated with a given email address
- */
-async function getCustomerIdByEmail(email) {
-    const { data, error } = await supabase.from('email-addresses')
-        .select('customer_id')
-        .eq('email_address', email)
-        .maybeSingle();
-    
-    if (error) {
-        logger.error(`[${email}] Failed to get customer ID by email`, { error });
+        logger.error(`[${email}] Failed to look up email address`, { error });
         return null;
     }
     
-    return data && data.customer_id ? data.customer_id : null;
+    return data?.customer_id || null;
 }
 
 /**

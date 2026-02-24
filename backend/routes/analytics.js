@@ -294,20 +294,148 @@ router.get('/employee-stats',
 );
 
 /**
- * Get response time statistics (placeholder for future implementation)
+ * Get response time statistics
  * GET /api/analytics/response-times?from=<ISO_DATE>&to=<ISO_DATE>
  * 
  * Authentication: Required
+ * Authorization: Admin only
+ * 
+ * Returns:
+ * {
+ *   overallAvgResponseMinutes: number,
+ *   totalResponded: number,
+ *   totalUnresponded: number,
+ *   responseRate: number,
+ *   dailyStats: Array<{ date, avgResponseMinutes, medianResponseMinutes, p90ResponseMinutes, totalResponded, totalUnresponded }>
+ * }
  */
 router.get('/response-times',
   authenticate,
   authorizeAdmin,
   async (req, res) => {
-    // TODO: Implement response time analytics
-    res.status(501).json({ 
-      error: 'Not Implemented',
-      message: 'Response time analytics coming soon' 
-    });
+    try {
+      const client_id = req.user.client_id;
+      const { from, to } = req.query;
+
+      // Validate date parameters
+      if (!from || !to) {
+        return res.status(400).json({ 
+          error: 'Bad Request',
+          message: 'Missing required parameters: from and to dates' 
+        });
+      }
+
+      const startDate = new Date(from);
+      const endDate = new Date(to);
+
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        return res.status(400).json({ 
+          error: 'Bad Request',
+          message: 'Invalid date format. Use ISO 8601 format' 
+        });
+      }
+
+      if (startDate > endDate) {
+        return res.status(400).json({ 
+          error: 'Bad Request',
+          message: 'Start date must be before end date' 
+        });
+      }
+
+      const MAX_DATE_RANGE_DAYS = 365;
+      const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+      if (daysDiff > MAX_DATE_RANGE_DAYS) {
+        return res.status(400).json({ 
+          error: 'Bad Request',
+          message: `Date range cannot exceed ${MAX_DATE_RANGE_DAYS} days` 
+        });
+      }
+
+      logger.info('[ANALYTICS] Fetching response time stats', { client_id, from, to });
+
+      const { data: rpcRows, error: rpcError } = await supabase
+        .rpc('get_response_time_stats', {
+          p_client_id: client_id,
+          p_from: from,
+          p_to: to
+        });
+
+      if (rpcError) {
+        logger.error('[ANALYTICS] RPC error fetching response time stats', { error: rpcError.message });
+        return res.status(500).json({ 
+          error: 'Database Error',
+          message: 'Failed to fetch response time statistics' 
+        });
+      }
+
+      // Build daily stats with zero-fill for missing dates
+      const rpcMap = new Map();
+      for (const row of (rpcRows || [])) {
+        rpcMap.set(row.day, row);
+      }
+
+      const dailyStats = [];
+      let totalResponded = 0;
+      let totalUnresponded = 0;
+      let weightedResponseSum = 0;
+
+      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+        const dateKey = d.toISOString().split('T')[0];
+        const rpcEntry = rpcMap.get(dateKey);
+
+        if (rpcEntry) {
+          const responded = Number(rpcEntry.total_responded || 0);
+          const unresponded = Number(rpcEntry.total_unresponded || 0);
+          totalResponded += responded;
+          totalUnresponded += unresponded;
+          weightedResponseSum += (Number(rpcEntry.avg_response_minutes) || 0) * responded;
+
+          dailyStats.push({
+            date: dateKey,
+            avgResponseMinutes: Number(rpcEntry.avg_response_minutes) || 0,
+            medianResponseMinutes: Number(rpcEntry.median_response_minutes) || 0,
+            p90ResponseMinutes: Number(rpcEntry.p90_response_minutes) || 0,
+            totalResponded: responded,
+            totalUnresponded: unresponded
+          });
+        } else {
+          dailyStats.push({
+            date: dateKey,
+            avgResponseMinutes: 0,
+            medianResponseMinutes: 0,
+            p90ResponseMinutes: 0,
+            totalResponded: 0,
+            totalUnresponded: 0
+          });
+        }
+      }
+
+      const overallAvgMinutes = totalResponded > 0
+        ? Math.round((weightedResponseSum / totalResponded) * 10) / 10
+        : 0;
+
+      const response = {
+        overallAvgResponseMinutes: overallAvgMinutes,
+        totalResponded,
+        totalUnresponded,
+        responseRate: (totalResponded + totalUnresponded) > 0
+          ? Math.round((totalResponded / (totalResponded + totalUnresponded)) * 1000) / 10
+          : 0,
+        dailyStats
+      };
+
+      logger.info('[ANALYTICS] Returning response time stats', { 
+        overallAvgMinutes, totalResponded, totalUnresponded 
+      });
+
+      res.json(response);
+    } catch (err) {
+      logger.error('[ANALYTICS] Server error in response-times', { error: err.message });
+      res.status(500).json({ 
+        error: 'Internal Server Error',
+        message: 'Failed to fetch response time data' 
+      });
+    }
   }
 );
 
@@ -418,20 +546,121 @@ router.get('/status-stats',
 );
 
 /**
- * Get agent performance statistics (placeholder for future implementation)
+ * Get agent performance statistics
  * GET /api/analytics/agent-performance?from=<ISO_DATE>&to=<ISO_DATE>
  * 
  * Authentication: Required
+ * Authorization: Admin only
+ * 
+ * Returns:
+ * {
+ *   summary: { totalAgents, totalEmailsSent, totalInternalNotes, totalTicketsResolved, teamAvgResponseMinutes },
+ *   agents: Array<{ employeeId, employeeName, emailsSent, internalNotes, avgResponseMinutes, ticketsResolved }>
+ * }
  */
 router.get('/agent-performance',
   authenticate,
   authorizeAdmin,
   async (req, res) => {
-    // TODO: Implement agent performance analytics
-    res.status(501).json({ 
-      error: 'Not Implemented',
-      message: 'Agent performance analytics coming soon' 
-    });
+    try {
+      const client_id = req.user.client_id;
+      const { from, to } = req.query;
+
+      // Validate date parameters
+      if (!from || !to) {
+        return res.status(400).json({ 
+          error: 'Bad Request',
+          message: 'Missing required parameters: from and to dates' 
+        });
+      }
+
+      const startDate = new Date(from);
+      const endDate = new Date(to);
+
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        return res.status(400).json({ 
+          error: 'Bad Request',
+          message: 'Invalid date format. Use ISO 8601 format' 
+        });
+      }
+
+      if (startDate > endDate) {
+        return res.status(400).json({ 
+          error: 'Bad Request',
+          message: 'Start date must be before end date' 
+        });
+      }
+
+      const MAX_DATE_RANGE_DAYS = 365;
+      const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+      if (daysDiff > MAX_DATE_RANGE_DAYS) {
+        return res.status(400).json({ 
+          error: 'Bad Request',
+          message: `Date range cannot exceed ${MAX_DATE_RANGE_DAYS} days` 
+        });
+      }
+
+      logger.info('[ANALYTICS] Fetching agent performance stats', { client_id, from, to });
+
+      const { data: rpcRows, error: rpcError } = await supabase
+        .rpc('get_agent_performance_stats', {
+          p_client_id: client_id,
+          p_from: from,
+          p_to: to
+        });
+
+      if (rpcError) {
+        logger.error('[ANALYTICS] RPC error fetching agent performance', { error: rpcError.message });
+        return res.status(500).json({ 
+          error: 'Database Error',
+          message: 'Failed to fetch agent performance statistics' 
+        });
+      }
+
+      const agents = (rpcRows || []).map(row => ({
+        employeeId: row.employee_id,
+        employeeName: row.employee_name,
+        emailsSent: Number(row.emails_sent || 0),
+        internalNotes: Number(row.internal_notes || 0),
+        avgResponseMinutes: Number(row.avg_response_minutes || 0),
+        ticketsResolved: Number(row.tickets_resolved || 0)
+      }));
+
+      // Compute team-level summary
+      const totalEmailsSent = agents.reduce((sum, a) => sum + a.emailsSent, 0);
+      const totalInternalNotes = agents.reduce((sum, a) => sum + a.internalNotes, 0);
+      const totalTicketsResolved = agents.reduce((sum, a) => sum + a.ticketsResolved, 0);
+      const agentsWithResponseTime = agents.filter(a => a.avgResponseMinutes > 0);
+      const teamAvgResponseMinutes = agentsWithResponseTime.length > 0
+        ? Math.round(
+            (agentsWithResponseTime.reduce((sum, a) => sum + a.avgResponseMinutes * a.emailsSent, 0) /
+             agentsWithResponseTime.reduce((sum, a) => sum + a.emailsSent, 0)) * 10
+          ) / 10
+        : 0;
+
+      const response = {
+        summary: {
+          totalAgents: agents.length,
+          totalEmailsSent,
+          totalInternalNotes,
+          totalTicketsResolved,
+          teamAvgResponseMinutes
+        },
+        agents
+      };
+
+      logger.info('[ANALYTICS] Returning agent performance stats', { 
+        agentCount: agents.length, totalEmailsSent, totalTicketsResolved 
+      });
+
+      res.json(response);
+    } catch (err) {
+      logger.error('[ANALYTICS] Server error in agent-performance', { error: err.message });
+      res.status(500).json({ 
+        error: 'Internal Server Error',
+        message: 'Failed to fetch agent performance data' 
+      });
+    }
   }
 );
 
