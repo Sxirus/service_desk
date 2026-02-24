@@ -108,6 +108,8 @@ app.use('/api/activity-log', require('./routes/activity-log'));
 
 app.use('/api/platform', require('./routes/platform'));
 
+app.use('/api/translate', require('./routes/translate'));
+
 // Global error handling middleware
 // This catches any unhandled errors from routes and provides consistent error responses
 app.use((err, req, res, next) => {

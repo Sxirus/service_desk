@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button';
 import { ParsedEmailContent } from '@/components/ParsedEmailContent';
 import { hasQuotedContent } from '@/utils/emailQuoteParser';
 import { NewMessageSeparator } from '@/components/NewMessageSeparator';
+import { apiClient } from '@/utils/api';
 
 /**
  * Individual attachment button component
@@ -249,14 +250,19 @@ interface EmailMessageProps {
 }
 
 const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPreview, isNew = false }) => {
-  const { t } = useTranslation('dashboard');
+  const { t, i18n } = useTranslation('dashboard');
   const isOutgoing = email.type === 'sent' || email.type === 'internal_note';
   const isInternalNote = email.type === 'internal_note' || (email.type === 'sent' && 'is_internal_note' in email && email.is_internal_note);
   const [showHtml, setShowHtml] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translatedText, setTranslatedText] = useState<string | null>(null);
+  const [showOriginalContent, setShowOriginalContent] = useState(false);
+  const [translationError, setTranslationError] = useState<string | null>(null);
   
   // Check if this email has significant HTML (only relevant for incoming emails)
   const hasHtml = hasSignificantHtml(email.html_content);
+  const showInlineTranslateWithHtmlToggle = !isOutgoing && hasHtml;
 
   // Get agent name and avatar for sent emails
   const agentName = isOutgoing && (email.type === 'sent' || email.type === 'internal_note') ? email.agent_name || t('tickets.supportAgent') : null;
@@ -302,6 +308,36 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
       return truncated.substring(0, lastSpace) + '...';
     }
     return truncated + '...';
+  };
+
+  const handleTranslate = async () => {
+    if (translatedText) {
+      setShowOriginalContent(!showOriginalContent);
+      return;
+    }
+
+    setIsTranslating(true);
+    setTranslationError(null);
+
+    try {
+      const response = await apiClient.post('/translate', {
+        emailId: email.id,
+        emailType: email.type,
+        targetLanguage: i18n.language || 'en'
+      });
+
+      if (!response?.translatedText || typeof response.translatedText !== 'string') {
+        throw new Error(t('tickets.translationError'));
+      }
+
+      setTranslatedText(response.translatedText);
+      setShowOriginalContent(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t('tickets.translationError');
+      setTranslationError(message);
+    } finally {
+      setIsTranslating(false);
+    }
   };
 
   // Determine article styling based on message type
@@ -406,7 +442,15 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
         ) : (
           // Incoming emails: Text view with collapsible quoted replies
           <>
-            <ParsedEmailContent textContent={getTruncatedContent()} />
+            <ParsedEmailContent
+              textContent={translatedText && !showOriginalContent ? translatedText : getTruncatedContent()}
+            />
+
+            {translatedText && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {t('tickets.translationActive')}
+              </p>
+            )}
 
             {/* Show More/Less Button for long emails */}
             {isLongContent && (
@@ -450,7 +494,7 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
 
             {/* HTML View Toggle Button - Only show for incoming emails with significant HTML */}
             {hasHtml && (
-              <div className="mt-3">
+              <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Button
                   size="sm"
                   variant="outline"
@@ -473,6 +517,20 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
                     </svg>
                     {showHtml ? t('tickets.hideHtmlVersion') : t('tickets.showHtmlVersion')}
                   </>
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleTranslate}
+                  disabled={isTranslating}
+                  className="text-xs"
+                >
+                  {isTranslating
+                    ? t('tickets.translating')
+                    : translatedText
+                      ? (showOriginalContent ? t('tickets.showTranslation') : t('tickets.showOriginal'))
+                      : t('tickets.translate')}
                 </Button>
               </div>
             )}
@@ -501,7 +559,53 @@ const EmailMessage: React.FC<EmailMessageProps> = ({ email, customerName, onPrev
                 }}
               />
             )}
+
           </>
+        )}
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {!showInlineTranslateWithHtmlToggle && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleTranslate}
+              disabled={isTranslating}
+              className="text-xs"
+            >
+              {isTranslating
+                ? t('tickets.translating')
+                : translatedText
+                  ? (showOriginalContent ? t('tickets.showTranslation') : t('tickets.showOriginal'))
+                  : t('tickets.translate')}
+            </Button>
+          )}
+
+          {translatedText && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setTranslatedText(null);
+                setShowOriginalContent(false);
+                setTranslationError(null);
+              }}
+              className="text-xs"
+            >
+              {t('tickets.clearTranslation')}
+            </Button>
+          )}
+        </div>
+
+        {isOutgoing && translatedText && !showOriginalContent && (
+          <div className="mt-2 rounded-md border border-border bg-muted/40 p-3">
+            <ParsedEmailContent textContent={translatedText} />
+          </div>
+        )}
+
+        {translationError && (
+          <p className="mt-2 text-xs text-red-600" role="alert">
+            {translationError}
+          </p>
         )}
 
         {/* Attachments */}

@@ -5,6 +5,7 @@ Kundaro is a multi-service customer-support platform with:
 - **Frontend**: Astro SSR + React UI (`frontend`, port `4321`)
 - **Backend API**: Express + Supabase integration (`backend`, port `3000`)
 - **IMAP Worker**: background inbox sync service (`imap-worker`)
+- **Translation Worker**: on-demand secure translation microservice (`translation-worker`, port `3002`)
 
 The repository is organized as a monorepo with separate Node.js projects per service.
 
@@ -15,6 +16,7 @@ service_desk/
 ├── backend/                 # Express API server
 ├── frontend/                # Astro + React web app
 ├── imap-worker/             # Background IMAP polling workers
+├── translation-worker/      # On-demand text translation worker
 ├── docker-compose.yml       # Multi-service local orchestration
 ├── STRIPE_WEBHOOKS_SETUP.md # Stripe webhook setup details
 └── STYLE_GUIDE.md           # Frontend design/style conventions
@@ -86,6 +88,10 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 SHOPIFY_CLIENT_ID=your_shopify_client_id
 SHOPIFY_SECRET=your_shopify_secret
 SHOPIFY_REDIRECT_URI=http://localhost:3000/api/shopify/callback
+
+# Translation service bridge
+TRANSLATION_SERVICE_URL=http://translation-worker:3002
+TRANSLATION_SERVICE_SECRET=your_shared_translation_secret
 ```
 
 ### 3) IMAP Worker (`imap-worker/.env`)
@@ -103,6 +109,24 @@ SYNC_INTERVAL_MS=60000
 ```
 
 > `ENCRYPTION_SECRET` must be identical in `backend` and `imap-worker`.
+
+### 4) Translation Worker (`translation-worker/.env`)
+
+Start from `translation-worker/.env.example`:
+
+```env
+NODE_ENV=development
+PORT=3002
+LOG_LEVEL=info
+
+ZAI_API_URL=https://api.z.ai/api/paas/v4/chat/completions
+ZAI_API_KEY=your_zai_api_key
+ZAI_MODEL=glm-4.7
+
+TRANSLATION_SERVICE_SECRET=your_shared_translation_secret
+```
+
+> `TRANSLATION_SERVICE_SECRET` must be identical in `backend` and `translation-worker`.
 
 ## Local Development (without Docker)
 
@@ -132,6 +156,14 @@ npm install
 npm run dev
 ```
 
+### Translation Worker
+
+```bash
+cd translation-worker
+npm install
+npm run dev
+```
+
 Expected URLs:
 
 - Frontend: `http://localhost:4321`
@@ -151,6 +183,7 @@ This starts:
 - `kundaro_frontend`
 - `kundaro_backend`
 - `kundaro_imap_worker`
+- `kundaro_translation_worker`
 
 The compose file reads backend/worker secrets from environment variables available to Docker (for example via a root `.env` file or shell environment).
 
@@ -178,6 +211,7 @@ The backend mounts route groups under `/api`, including:
 - `/api/avatars`
 - `/api/activity-log`
 - `/api/platform`
+- `/api/translate`
 - `/api/webhooks/stripe` (raw-body webhook endpoint)
 
 ## Stripe Webhooks

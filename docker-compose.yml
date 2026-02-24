@@ -34,6 +34,8 @@ services:
       NODE_ENV: development
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_KEY: ${SUPABASE_KEY}
+      TRANSLATION_SERVICE_URL: ${TRANSLATION_SERVICE_URL:-http://translation-worker:3002}
+      TRANSLATION_SERVICE_SECRET: ${TRANSLATION_SERVICE_SECRET}
 
   imap-worker:
     container_name: kundaro_imap_worker
@@ -52,6 +54,30 @@ services:
       ENCRYPTION_SECRET: ${ENCRYPTION_SECRET}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SYNC_INTERVAL_MS: ${SYNC_INTERVAL_MS:-60000}
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  translation-worker:
+    container_name: kundaro_translation_worker
+    build:
+      context: ./translation-worker
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./translation-worker:/app
+      - /app/node_modules
+    working_dir: /app
+    command: node index.js
+    environment:
+      NODE_ENV: development
+      PORT: 3002
+      ZAI_API_URL: ${ZAI_API_URL:-https://api.z.ai/api/paas/v4/chat/completions}
+      ZAI_API_KEY: ${ZAI_API_KEY}
+      ZAI_MODEL: ${ZAI_MODEL:-glm-4.7}
+      TRANSLATION_SERVICE_SECRET: ${TRANSLATION_SERVICE_SECRET}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:
       - backend
     restart: unless-stopped
