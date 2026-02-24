@@ -10,7 +10,6 @@ const encryption = require('../utils/encryption');
 const { authenticate } = require('../middleware/auth');
 const { authorizeAdmin } = require('../middleware/authorization');
 const { validateId } = require('../middleware/validation');
-const { stopWorkerById } = require('../services/workerManager');
 const { logFromReq, ACTIONS } = require('../services/activityLogger');
 const logger = require('../utils/logger');
 
@@ -153,11 +152,7 @@ router.patch('/:id', authenticate, authorizeAdmin, validateId('id'), async (req,
 
         if (error) throw error;
 
-        // If deactivated, stop the worker
-        if (updates.active === false) {
-            stopWorkerById(id);
-        }
-
+        // Note: imap-worker service detects deactivation via its periodic DB sync
         logFromReq(req, { ...ACTIONS.EMAIL_ACCOUNT_UPDATED, targetType: 'email_account', targetId: id, details: { changedFields: Object.keys(updates).filter(k => k !== 'password') } });
         res.json({ success: true, data });
     } catch (err) {
@@ -197,9 +192,7 @@ router.delete('/:id', authenticate, authorizeAdmin, validateId('id'), async (req
 
         if (error) throw error;
 
-        // Stop the worker immediately
-        stopWorkerById(id);
-
+        // Note: imap-worker service detects deletion via its periodic DB sync
         logFromReq(req, { ...ACTIONS.EMAIL_ACCOUNT_DELETED, targetType: 'email_account', targetId: id });
         res.json({ success: true });
     } catch (err) {

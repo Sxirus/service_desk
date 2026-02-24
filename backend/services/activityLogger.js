@@ -13,6 +13,18 @@ const logger = require('../utils/logger');
  * Action constants — use these instead of raw strings to prevent typos.
  * Each entry has { action, category }.
  */
+/**
+ * S9 fix: In-memory audit log failure metrics.
+ * Operators can call getAuditMetrics() to monitor audit log health.
+ */
+const auditMetrics = {
+  totalAttempts: 0,
+  totalFailures: 0,
+  lastFailureAt: null,
+  lastFailureError: null,
+  consecutiveFailures: 0,
+};
+
 const ACTIONS = {
   // Email
   EMAIL_SENT:                { action: 'email.sent',                  category: 'email' },
@@ -125,16 +137,40 @@ function logActivity({ clientId, employeeId, action, category, targetType, targe
     ip_address: ipAddress || null,
   };
 
+  auditMetrics.totalAttempts++;
+
   supabase
     .from('activity_log')
     .insert(row)
     .then(({ error }) => {
       if (error) {
+        auditMetrics.totalFailures++;
+        auditMetrics.consecutiveFailures++;
+        auditMetrics.lastFailureAt = new Date().toISOString();
+        auditMetrics.lastFailureError = error.message;
         logger.error('[ACTIVITY] Failed to insert activity log', { error: error.message, row });
+        if (auditMetrics.consecutiveFailures > 10) {
+          logger.error('[AUDIT_HEALTH_CRITICAL] Audit log has failed more than 10 consecutive inserts', {
+            consecutiveFailures: auditMetrics.consecutiveFailures,
+            lastError: error.message,
+          });
+        }
+      } else {
+        auditMetrics.consecutiveFailures = 0;
       }
     })
     .catch((err) => {
+      auditMetrics.totalFailures++;
+      auditMetrics.consecutiveFailures++;
+      auditMetrics.lastFailureAt = new Date().toISOString();
+      auditMetrics.lastFailureError = err.message;
       logger.error('[ACTIVITY] Unexpected error inserting activity log', { error: err.message });
+      if (auditMetrics.consecutiveFailures > 10) {
+        logger.error('[AUDIT_HEALTH_CRITICAL] Audit log has failed more than 10 consecutive inserts', {
+          consecutiveFailures: auditMetrics.consecutiveFailures,
+          lastError: err.message,
+        });
+      }
     });
 }
 
@@ -152,4 +188,11 @@ function logFromReq(req, { action, category, targetType, targetId, details }) {
   logActivity({ clientId, employeeId, action, category, targetType, targetId, details, ipAddress });
 }
 
-module.exports = { logActivity, logFromReq, ACTIONS };
+/**
+ * Returns a snapshot of the audit log metrics.
+ */
+function getAuditMetrics() {
+  return { ...auditMetrics };
+}
+
+module.exports = { logActivity, logFromReq, ACTIONS, getAuditMetrics };

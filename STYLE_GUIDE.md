@@ -1,4 +1,4 @@
-# Service Desk Frontend Style Guide
+# Kundaro Frontend Style Guide
 
 > **Last Updated:** January 8, 2026  
 > **Design System:** shadcn/ui (New York style)  
@@ -21,7 +21,7 @@
 
 ## Design Philosophy
 
-The Service Desk interface follows a **clean, professional, and functional** design language with these core principles:
+The Kundaro interface follows a **clean, professional, and functional** design language with these core principles:
 
 - **Clarity over cleverness** - UI elements are immediately understandable
 - **Consistency** - Repeated patterns create predictable user experiences
@@ -627,7 +627,7 @@ xl: 1280px
 
 ## Summary
 
-This Service Desk frontend uses a **modern, accessible, and consistent design system** built on:
+This Kundaro frontend uses a **modern, accessible, and consistent design system** built on:
 
 - **shadcn/ui** components (New York style)
 - **Tailwind CSS** with OKLCH color space

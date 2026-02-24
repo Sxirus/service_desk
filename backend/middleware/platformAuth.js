@@ -137,6 +137,17 @@ async function requirePlatformAdmin(req, res, next) {
 }
 
 /**
+ * S9 fix: Platform audit log failure metrics
+ */
+const platformAuditMetrics = {
+  totalAttempts: 0,
+  totalFailures: 0,
+  lastFailureAt: null,
+  lastFailureError: null,
+  consecutiveFailures: 0,
+};
+
+/**
  * Log a platform admin action to the audit log
  * @param {string} adminId - Platform admin ID
  * @param {string} action - Action performed (e.g., 'update_client', 'add_admin')
@@ -146,8 +157,9 @@ async function requirePlatformAdmin(req, res, next) {
  * @param {object} req - Express request object for IP/user agent
  */
 async function logPlatformAction(adminId, action, targetType, targetId, details, req) {
+  platformAuditMetrics.totalAttempts++;
   try {
-    await supabase
+    const { error } = await supabase
       .from('platform_audit_log')
       .insert({
         admin_id: adminId,
@@ -158,14 +170,47 @@ async function logPlatformAction(adminId, action, targetType, targetId, details,
         ip_address: req?.ip || req?.connection?.remoteAddress || null,
         user_agent: req?.headers?.['user-agent'] || null
       });
+    if (error) {
+      platformAuditMetrics.totalFailures++;
+      platformAuditMetrics.consecutiveFailures++;
+      platformAuditMetrics.lastFailureAt = new Date().toISOString();
+      platformAuditMetrics.lastFailureError = error.message;
+      logger.error('[PLATFORM_AUDIT] Failed to log action', { error: error.message });
+      if (platformAuditMetrics.consecutiveFailures > 5) {
+        logger.error('[PLATFORM_AUDIT_HEALTH] Platform audit log has failed more than 5 consecutive inserts', {
+          consecutiveFailures: platformAuditMetrics.consecutiveFailures,
+          lastError: error.message,
+        });
+      }
+    } else {
+      platformAuditMetrics.consecutiveFailures = 0;
+    }
   } catch (error) {
+    platformAuditMetrics.totalFailures++;
+    platformAuditMetrics.consecutiveFailures++;
+    platformAuditMetrics.lastFailureAt = new Date().toISOString();
+    platformAuditMetrics.lastFailureError = error.message || String(error);
     logger.error('[PLATFORM_AUDIT] Failed to log action', { error: error.message || error });
+    if (platformAuditMetrics.consecutiveFailures > 5) {
+      logger.error('[PLATFORM_AUDIT_HEALTH] Platform audit log has failed more than 5 consecutive inserts', {
+        consecutiveFailures: platformAuditMetrics.consecutiveFailures,
+        lastError: error.message || String(error),
+      });
+    }
     // Don't throw - audit logging shouldn't break the main operation
   }
+}
+
+/**
+ * Returns a snapshot of the platform audit log metrics.
+ */
+function getPlatformAuditMetrics() {
+  return { ...platformAuditMetrics };
 }
 
 module.exports = {
   authenticatePlatformAdmin,
   requirePlatformAdmin,
-  logPlatformAction
+  logPlatformAction,
+  getPlatformAuditMetrics
 };

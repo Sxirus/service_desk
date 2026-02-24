@@ -2,7 +2,7 @@
  * IMAP Worker Child Process
  * Runs as a standalone Node.js process forked by workerManager.
  * Receives email account config via IPC, delegates to imapWorker for polling.
- * Isolates each IMAP connection so a stuck/crashed worker cannot affect the main backend.
+ * Isolates each IMAP connection so a stuck/crashed worker cannot affect the main service.
  */
 
 const { startImapWorker, stopAllWorkers } = require('./imapWorker');

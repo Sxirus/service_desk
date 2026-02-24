@@ -20,6 +20,9 @@
     "companyNamePlaceholder": "Enter company name",
     "companyNameDescription": "This is your company's official name.",
     "companyNameError": "Company name must be at least 2 characters.",
+    "senderDisplayName": "Email Sender Name",
+    "senderDisplayNamePlaceholder": "e.g. Acme Support",
+    "senderDisplayNameDescription": "The name shown as the sender in outbound emails. If empty, your company name will be used.",
     "address": "Address",
     "street": "Street & Number",
     "streetPlaceholder": "Street and number",
@@ -758,10 +761,10 @@
     "settings": {
       "pageTitle": "General Settings",
       "heading": "General Settings",
-      "description": "Manage the settings and preferences for the service desk",
+      "description": "Manage the settings and preferences for Kundaro",
       "emailConfig": {
         "title": "Email Sending Configuration",
-        "description": "Configure how emails are sent from your service desk",
+        "description": "Configure how emails are sent from your Kundaro instance",
         "errorTitle": "Failed to load email configurations",
         "errorDescription": "There was an error loading your email accounts. You can still configure the settings.",
         "noEmails": "No email accounts configured yet",
@@ -772,7 +775,10 @@
         "matchInbox": "Match the inbox",
         "matchInboxDescription": "Always reply from the same email that received the original message",
         "primaryAccount": "Primary Sending Account",
-        "selectAccount": "Select an email account that will be used as default for sending emails"
+        "selectAccount": "Select an email account that will be used as default for sending emails",
+        "senderName": "Sender Display Name",
+        "senderNamePlaceholder": "e.g. Acme Support",
+        "senderNameDescription": "The name shown as the sender in outbound emails. If empty, your company name will be used."
       },
       "emailSignature": {
         "title": "Email Signature",

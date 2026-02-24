@@ -12,7 +12,7 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import { createClient } from "../../lib/supabase.ts";
 import { getCompletePageContext } from "../../lib/auth-helpers.ts";
 import AdminShell from "@/components/AdminShell";
-import { ActivityLog } from "@/components/ActivityLog";
+import { ActivityLog as ActivityLogComponent } from "@/components/ActivityLog";
 import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
 
 // Get translations
@@ -51,7 +51,7 @@ if (!authContext.isAdmin) {
 }
 ---
 
-<BaseLayout title="Activity Log - Service Desk">
+<BaseLayout title="Activity Log - Kundaro">
   <AdminShell
     client:load
     user={sidebarData.user}
@@ -66,6 +66,6 @@ if (!authContext.isAdmin) {
     clientId={sidebarData.clientId}
     subscriptionTier={sidebarData.subscriptionTier}
   >
-    <ActivityLog client:load />
+    <ActivityLogComponent client:load />
   </AdminShell>
 </BaseLayout>

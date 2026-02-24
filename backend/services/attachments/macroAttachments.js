@@ -14,7 +14,7 @@ async function storeMacroAttachmentsInDB(attachments, client_id, macro_id, delet
   });
 
   if (deletedAttachments != null && deletedAttachments.length > 0) {
-    await deleteAttachmentsFromStorage(deletedAttachments);
+    await deleteAttachmentsFromStorage(deletedAttachments, client_id);
   }
 
   for(const att of formatedAttachments) {
@@ -82,11 +82,26 @@ async function storeMacroAttachmentsInDB(attachments, client_id, macro_id, delet
   }
 }
 
-async function deleteAttachmentsFromStorage(attachments) {
+async function deleteAttachmentsFromStorage(attachments, clientId) {
 
   try {
-    // Extract only the object_paths
+    // S7 fix: Validate all paths belong to the requesting client
     const filePaths = attachments.map(file => file.object_path);
+    
+    if (!clientId) {
+      logger.error('[Attachment-Handler-Macro] Missing clientId — cannot validate attachment ownership');
+      return { success: false, error: 'Missing client ID for ownership validation' };
+    }
+
+    const clientPrefix = `${clientId}/`;
+    const invalidPaths = filePaths.filter(p => !p.startsWith(clientPrefix));
+    if (invalidPaths.length > 0) {
+      logger.error('[Attachment-Handler-Macro] Client ownership validation failed — paths do not belong to client', {
+        clientId,
+        invalidPaths
+      });
+      return { success: false, error: 'Access denied: attachment paths do not belong to this client' };
+    }
     
     // Deleting all files at once
     const { data, error } = await supabase

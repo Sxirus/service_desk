@@ -5,7 +5,6 @@ const helmet = require('helmet');             // Security middleware for HTTP he
 require('dotenv').config();                   // Load environment variables from .env file
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
-const { initializeWorkers } = require('./services/workerManager');
 const logger = require('./utils/logger');
 
 // Validate required environment variables at startup
@@ -121,11 +120,6 @@ app.use((err, req, res, next) => {
 });
 
 // Start the HTTP server
-app.listen(PORT, async () => {
+app.listen(PORT, () => {
     logger.info(`Server running on port ${PORT}`);
-    try {
-        await initializeWorkers();
-    } catch (err) {
-        logger.error('Failed to initialize workers:', { error: err.message });
-    }
 });

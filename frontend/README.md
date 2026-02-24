@@ -1,47 +1,51 @@
-# Astro Starter Kit: Minimal
+# Kundaro — Frontend
 
-```sh
-npm create astro@latest -- --template minimal
-```
+The **Kundaro** frontend is an [Astro](https://astro.build/) + React application that provides the user interface for the Kundaro customer-support platform.
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/withastro/astro/tree/latest/examples/minimal)
-[![Open with CodeSandbox](https://assets.codesandbox.io/github/button-edit-lime.svg)](https://codesandbox.io/p/sandbox/github/withastro/astro/tree/latest/examples/minimal)
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/withastro/astro?devcontainer_path=.devcontainer/minimal/devcontainer.json)
+## Tech Stack
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+- **Framework:** Astro (SSR) + React
+- **Language:** TypeScript
+- **Styling:** Tailwind CSS with shadcn/ui (New York style)
+- **i18n:** i18next (English & German)
+- **Icons:** Lucide React
 
-## 🚀 Project Structure
-
-Inside of your Astro project, you'll see the following folders and files:
+## Project Structure
 
 ```text
 /
-├── public/
+├── public/              # Static assets (favicon, tracking logos)
+├── migrations/          # SQL migration files
 ├── src/
-│   └── pages/
-│       └── index.astro
+│   ├── actions/         # Astro server actions
+│   ├── components/      # React & Astro components
+│   ├── hooks/           # Custom React hooks
+│   ├── i18n/            # Translations (en, de)
+│   ├── layouts/         # Page layouts
+│   ├── lib/             # Utility libraries
+│   ├── pages/           # File-based routing
+│   ├── styles/          # Global styles
+│   ├── types/           # TypeScript type definitions
+│   └── utils/           # Helper utilities
 └── package.json
 ```
 
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
+## Getting Started
 
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
+```sh
+# Install dependencies
+npm install
 
-Any static assets, like images, can be placed in the `public/` directory.
+# Start the dev server (http://localhost:4321)
+npm run dev
+```
 
-## 🧞 Commands
-
-All commands are run from the root of the project, from a terminal:
+## Commands
 
 | Command                   | Action                                           |
 | :------------------------ | :----------------------------------------------- |
 | `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
-
-## 👀 Want to learn more?
-
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+| `npm run dev`             | Starts local dev server at `localhost:4321`       |
+| `npm run build`           | Build production site to `./dist/`               |
+| `npm run preview`         | Preview the production build locally             |
+| `npm run astro ...`       | Run Astro CLI commands                           |

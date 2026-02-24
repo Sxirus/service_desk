@@ -1,6 +1,6 @@
 // --- emailHandler.js ---
 // Email Handler module for processing and storing incoming emails in the database
-// Handles customer creation, email address management, and email storage for the service desk system
+// Handles customer creation, email address management, and email storage for the Kundaro system
 
 // Import required modules
 const supabase = require('../config/supabase');  // Supabase client for database operations
@@ -66,10 +66,11 @@ async function saveEmail(parsedEmail, clientId, InboxEmail, confirmation) {
 
     let customerId;
 
-    logger.info(`[${InboxEmail}] Checking if email address exists`, { senderEmailAddress });
+    // B3 fix: Single query to find customer by email (replaces separate exists + getId queries)
+    logger.info(`[${InboxEmail}] Looking up customer by email`, { senderEmailAddress });
+    customerId = await findCustomerByEmail(senderEmailAddress);
     
-    // Check if this email address is already associated with a customer
-    if (!(await checkIfEmailAddressExists(senderEmailAddress))) {
+    if (!customerId) {
         // Email address is new - create a new customer record
         logger.info(`[${InboxEmail}] Email address does not exist, creating new customer with email`, { senderEmailAddress });
         customerId = await createCustomerWithEmail(from, clientId);
@@ -78,9 +79,7 @@ async function saveEmail(parsedEmail, clientId, InboxEmail, confirmation) {
             return;
         }
     } else {
-        // Email address exists - retrieve the existing customer ID
-        customerId = await getCustomerIdByEmail(senderEmailAddress);
-        logger.info(`[${InboxEmail}] Email address exists, retrieving customer ID for "${senderEmailAddress}"`, { customerId });
+        logger.info(`[${InboxEmail}] Found existing customer`, { customerId, senderEmailAddress });
     }
 
     // Log email details for debugging
@@ -95,32 +94,32 @@ async function saveEmail(parsedEmail, clientId, InboxEmail, confirmation) {
     // - If there's no prior agent response (no sent-mail), status is 'new'
     // - If agent has responded before and ticket was 'resolved', this is a re-open -> 'open'
     // - Otherwise for follow-ups during active conversation -> 'open'
+    // B3 fix: Run sent-mail check and last email status check in parallel
     let initialStatus = 'new';
     
-    // Check if there are any sent emails to this customer (agent has responded before)
-    const { data: sentEmails, error: sentError } = await supabase
-        .from('sent-mail')
-        .select('id')
-        .eq('customer_id', customerId)
-        .limit(1);
-    
-    if (!sentError && sentEmails && sentEmails.length > 0) {
-        // Agent has responded before, this is a follow-up or re-open
-        // Check the most recent email status for this customer
-        const { data: lastEmail } = await supabase
+    const [sentMailResult, lastEmailResult] = await Promise.all([
+        supabase
+            .from('sent-mail')
+            .select('id')
+            .eq('customer_id', customerId)
+            .limit(1),
+        supabase
             .from('incoming-mails')
             .select('status')
             .eq('customer_id', customerId)
             .order('send_at', { ascending: false })
             .limit(1)
-            .single();
-        
+            .maybeSingle()
+    ]);
+
+    const { data: sentEmails, error: sentError } = sentMailResult;
+    const { data: lastEmail } = lastEmailResult;
+
+    if (!sentError && sentEmails && sentEmails.length > 0) {
         if (lastEmail?.status === 'resolved') {
-            // Ticket was resolved, customer is re-opening it
             initialStatus = 'open';
             logger.info(`[${InboxEmail}] Customer re-opening resolved ticket, setting status to 'open'`);
         } else {
-            // Active conversation, customer follow-up
             initialStatus = 'open';
             logger.info(`[${InboxEmail}] Customer follow-up on active ticket, setting status to 'open'`);
         }
@@ -177,96 +176,59 @@ async function saveEmail(parsedEmail, clientId, InboxEmail, confirmation) {
 
 /**
  * Create a new customer record with associated email address
- * This function handles the two-step process of creating a customer and linking their email
- * 
- * @param {Object} from - Email sender information from parsed email
- * @param {string} clientId - Client ID this customer belongs to
- * @returns {string|null} The newly created customer's ID, or null if creation failed
  */
 async function createCustomerWithEmail(from, clientId) {
-    // Extract sender information from email headers
     const senderEmailAddress = from.value[0].address;
-    const senderName = from.value[0].name || 'Unknown Sender';  // Fallback for missing name
+    const senderName = from.value[0].name || 'Unknown Sender';
     
-    // Step 1: Create a new customer record in the customers table
     const { data: customer, error: customerError } = await supabase.from('customers').insert([
         {
-            client_id: clientId,                 // Associate customer with specific client
-            name: senderName                     // Customer's display name from email
+            client_id: clientId,
+            name: senderName
         }
     ]).select().single();
 
-    // Handle customer creation errors
     if (customerError) {
         logger.error(`[${senderEmailAddress}] Failed to create customer`, { error: customerError });
         return;
     }
 
-    // Step 2: Create email address record linked to the new customer
     const { data: emailAddress, error: emailError } = await supabase.from('email-addresses').insert([
         {
-            email_address: senderEmailAddress,   // The actual email address
-            customer_id: customer.id             // Link to the customer we just created
+            email_address: senderEmailAddress,
+            customer_id: customer.id
         }
     ]).select().single();
 
-    // Handle email address creation errors
     if (emailError) {
         logger.error(`[${clientId}] Failed to create email address`, { error: emailError });
         return;
     }
 
-    return customer.id; // Return the newly created customer's ID for email association
+    return customer.id;
 }
 
 /**
- * Check if an email address already exists in the system
- * Queries the email-addresses table to determine if we have a record for this email
- * 
- * @param {string} email - Email address to check for existence
- * @returns {boolean} True if email exists, false otherwise
+ * B3 fix: Combined email-address lookup — replaces separate checkIfEmailAddressExists + getCustomerIdByEmail
+ * Returns customer_id if found, null otherwise.
  */
-async function checkIfEmailAddressExists(email) {
-    // Query the email-addresses table for this specific email
+async function findCustomerByEmail(email) {
     const { data, error } = await supabase.from('email-addresses')
-        .select('customer_id')                   // Only need customer_id to confirm existence
-        .eq('email_address', email)              // Filter by the email address
-        .maybeSingle();                          // Use maybeSingle() to handle 0 or 1 results gracefully
+        .select('customer_id')
+        .eq('email_address', email)
+        .maybeSingle();
     
-    // Handle database query errors
     if (error) {
-        logger.error(`[${email}] Failed to check email existence`, { error });
-        return false;                            // Assume email doesn't exist on error
-    } else {
-        // Return true if we found a record with a valid customer_id
-        return Boolean(data?.customer_id);
+        logger.error(`[${email}] Failed to look up email address`, { error });
+        return null;
     }
+    
+    return data?.customer_id || null;
 }
 
 /**
- * Retrieve the customer ID associated with a given email address
- * Used when we know the email exists and need to link it to an incoming email
- * 
- * @param {string} email - Email address to look up
- * @returns {string|null} Customer ID if found, null if not found or error occurred
+ * Get confirmation email settings for a client
  */
-async function getCustomerIdByEmail(email) {
-    // Query the email-addresses table to get the customer ID
-    const { data, error } = await supabase.from('email-addresses')
-        .select('customer_id')                   // Only select the customer_id field
-        .eq('email_address', email)              // Filter by the email address
-        .maybeSingle();                          // Use maybeSingle() for safe single record retrieval
-    
-    // Handle database query errors
-    if (error) {
-        logger.error(`[${email}] Failed to get customer ID by email`, { error });
-        return null;                             // Return null to indicate failure
-    }
-    
-    return data && data.customer_id ? data.customer_id : null; // Return customer ID or null if not found
-}
-
-//getting the text send as confirmation
 async function getConfirmation(clientId) {
     const {data, error} = await supabase
       .from('clients')
@@ -282,28 +244,26 @@ async function getConfirmation(clientId) {
     return data;
 }
 
-//sending a confirmation mail
+/**
+ * Send a confirmation email to the customer
+ */
 async function sendConfirmation(customerEmail, confirmation, clientId, inboxEmail) {
   try {
     const to = customerEmail;
     const subject = confirmation.confirmation_mail_subject;
     const htmlBody = confirmation.confirm_mail;
-    // Strip HTML tags for plain text fallback
     const textBody = htmlBody ? htmlBody.replace(/<[^>]*>/g, '') : '';
 
-    // Get the client's SMTP config (prefer the inbox that received the email)
     const smtpConfig = await getClientSmtpConfig(clientId, inboxEmail);
     if (!smtpConfig) {
       logger.error(`[CONFIRMATION] No SMTP configuration found for client ${clientId}`);
       return;
     }
 
-    // Create transporter using the client's email account
     const transporter = nodemailer.createTransport(smtpConfig);
 
-    // Send email with both HTML and plain text
     const info = await transporter.sendMail({
-      from: `"Service Desk" <${smtpConfig.auth.user}>`,
+      from: `"${smtpConfig.displayName}" <${smtpConfig.auth.user}>`,
       to,
       subject,
       text: textBody,
@@ -317,5 +277,4 @@ async function sendConfirmation(customerEmail, confirmation, clientId, inboxEmai
   }
 }
 
-// Export the main function for use by IMAP workers
 module.exports = { saveEmail, getConfirmation };

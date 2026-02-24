@@ -1,6 +1,5 @@
 // --- imapWorker.js ---
 // Polling-based IMAP Worker with time-cutoff strategy
-// Restored to original interval-based approach for development
 
 const Imap = require('imap');
 const { simpleParser } = require('mailparser');
@@ -112,7 +111,10 @@ async function pollNewEmailsSinceLast(config, confirmation) {
             authTimeout: 15000,
             connTimeout: 30000,
             tlsOptions: {
-                rejectUnauthorized: process.env.NODE_ENV === 'production'
+                rejectUnauthorized: process.env.NODE_ENV === 'production',
+                // SNI is required by Gmail (and others) — without it the server
+                // may return a default / self-signed certificate.
+                servername: imapHost
             }
         });
 

@@ -20,6 +20,9 @@
     "companyNamePlaceholder": "Firmennamen eingeben",
     "companyNameDescription": "Dies ist der offizielle Name Ihres Unternehmens.",
     "companyNameError": "Der Firmenname muss mindestens 2 Zeichen lang sein.",
+    "senderDisplayName": "E-Mail-Absendername",
+    "senderDisplayNamePlaceholder": "z.B. Acme Support",
+    "senderDisplayNameDescription": "Der Name, der als Absender in ausgehenden E-Mails angezeigt wird. Wenn leer, wird Ihr Firmenname verwendet.",
     "address": "Adresse",
     "street": "Straße & Hausnummer",
     "streetPlaceholder": "Straße und Hausnummer",
@@ -758,10 +761,10 @@
     "settings": {
       "pageTitle": "Allgemeine Einstellungen",
       "heading": "Allgemeine Einstellungen",
-      "description": "Verwalten Sie die Einstellungen und Präferenzen für das Service Desk",
+      "description": "Verwalten Sie die Einstellungen und Präferenzen für Kundaro",
       "emailConfig": {
         "title": "E-Mail-Versandkonfiguration",
-        "description": "Konfigurieren Sie, wie E-Mails von Ihrem Service Desk gesendet werden",
+        "description": "Konfigurieren Sie, wie E-Mails von Ihrer Kundaro-Instanz gesendet werden",
         "errorTitle": "E-Mail-Konfigurationen konnten nicht geladen werden",
         "errorDescription": "Beim Laden Ihrer E-Mail-Konten ist ein Fehler aufgetreten. Sie können die Einstellungen dennoch konfigurieren.",
         "noEmails": "Noch keine E-Mail-Konten konfiguriert",
@@ -772,7 +775,10 @@
         "matchInbox": "Posteingang abgleichen",
         "matchInboxDescription": "Immer von der E-Mail-Adresse antworten, die die ursprüngliche Nachricht empfangen hat",
         "primaryAccount": "Primäres Versandkonto",
-        "selectAccount": "Wählen Sie ein E-Mail-Konto, das standardmäßig zum Versenden von E-Mails verwendet wird"
+        "selectAccount": "Wählen Sie ein E-Mail-Konto, das standardmäßig zum Versenden von E-Mails verwendet wird",
+        "senderName": "Absendername",
+        "senderNamePlaceholder": "z.B. Acme Support",
+        "senderNameDescription": "Der Name, der als Absender in ausgehenden E-Mails angezeigt wird. Wenn leer, wird Ihr Firmenname verwendet."
       },
       "emailSignature": {
         "title": "E-Mail-Signatur",

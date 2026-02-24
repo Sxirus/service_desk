@@ -367,7 +367,7 @@ router.delete('/deleteMacro',
       }
       
       if (oldAttachments.attachments != null && oldAttachments.attachments.length > 0) {
-        const response = await deleteAttachmentsFromStorage(oldAttachments.attachments);
+        const response = await deleteAttachmentsFromStorage(oldAttachments.attachments, client_id);
         if (!response.success) {
           logger.error('[MACROS] Delete failed', { error: response.message });
           return res.status(500).json({ error: 'Database error' });
