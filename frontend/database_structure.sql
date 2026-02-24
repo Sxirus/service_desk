@@ -6,6 +6,21 @@ CREATE TABLE public._health_check (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT _health_check_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.activity_log (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  client_id bigint NOT NULL,
+  employee_id bigint,
+  action text NOT NULL,
+  category text NOT NULL,
+  target_type text,
+  target_id text,
+  details jsonb,
+  ip_address inet,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT activity_log_pkey PRIMARY KEY (id),
+  CONSTRAINT activity_log_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.clients(id),
+  CONSTRAINT activity_log_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.employees(id)
+);
 CREATE TABLE public.ai_responses (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   email_id bigint,
@@ -38,6 +53,9 @@ CREATE TABLE public.client-emails (
   imap_port integer,
   smtp text,
   smtp_port integer,
+  last_sync_at timestamp with time zone,
+  last_error text,
+  created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT client-emails_pkey PRIMARY KEY (id),
   CONSTRAINT Client-Email_provider_id_fkey FOREIGN KEY (provider_id) REFERENCES public.email-provider(id),
   CONSTRAINT Client-Email_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.clients(id),
@@ -77,7 +95,6 @@ CREATE TABLE public.clients (
   auto_assign_employee_on_send boolean NOT NULL DEFAULT false,
   email_sending_mode text NOT NULL DEFAULT 'primary'::text,
   primary_email_id integer,
-  sender_display_name text,
   stripe_customer_id character varying,
   subscription_tier text DEFAULT 'free'::text,
   stripe_subscription_id text,
@@ -85,7 +102,8 @@ CREATE TABLE public.clients (
   subscription_cancelled_at timestamp with time zone,
   subscription_ends_at timestamp with time zone,
   tracking_settings jsonb DEFAULT '{"providers": [], "customProviders": []}'::jsonb,
-  confirmation_mail_mode text NOT NULL DEFAULT 'all'::text CHECK (confirmation_mail_mode IN ('all', 'new_only', 'disabled')),
+  confirmation_mail_mode text NOT NULL DEFAULT 'all'::text CHECK (confirmation_mail_mode = ANY (ARRAY['all'::text, 'new_only'::text, 'disabled'::text])),
+  sender_display_name text,
   CONSTRAINT clients_pkey PRIMARY KEY (id),
   CONSTRAINT clients_primary_email_id_fkey FOREIGN KEY (primary_email_id) REFERENCES public.client-emails(id)
 );
@@ -293,11 +311,11 @@ CREATE TABLE public.sent-mail (
   send_at timestamp with time zone NOT NULL DEFAULT now(),
   employee_id bigint NOT NULL,
   text_content text,
-  html_content text,
   customer_id bigint NOT NULL,
   provider_name text,
   sent_via text,
   attachments jsonb,
+  html_content text,
   is_internal_note boolean NOT NULL DEFAULT false,
   CONSTRAINT sent-mail_pkey PRIMARY KEY (id),
   CONSTRAINT send-mail_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.employees(id),
