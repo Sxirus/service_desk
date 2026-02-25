@@ -141,3 +141,6 @@ vite.config.ts.timestamp-*
 /plans
 /.vscode
 /.vscode
+
+# MacOS systen build files
+.DS_Store
