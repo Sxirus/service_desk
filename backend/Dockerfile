@@ -1,20 +1,20 @@
-# Verwende Node.js Basis-Image
 FROM node:20-alpine
 
-# Arbeitsverzeichnis im Container
+RUN addgroup -S app && adduser -S app -G app
+
 WORKDIR /app
 
-# Installiere dev-Tools (z. B. nodemon) über package.json
 COPY package*.json ./
+RUN npm ci --omit=dev
 
-# Installiere alle Abhängigkeiten
-RUN npm install
-
-# Kopiere den Rest der Anwendung
 COPY . .
+RUN rm -f .env .env.*
 
-# Port für Express (Standard: 3000)
+# Create attachments directory and give ownership to app user
+RUN mkdir -p /app/attachments && chown -R app:app /app/attachments
+
+USER app
+
 EXPOSE 3000
 
-# Starte den Entwicklungsserver (z. B. mit nodemon)
-CMD ["npm", "run", "dev"]
+CMD ["node", "index.js"]

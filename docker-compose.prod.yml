@@ -1,0 +1,64 @@
+version: "3.9"
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: kundaro_tunnel
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+    networks:
+      - kundaro
+
+  frontend:
+    container_name: kundaro_frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        PUBLIC_SUPABASE_URL: ${PUBLIC_SUPABASE_URL}
+        PUBLIC_SUPABASE_ANON_KEY: ${PUBLIC_SUPABASE_ANON_KEY}
+        PUBLIC_API_URL: ${PUBLIC_API_URL}
+        PUBLIC_SITE_URL: ${PUBLIC_SITE_URL}
+        PUBLIC_STRIPE_PUBLISHABLE_KEY: ${PUBLIC_STRIPE_PUBLISHABLE_KEY}
+        TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY}
+    env_file:
+      - ./frontend/.env.production
+    restart: unless-stopped
+    networks:
+      - kundaro
+
+  backend:
+    container_name: kundaro_backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./backend/.env.production
+    volumes:
+      - backend_attachments:/app/attachments
+    restart: unless-stopped
+    networks:
+      - kundaro
+
+  translation-worker:
+    container_name: kundaro_translation_worker
+    build:
+      context: ./translation-worker
+      dockerfile: Dockerfile
+    env_file:
+      - ./translation-worker/.env.production
+    restart: unless-stopped
+    networks:
+      - kundaro
+
+volumes:
+  backend_attachments:
+
+networks:
+  kundaro:
+    driver: bridge
