@@ -17,9 +17,8 @@ const pollingIntervals = new Map();
 async function startImapWorker({ id, email, password, imapHost, imapPort, clientId }) {
     logger.info(`[${email}] Starting interval-based polling worker (5min interval)`);
     
+    // Execute first poll immediately — fetch confirmation settings fresh each cycle
     const confirmation = await getConfirmation(clientId);
-    
-    // Execute first poll immediately
     await pollNewEmailsSinceLast({ id, email, password, imapHost, imapPort, clientId }, confirmation);
     
     // Clear existing interval if present (prevents memory leak on restart)
@@ -28,8 +27,10 @@ async function startImapWorker({ id, email, password, imapHost, imapPort, client
     }
     
     // Set up polling interval (5 minutes = 300000 ms)
+    // Re-fetch confirmation settings every cycle so admin changes take effect immediately
     const interval = setInterval(async () => {
-        await pollNewEmailsSinceLast({ id, email, password, imapHost, imapPort, clientId }, confirmation);
+        const freshConfirmation = await getConfirmation(clientId);
+        await pollNewEmailsSinceLast({ id, email, password, imapHost, imapPort, clientId }, freshConfirmation);
     }, 300000);
     
     pollingIntervals.set(email, interval);
