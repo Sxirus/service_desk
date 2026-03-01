@@ -1,5 +1,7 @@
 // src/components/AdminShell.tsx
 import * as React from "react";
+import { useTranslation } from "react-i18next";
+import { Search } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
   Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList,
@@ -7,6 +9,8 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
+import { GlobalSearch } from "@/components/GlobalSearch";
 import { apiClient } from "@/utils/api";
 
 export type ShellUser = {
@@ -50,6 +54,21 @@ export default function AdminShell({
   clientId = 0,
   subscriptionTier = "free",
 }: Props) {
+  const { t } = useTranslation("common");
+  const [searchOpen, setSearchOpen] = React.useState(false);
+
+  // Ctrl+K / Cmd+K keyboard shortcut to open search
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setSearchOpen((prev) => !prev);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   // Aktueller Pfad aus dem Browser ermitteln, falls nicht übergeben
   const [detectedPath, setDetectedPath] = React.useState("");
   const [accessibleInboxes, setAccessibleInboxes] = React.useState<InboxType[]>([]);
@@ -113,6 +132,21 @@ export default function AdminShell({
               </BreadcrumbList>
             </Breadcrumb>
           </div>
+          <div className="ml-auto flex items-center gap-2 px-4">
+            <Button
+              variant="outline"
+              size="sm"
+              className="relative h-8 w-full justify-start rounded-md bg-muted/50 text-sm font-normal text-muted-foreground shadow-none sm:w-64 sm:pr-12"
+              onClick={() => setSearchOpen(true)}
+            >
+              <Search className="mr-2 h-4 w-4" />
+              {t("globalSearch.openSearch")}
+              <kbd className="pointer-events-none absolute right-[0.3rem] top-[0.3rem] hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
+                <span className="text-xs">⌘</span>K
+              </kbd>
+            </Button>
+          </div>
+          <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
         </header>
 
         <div className="flex flex-1 flex-col gap-4 p-4 pt-0">

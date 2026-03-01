@@ -110,6 +110,10 @@ app.use('/api/platform', require('./routes/platform'));
 
 app.use('/api/translate', require('./routes/translate'));
 
+app.use('/api/search', require('./routes/search'));
+
+app.use('/api/agents', require('./routes/agents'));
+
 // Global error handling middleware
 // This catches any unhandled errors from routes and provides consistent error responses
 app.use((err, req, res, next) => {

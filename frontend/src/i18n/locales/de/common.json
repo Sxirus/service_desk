@@ -313,5 +313,24 @@
       "pageTitle": "Analysen - Kundaro"
     }
   },
-  "or": "oder"
+  "or": "oder",
+  "globalSearch": {
+    "placeholder": "Kunden, Agenten, Tickets suchen...",
+    "noResults": "Keine Ergebnisse gefunden.",
+    "customers": "Kunden",
+    "agents": "Agenten",
+    "tickets": "Tickets",
+    "emailAddresses": "E-Mail-Adressen",
+    "openSearch": "Suchen",
+    "ticketId": "Ticket #{{id}}"
+  },
+  "agentView": {
+    "agent": "Agent",
+    "memberSince": "Mitglied seit",
+    "activeTickets": "Aktiv",
+    "resolvedTickets": "Gel\u00f6st",
+    "groups": "Gruppen",
+    "assignedTickets": "Zugewiesene Tickets",
+    "noTickets": "Diesem Agenten sind keine Tickets zugewiesen."
+  }
 }

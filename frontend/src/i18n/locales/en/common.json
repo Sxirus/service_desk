@@ -310,5 +310,24 @@
     "analytics": {
       "pageTitle": "Analytics - Kundaro"
     }
+  },
+  "globalSearch": {
+    "placeholder": "Search customers, agents, tickets...",
+    "noResults": "No results found.",
+    "customers": "Customers",
+    "agents": "Agents",
+    "tickets": "Tickets",
+    "emailAddresses": "Email Addresses",
+    "openSearch": "Search",
+    "ticketId": "Ticket #{{id}}"
+  },
+  "agentView": {
+    "agent": "Agent",
+    "memberSince": "Member since",
+    "activeTickets": "Active",
+    "resolvedTickets": "Resolved",
+    "groups": "Groups",
+    "assignedTickets": "Assigned Tickets",
+    "noTickets": "No tickets assigned to this agent."
   }
 }

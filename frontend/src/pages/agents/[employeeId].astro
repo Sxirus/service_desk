@@ -1,0 +1,99 @@
+---
+/**
+ * Agent Detail View
+ *
+ * Displays an agent's profile: name, avatar, email, groups,
+ * and a table of all their assigned tickets.
+ *
+ * Route: /agents/[employeeId]
+ * Security: Authenticated users only, scoped by client_id
+ */
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { createClient } from "../../lib/supabase.ts";
+import { getCompletePageContext } from "../../lib/auth-helpers.ts";
+import { serverApiCall } from "../../utils/api.ts";
+import AdminShell from "@/components/AdminShell";
+import { AgentView } from "@/components/AgentView";
+import { getTranslations, getLanguageFromCookies } from "@/i18n/astro";
+
+// i18n
+const lang = getLanguageFromCookies(Astro.cookies);
+const { t } = getTranslations(lang, "common");
+
+// Supabase client
+const supabase = createClient({
+  request: Astro.request,
+  cookies: Astro.cookies,
+});
+
+// Auth
+const pageContext = await getCompletePageContext(supabase, Astro.cookies);
+if (!pageContext) return Astro.redirect("/");
+const { authContext, sidebarData, isPlatformAdmin } = pageContext;
+
+const { data: { session } } = await supabase.auth.getSession();
+if (!session) return Astro.redirect("/");
+
+// Route param
+const { employeeId } = Astro.params;
+if (!employeeId || !/^\d+$/.test(employeeId) || parseInt(employeeId) < 1) {
+  return new Response("Invalid agent ID", { status: 400 });
+}
+
+// Fetch agent details from backend
+let agentData: any = null;
+try {
+  const response = await serverApiCall(
+    `/agents/${employeeId}/details`,
+    session.access_token
+  );
+  if (response.success) {
+    agentData = response.data;
+  }
+} catch {
+  /* handled below */
+}
+
+if (!agentData) {
+  return Astro.redirect("/dashboard");
+}
+
+// Map tickets to the shape expected by TicketsDataTable
+const tickets = (agentData.tickets || []).map((mail: any) => ({
+  id: mail.id,
+  subject: mail.subject || "",
+  email_address: mail.email_address || "",
+  customer_id: mail.customer_id,
+  customer_name: mail.customer_name || "Unknown",
+  send_at: mail.send_at,
+  status: mail.status || "new",
+  read: mail.read ?? false,
+}));
+
+const agentName = agentData.employee?.name || t("agentView.agent");
+---
+
+<BaseLayout title={`${agentName} - ${t("serviceDesk")}`}>
+  <AdminShell
+    client:load
+    user={sidebarData.user}
+    firstTeam={sidebarData.team ?? undefined}
+    crumbParentLabel={t("serviceDesk")}
+    crumbParentHref="/dashboard"
+    crumbCurrent={agentName}
+    isAdmin={authContext.isAdmin}
+    isPlatformAdmin={isPlatformAdmin}
+    currentPath={`/agents/${employeeId}`}
+    employeeId={sidebarData.employeeId}
+    clientId={sidebarData.clientId}
+    subscriptionTier={sidebarData.subscriptionTier}
+  >
+    <AgentView
+      client:load
+      employee={agentData.employee}
+      groups={agentData.groups}
+      tickets={tickets}
+    />
+  </AdminShell>
+</BaseLayout>
